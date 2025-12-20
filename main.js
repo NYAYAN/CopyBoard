@@ -4,385 +4,177 @@ const fs = require('fs');
 const Store = require('electron-store');
 const Tesseract = require('tesseract.js');
 
-const store = new Store();
-let mainWindow;
-let snipperWindow;
-let ocrWindow;
-let tray;
-let clipboardHistory = store.get('history', []);
-let maxItems = store.get('maxItems', 50);
-let globalShortcutKey = store.get('globalShortcut', 'Alt+Shift+V');
-let globalShortcutImage = store.get('globalShortcutImage', 'Alt+Shift+9');
-let pendingMode = null; // Track which window to show on ready
-
-// Fix conflict: If user still has Alt+Shift+2 stored for Draw mode, force reset it to Alt+Shift+9
-if (globalShortcutImage === 'Alt+Shift+2') {
-  globalShortcutImage = 'Alt+Shift+9';
-  store.set('globalShortcutImage', 'Alt+Shift+9');
+// --- Single Instance Lock ---
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  // If we have the lock, listen for second-instance attempts
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    if (state.mainWindow) {
+      if (state.mainWindow.isMinimized()) state.mainWindow.restore();
+      showMain();
+    }
+  });
 }
 
-let lastText = clipboard.readText();
-const LAST_IMAGE_KEY = 'lastImageHash'; // Simple in-memory check for now
-let lastImageCheck = null;
+const store = new Store();
 
-function createWindow() {
+
+const state = {
+  mainWindow: null, snipperWindow: null, ocrWindow: null, tray: null,
+  history: store.get('history', []),
+  maxItems: store.get('maxItems', 50),
+  shortcuts: {
+    list: store.get('globalShortcut', 'Alt+Shift+V'),
+    draw: store.get('globalShortcutImage', 'Alt+Shift+9'),
+    ocr: 'Alt+Shift+2'
+  },
+  lastText: clipboard.readText(),
+  lastImageCheck: null,
+  lastMode: null
+};
+
+// --- Window Creators ---
+function createMain() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
-  mainWindow = new BrowserWindow({
-    width: 400,
-    height: 600,
-    x: width - 420,
-    y: height - 620,
-    show: false,
-    frame: false,
-    skipTaskbar: true,
-    resizable: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true
-    },
+  state.mainWindow = new BrowserWindow({
+    width: 400, height: 600, x: width - 420, y: height - 620, show: false, frame: false, skipTaskbar: true, resizable: false,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true },
     icon: path.join(__dirname, 'icon.png')
   });
-
-  mainWindow.loadFile('index.html');
-
-  mainWindow.on('blur', () => {
-    mainWindow.hide();
-  });
+  state.mainWindow.loadFile('index.html');
+  state.mainWindow.on('blur', () => state.mainWindow.hide());
 }
 
-// --- Window Management ---
-function createCaptureWindow(type) {
+function createCapture(type) {
   const { width, height } = screen.getPrimaryDisplay().bounds;
   const win = new BrowserWindow({
     width, height, x: 0, y: 0, show: false, frame: false, transparent: true,
     alwaysOnTop: true, skipTaskbar: true, resizable: false, fullscreen: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }
   });
-
   win.loadFile(type === 'ocr' ? 'ocr.html' : 'snipper.html');
-  win.on('closed', () => {
-    if (type === 'ocr') ocrWindow = null;
-    else snipperWindow = null;
-  });
-
-  if (type === 'ocr') ocrWindow = win;
-  else snipperWindow = win;
+  win.on('closed', () => { if (type === 'ocr') state.ocrWindow = null; else state.snipperWindow = null; });
+  if (type === 'ocr') state.ocrWindow = win; else state.snipperWindow = win;
   return win;
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, 'icon.png'));
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Uygulamayı Göster', click: () => showWindow() },
+  state.tray = new Tray(path.join(__dirname, 'icon.png'));
+  updateTrayMenu();
+  state.tray.on('click', showMain);
+}
+
+function updateTrayMenu() {
+  const format = (s) => s.split('+').join(' + ').replace('CommandOrControl', 'Ctrl');
+  state.tray.setContextMenu(Menu.buildFromTemplate([
+    { label: `Uygulamayı Göster (${format(state.shortcuts.list)})`, click: showMain },
     { type: 'separator' },
-    { label: 'Ekran Görüntüsü (Alt+Shift+9)', click: () => captureAndOpenSnipper('draw') },
-    { label: 'Metin Okuma (Alt+Shift+2)', click: () => captureAndOpenSnipper('ocr') },
+    { label: `Ekran Görüntüsü (${format(state.shortcuts.draw)})`, click: () => capture('draw') },
+    { label: `Metin Okuma (${format(state.shortcuts.ocr)})`, click: () => capture('ocr') },
     { type: 'separator' },
     { label: 'Çıkış', click: () => app.quit() }
-  ]);
-  tray.setToolTip('CopyBoard');
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => showWindow());
+  ]));
 }
 
-function showWindow() {
+function showMain() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  // Position window near tray (bottom right usually on Windows)
-  // Re-calculate simply to be safe
-  mainWindow.setPosition(width - 420, height - 620);
-  mainWindow.show();
-  mainWindow.focus();
+  state.mainWindow.setPosition(width - 420, height - 620);
+  state.mainWindow.show(); state.mainWindow.focus();
 }
 
-async function checkClipboard() {
-  // 1. Text Check
+// --- Clipboard & Logic ---
+async function pollClipboard() {
   const text = clipboard.readText();
-  if (text && text !== lastText) {
-    lastText = text;
-    addHistoryItem(text);
-    return; // Priority to text
+  if (text && text !== state.lastText) {
+    state.lastText = text; addHistory(text); return;
   }
-
-  // 2. Image Check (OCR)
   const formats = clipboard.availableFormats();
-  const hasImage = formats.some(f => f.includes('image'));
-
-  if (hasImage && !text) { // Only check image if no text implies direct text copy
-    try {
-      const image = clipboard.readImage();
-      if (image.isEmpty()) return;
-
-      const imageBuffer = image.toPNG();
-      const currentImageCheck = imageBuffer.toString('base64').substring(0, 50) + imageBuffer.length;
-
-      if (currentImageCheck !== lastImageCheck) {
-        lastImageCheck = currentImageCheck;
-
-        // Notify user analysis started (Optional - kept silent or custom toast)
-        if (mainWindow) mainWindow.webContents.send('show-toast', 'Metin taranıyor...', 'info');
-
-        const { data: { text: recognizedText } } = await Tesseract.recognize(imageBuffer, 'eng+tur');
-
-        const cleanText = recognizedText.trim();
-        if (cleanText) {
-          lastText = cleanText;
-          addHistoryItem(cleanText);
-          if (mainWindow) mainWindow.webContents.send('show-toast', 'Görseldeki yazı eklendi.', 'success');
-        } else {
-          if (mainWindow) mainWindow.webContents.send('show-toast', 'Yazı bulunamadı.', 'error');
-        }
-      }
-    } catch (error) {
-      console.error('OCR Error:', error);
+  if (formats.some(f => f.includes('image')) && !text) {
+    const img = clipboard.readImage();
+    if (img.isEmpty()) return;
+    const buf = img.toPNG();
+    const sum = buf.toString('base64').substring(0, 50) + buf.length;
+    if (sum !== state.lastImageCheck) {
+      state.lastImageCheck = sum;
+      if (state.mainWindow) state.mainWindow.webContents.send('show-toast', 'Metin taranıyor...', 'info');
+      try {
+        const { data: { text: res } } = await Tesseract.recognize(buf, 'eng+tur');
+        const clean = res.trim();
+        if (clean) { state.lastText = clean; addHistory(clean); }
+      } catch (e) { console.error(e); }
     }
   }
 }
 
-function addHistoryItem(text) {
-  if (!text || text.trim() === '') return;
-  // Remove existing to avoid duplicates and move to top
-  clipboardHistory = clipboardHistory.filter(item => (typeof item === 'string' ? item : item.content) !== text);
-
-  const newItem = {
-    id: Date.now(),
-    content: text,
-    type: 'text',
-    timestamp: new Date().toISOString()
-  };
-
-  clipboardHistory.unshift(newItem);
-  if (clipboardHistory.length > maxItems) {
-    clipboardHistory = clipboardHistory.slice(0, maxItems);
-  }
-
-  store.set('history', clipboardHistory);
-  if (mainWindow) mainWindow.webContents.send('update-history', clipboardHistory);
+function addHistory(text) {
+  if (!text || !text.trim()) return;
+  state.history = state.history.filter(item => (typeof item === 'string' ? item : item.content) !== text);
+  state.history.unshift({ id: Date.now(), content: text, type: 'text', timestamp: new Date().toISOString() });
+  if (state.history.length > state.maxItems) state.history = state.history.slice(0, state.maxItems);
+  store.set('history', state.history);
+  if (state.mainWindow) state.mainWindow.webContents.send('update-history', state.history);
 }
 
-let lastMode = null; // To know which window to show
-
-app.whenReady().then(() => {
-  createTray();
-  createWindow();
-
-  // Polling clipboard every 1 second
-  setInterval(checkClipboard, 1000);
-
-  // 1. History List Shortcut 
-  registerGlobalShortcut(globalShortcutKey);
-
-  // 2. OCR Selection Shortcut
-  registerImageShortcut(globalShortcutImage);
-
-  // Separate registration for OCR shortcut (Alt+Shift+2 - Hardcoded)
-  // We unregister it first to be sure
-  if (globalShortcut.isRegistered('Alt+Shift+2')) {
-    globalShortcut.unregister('Alt+Shift+2');
-  }
-
-  globalShortcut.register('Alt+Shift+2', async () => {
-    console.log('OCR Shortcut Triggered (Alt+Shift+2)');
-    captureAndOpenSnipper('ocr');
-  });
-
-  // Snipper IPC
-  ipcMain.on('snip-close', () => {
-    if (snipperWindow) snipperWindow.close();
-    if (ocrWindow) ocrWindow.close();
-  });
-
-  ipcMain.on('snip-ready', (event) => {
-    if (lastMode === 'ocr' && ocrWindow) {
-      ocrWindow.show();
-      ocrWindow.focus();
-    } else if (snipperWindow) {
-      snipperWindow.show();
-      snipperWindow.focus();
-    }
-  });
-
-  ipcMain.on('snip-copy-image', (event, dataUrl) => {
-    try {
-      const { nativeImage } = require('electron');
-      const image = nativeImage.createFromDataURL(dataUrl);
-      clipboard.writeImage(image);
-      if (mainWindow) mainWindow.webContents.send('show-toast', 'Resim kopyalandı.', 'success');
-      if (snipperWindow) snipperWindow.close();
-    } catch (e) {
-      console.error(e);
-      if (mainWindow) mainWindow.webContents.send('show-toast', 'Kopyalama hatası.', 'error');
-    }
-  });
-
-  ipcMain.on('snip-save-image', async (event, dataUrl) => {
-    try {
-      const { filePath } = await dialog.showSaveDialog(snipperWindow, {
-        title: 'Ekran Görüntüsünü Kaydet',
-        defaultPath: path.join(app.getPath('pictures'), `screenshot_${Date.now()}.png`),
-        filters: [{ name: 'Images', extensions: ['png', 'jpg'] }]
-      });
-
-      if (filePath) {
-        const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
-        fs.writeFile(filePath, buffer, (err) => {
-          if (err) {
-            console.error(err);
-            if (mainWindow) mainWindow.webContents.send('show-toast', 'Kaydetme başarısız.', 'error');
-          } else {
-            if (mainWindow) mainWindow.webContents.send('show-toast', 'Resim kaydedildi.', 'success');
-            if (snipperWindow) snipperWindow.close();
-          }
-        });
-      }
-      // If canceled, do nothing (window stays open)
-    } catch (e) {
-      console.error(e);
-    }
-  });
-
-  ipcMain.on('snip-complete', async (event, dataUrl) => {
-    // Close capture windows immediately
-    if (snipperWindow) { snipperWindow.close(); snipperWindow = null; }
-    if (ocrWindow) { ocrWindow.close(); ocrWindow = null; }
-
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.webContents.send('show-toast', 'Metin taranıyor...', 'info');
-    }
-
-    try {
-      const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
-      const { data: { text: recognizedText } } = await Tesseract.recognize(buffer, 'eng+tur');
-      const cleanText = recognizedText.trim();
-
-      if (cleanText) {
-        lastText = cleanText;
-        addHistoryItem(cleanText);
-        clipboard.writeText(cleanText);
-        if (mainWindow) mainWindow.webContents.send('show-toast', 'Metin kopyalandı.', 'success');
-      } else {
-        if (mainWindow) mainWindow.webContents.send('show-toast', 'Okunabilir metin yok.', 'error');
-      }
-    } catch (error) {
-      console.error('OCR Error', error);
-      if (mainWindow) mainWindow.webContents.send('show-toast', 'Hata: Metin okunamadı.', 'error');
-    }
-  });
-
-  // Initial load
-  ipcMain.handle('get-history', () => clipboardHistory);
-  ipcMain.handle('get-settings', () => ({
-    maxItems,
-    globalShortcut: globalShortcutKey,
-    globalShortcutImage: globalShortcutImage
-  }));
-
-  ipcMain.on('set-shortcut', (event, shortcut) => {
-    globalShortcut.unregisterAll();
-    if (registerGlobalShortcut(shortcut)) {
-      globalShortcutKey = shortcut;
-      store.set('globalShortcut', globalShortcutKey);
-    } else {
-      // Revert if failed (optional handling)
-      console.log('Failed to register new shortcut');
-      registerGlobalShortcut(globalShortcutKey);
-    }
-  });
-
-  ipcMain.on('set-max-items', (event, count) => {
-    maxItems = count;
-    store.set('maxItems', maxItems);
-    // Trim current history if needed
-    if (clipboardHistory.length > maxItems) {
-      clipboardHistory = clipboardHistory.slice(0, maxItems);
-      store.set('history', clipboardHistory);
-      mainWindow.webContents.send('update-history', clipboardHistory);
-    }
-  });
-
-  ipcMain.on('copy-item', (event, item) => {
-    const text = typeof item === 'string' ? item : item.content;
-    if (text) {
-      clipboard.writeText(text);
-      lastText = text; // Prevent re-adding immediately
-    }
-    mainWindow.hide();
-  });
-
-  ipcMain.on('clear-history', () => {
-    clipboardHistory = [];
-    store.set('history', []);
-    mainWindow.webContents.send('update-history', []);
-  });
-
-  ipcMain.on('close-window', () => {
-    mainWindow.hide();
-  });
-});
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-});
-
-app.on('window-all-closed', () => {
-  // Do nothing, keep running in tray
-});
-
-function registerGlobalShortcut(shortcut) {
-  try {
-    const ret = globalShortcut.register(shortcut, () => {
-      // Check if it's the OCR shortcut (Alt+Shift+2) or Toolbar shortcut (Alt+Shift+9)
-      // Actually this function is for the HISTORY list only in previous code logic?
-      // Wait, globalShortcutKey is for list.
-      showWindow();
-    });
-    if (!ret) {
-      console.log('History Registration failed: ' + shortcut);
-    }
-    return ret;
-  } catch (e) {
-    console.error(e);
-    return false;
+// --- Shortcuts ---
+function updateShortcut(key, val, storeKey) {
+  globalShortcut.unregister(state.shortcuts[key]);
+  if (globalShortcut.register(val, key === 'list' ? showMain : () => capture(key))) {
+    state.shortcuts[key] = val;
+    store.set(storeKey, val);
+    updateTrayMenu(); // Update the tray labels too
+  } else {
+    globalShortcut.register(state.shortcuts[key], key === 'list' ? showMain : () => capture(key));
   }
 }
 
-function registerImageShortcut(shortcut) {
-  // This is specifically for Alt+Shift+9 (Drawing Mode)
-  try {
-    const ret = globalShortcut.register(shortcut, async () => {
-      captureAndOpenSnipper('draw');
-    });
-
-    if (!ret) {
-      console.log('Image Registration failed: ' + shortcut);
-    }
-    return ret;
-  } catch (e) {
-    console.error(e);
-    return false;
-  }
-}
-
-async function captureAndOpenSnipper(mode) {
+async function capture(mode) {
   const { width, height } = screen.getPrimaryDisplay().bounds;
   try {
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
-    const primarySource = sources[0];
-
-    if (primarySource) {
-      const dataUrl = primarySource.thumbnail.toDataURL();
-      lastMode = mode;
-
-      const win = createCaptureWindow(mode);
-
-      // Wait for the window to be ready to receive IPC
-      win.webContents.on('did-finish-load', () => {
-        win.webContents.send('capture-screen', dataUrl, mode);
-      });
+    if (sources[0]) {
+      const data = sources[0].thumbnail.toDataURL();
+      state.lastMode = mode;
+      const win = createCapture(mode);
+      win.webContents.on('did-finish-load', () => win.webContents.send('capture-screen', data, mode));
     }
-  } catch (e) {
-    console.error('Screen capture failed', e);
-  }
+  } catch (e) { console.error(e); }
 }
+
+// --- Initialization ---
+app.whenReady().then(() => {
+  createTray(); createMain();
+  setInterval(pollClipboard, 1000);
+  globalShortcut.register(state.shortcuts.list, showMain);
+  globalShortcut.register(state.shortcuts.draw, () => capture('draw'));
+  globalShortcut.register(state.shortcuts.ocr, () => capture('ocr'));
+
+  ipcMain.handle('get-history', () => state.history);
+  ipcMain.handle('get-settings', () => ({ maxItems: state.maxItems, globalShortcut: state.shortcuts.list, globalShortcutImage: state.shortcuts.draw }));
+
+  ipcMain.on('set-shortcut', (e, s) => updateShortcut('list', s, 'globalShortcut'));
+  ipcMain.on('set-image-shortcut', (e, s) => updateShortcut('draw', s, 'globalShortcutImage'));
+  ipcMain.on('set-max-items', (e, c) => { state.maxItems = c; store.set('maxItems', c); addHistory(''); }); // Trigger trim
+  ipcMain.on('copy-item', (e, i) => { const t = typeof i === 'string' ? i : i.content; if (t) { clipboard.writeText(t); state.lastText = t; } state.mainWindow.hide(); });
+  ipcMain.on('clear-history', () => { state.history = []; store.set('history', []); state.mainWindow.webContents.send('update-history', []); });
+  ipcMain.on('close-window', () => state.mainWindow.hide());
+  ipcMain.on('snip-close', () => { if (state.snipperWindow) state.snipperWindow.close(); if (state.ocrWindow) state.ocrWindow.close(); });
+  ipcMain.on('snip-ready', () => { const win = state.lastMode === 'ocr' ? state.ocrWindow : state.snipperWindow; if (win) { win.show(); win.focus(); } });
+  ipcMain.on('snip-copy-image', (e, d) => { clipboard.writeImage(require('electron').nativeImage.createFromDataURL(d)); state.mainWindow.webContents.send('show-toast', 'Kopyalandı.', 'success'); state.snipperWindow.close(); });
+  ipcMain.on('snip-save-image', (e, d) => {
+    const p = dialog.showSaveDialogSync(state.snipperWindow, { title: 'Kaydet', defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`), filters: [{ name: 'Images', extensions: ['png'] }] });
+    if (p) { fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64')); state.mainWindow.webContents.send('show-toast', 'Kaydedildi.', 'success'); state.snipperWindow.close(); }
+  });
+  ipcMain.on('snip-complete', async (e, d) => {
+    if (state.snipperWindow) state.snipperWindow.close(); if (state.ocrWindow) state.ocrWindow.close();
+    state.mainWindow.show(); state.mainWindow.webContents.send('show-toast', 'Taranıyor...', 'info');
+    try {
+      const { data: { text } } = await Tesseract.recognize(Buffer.from(d.split(',')[1], 'base64'), 'eng+tur');
+      const c = text.trim(); if (c) { state.lastText = c; clipboard.writeText(c); addHistory(c); state.mainWindow.webContents.send('show-toast', 'Kopyalandı.', 'success'); }
+    } catch (err) { console.error(err); }
+  });
+});
+
+app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('window-all-closed', () => { });

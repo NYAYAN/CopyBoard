@@ -24,11 +24,11 @@ function setupShortcutInput(element, callback) {
 
         keys.push(key);
 
-        const shortcut = keys.join('+');
-        element.value = shortcut;
+        const shortcutForMain = keys.join('+');
+        const shortcutForDisplay = keys.join(' + ').replace('CommandOrControl', 'Ctrl');
 
-        // Debounce/Commit
-        callback(shortcut);
+        element.value = shortcutForDisplay;
+        callback(shortcutForMain);
     });
 }
 
@@ -113,11 +113,16 @@ function renderHistory(history) {
     const settings = await window.api.getSettings();
 
     maxItemsInput.value = settings.maxItems;
+    function formatShortcut(s) {
+        if (!s) return '';
+        return s.split('+').join(' + ').replace('CommandOrControl', 'Ctrl');
+    }
+
     if (settings.globalShortcut) {
-        shortcutInput.value = settings.globalShortcut;
+        shortcutInput.value = formatShortcut(settings.globalShortcut);
     }
     if (settings.globalShortcutImage) {
-        imageShortcutInput.value = settings.globalShortcutImage;
+        imageShortcutInput.value = formatShortcut(settings.globalShortcutImage);
     }
     renderHistory(history);
 })();

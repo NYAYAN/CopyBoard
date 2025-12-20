@@ -1,0 +1,45 @@
+{
+  "name": "copyboard",
+  "version": "1.0.0",
+  "description": "Gelişmiş Pano Yöneticisi ve OCR Aracı",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Nurullah YAYAN",
+  "license": "ISC",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.nurullahyayan.copyboard",
+    "productName": "CopyBoard",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png",
+      "verifyUpdateCodeSignature": false,
+      "forceCodeSigning": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "files": [
+      "!**/*.map",
+      "!**/*.idb",
+      "!**/*.pdb"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^25.1.8",
+    "electron-packager": "^17.1.2"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "tesseract.js": "^5.1.1"
+  }
+}

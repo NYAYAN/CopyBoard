@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CopyBoard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="icon">📋</span>
+                <h1>CopyBoard</h1>
+            </div>
+            <div class="actions">
+                <button id="about-btn" class="icon-btn" title="Hakkında">ℹ️</button>
+                <button id="settings-btn" class="icon-btn" title="Ayarlar">⚙️</button>
+            </div>
+        </header>
+
+        <div id="about-panel" class="settings-panel hidden">
+            <div class="about-content">
+                <h3>CopyBoard v1.0</h3>
+                <p><strong>Geliştirici:</strong> Nurullah YAYAN</p>
+                <p>📧 nurullah.yayan@gmail.com</p>
+                <p>📞 541 457 27 39</p>
+            </div>
+        </div>
+
+        <div id="settings-panel" class="settings-panel hidden">
+            <div class="setting-item">
+                <label for="max-items">Maksimum Kayıt:</label>
+                <input type="number" id="max-items" min="1" max="500" value="50">
+            </div>
+            <div class="setting-item">
+                <label for="shortcut-input">Liste Kısayolu:</label>
+                <input type="text" id="shortcut-input" placeholder="Tuşlara basın..." readonly class="shortcut-input">
+            </div>
+            <div class="setting-item">
+                <label for="image-shortcut-input">OCR Kısayolu:</label>
+                <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
+                    class="shortcut-input">
+            </div>
+            <button id="clear-history-btn" class="danger-btn">Geçmişi Temizle</button>
+        </div>
+
+        <main id="history-list" class="history-list">
+            <!-- Items will be injected here -->
+        </main>
+    </div>
+    <script src="renderer.js"></script>
+    <div id="toast" class="toast hidden"></div>
+</body>
+
+</html>

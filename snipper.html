@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="snipper.css">
+</head>
+
+<body>
+    <div id="overlay" class="overlay"></div> <!-- Full screen darkening -->
+    <canvas id="screen-canvas"></canvas>
+    <canvas id="draw-canvas"></canvas> <!-- New layer for drawing -->
+    <div id="selection-box" class="selection-box hidden">
+        <div class="resize-handle nw" data-handle="nw"></div>
+        <div class="resize-handle n" data-handle="n"></div>
+        <div class="resize-handle ne" data-handle="ne"></div>
+        <div class="resize-handle e" data-handle="e"></div>
+        <div class="resize-handle se" data-handle="se"></div>
+        <div class="resize-handle s" data-handle="s"></div>
+        <div class="resize-handle sw" data-handle="sw"></div>
+        <div class="resize-handle w" data-handle="w"></div>
+    </div>
+
+    <!-- Toolbar -->
+    <div id="toolbar" class="toolbar hidden">
+        <div class="tool-group">
+            <button class="tool-btn" data-tool="pen" title="Kalem">✏️</button>
+            <button class="tool-btn" data-tool="rect" title="Kare">⬜</button>
+            <button class="tool-btn" data-tool="circle" title="Yuvarlak">⭕</button>
+            <button class="tool-btn" data-tool="text" title="Metin">T</button>
+            <button class="tool-btn" data-tool="arrow" title="Ok">↗️</button>
+        </div>
+        <div class="divider"></div>
+        <div class="color-group">
+            <div class="color-dot active" data-color="#ff0000" style="background: #ff0000;"></div>
+            <div class="color-dot" data-color="#00ff00" style="background: #00ff00;"></div>
+            <div class="color-dot" data-color="#0000ff" style="background: #0000ff;"></div>
+            <div class="color-dot" data-color="#ffff00" style="background: #ffff00;"></div>
+            <div class="color-dot" data-color="#ffffff" style="background: #ffffff;"></div>
+            <div class="color-dot" data-color="#000000" style="background: #000000;"></div>
+        </div>
+        <div class="divider"></div>
+        <div class="action-group">
+            <button class="action-btn" id="btn-copy" title="Kopyala">📋</button>
+            <button class="action-btn" id="btn-save" title="Kaydet">💾</button>
+            <button class="action-btn close" id="btn-close" title="Kapat">❌</button>
+        </div>
+    </div>
+
+    <div id="text-input-container" class="text-input-container hidden">
+        <div id="text-drag-handle" class="text-drag-handle" title="Sürükle">☰</div>
+        <textarea id="text-input" class="text-input-field"
+            placeholder="Yazmaya başla... (Enter: Onay, Shift+Enter: Alt Satır)" rows="1"></textarea>
+    </div>
+
+    <div class="instruction">Metni veya resmi seçmek için alanı tarayın.</div>
+    <script src="snipper.js"></script>
+</body>
+
+</html>

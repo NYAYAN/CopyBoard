@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="snipper.css">
+    <style>
+        /* OCR unique style: hide things that might bleed in from snipper.css */
+        .selection-box {
+            border: 2px solid #8be9fd;
+            /* Distinct color for OCR */
+            cursor: crosshair;
+        }
+    </style>
+</head>
+
+<body class="ocr-mode">
+    <div id="overlay" class="overlay"></div>
+    <canvas id="screen-canvas"></canvas>
+    <div id="selection-box" class="selection-box hidden"></div>
+
+    <div class="instruction">Metni okumak için alanı seçin. (ESC ile iptal)</div>
+    <script src="ocr.js"></script>
+</body>
+
+</html>

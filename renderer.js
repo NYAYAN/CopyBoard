@@ -7,6 +7,9 @@ const maxItemsInput = document.getElementById('max-items');
 const shortcutInput = document.getElementById('shortcut-input');
 const imageShortcutInput = document.getElementById('image-shortcut-input');
 const clearBtn = document.getElementById('clear-history-btn');
+const confirmModal = document.getElementById('confirm-modal');
+const confirmClearBtn = document.getElementById('confirm-clear-btn');
+const cancelClearBtn = document.getElementById('cancel-clear-btn');
 
 // Helper for shortcut recording
 function setupShortcutInput(element, callback) {
@@ -34,14 +37,25 @@ function setupShortcutInput(element, callback) {
 
 // Toggle Settings
 settingsBtn.addEventListener('click', () => {
-    aboutPanel.classList.add('hidden'); // Close about if open
+    aboutPanel.classList.add('hidden');
+    aboutBtn.classList.remove('active');
     settingsPanel.classList.toggle('hidden');
+    settingsBtn.classList.toggle('active');
 });
 
 // Toggle About
 aboutBtn.addEventListener('click', () => {
-    settingsPanel.classList.add('hidden'); // Close settings if open
+    settingsPanel.classList.add('hidden');
+    settingsBtn.classList.remove('active');
     aboutPanel.classList.toggle('hidden');
+    aboutBtn.classList.toggle('active');
+});
+
+const autoStartCheck = document.getElementById('autostart-check');
+
+// Update Startup Setting
+autoStartCheck.addEventListener('change', (e) => {
+    window.api.setAutoStart(e.target.checked);
 });
 
 // Update Max Items
@@ -56,11 +70,18 @@ maxItemsInput.addEventListener('change', (e) => {
 setupShortcutInput(shortcutInput, (s) => window.api.setShortcut(s));
 setupShortcutInput(imageShortcutInput, (s) => window.api.setImageShortcut(s));
 
-// Clear History
+// Clear History Dialog Toggle
 clearBtn.addEventListener('click', () => {
-    if (confirm('Tüm geçmişi silmek istediğinizden emin misiniz?')) {
-        window.api.clearHistory();
-    }
+    confirmModal.classList.remove('hidden');
+});
+
+cancelClearBtn.addEventListener('click', () => {
+    confirmModal.classList.add('hidden');
+});
+
+confirmClearBtn.addEventListener('click', () => {
+    window.api.clearHistory();
+    confirmModal.classList.add('hidden');
 });
 
 // Render List
@@ -113,6 +134,8 @@ function renderHistory(history) {
     const settings = await window.api.getSettings();
 
     maxItemsInput.value = settings.maxItems;
+    autoStartCheck.checked = settings.autoStart;
+
     function formatShortcut(s) {
         if (!s) return '';
         return s.split('+').join(' + ').replace('CommandOrControl', 'Ctrl');

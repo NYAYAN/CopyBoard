@@ -81,6 +81,12 @@ h1 {
     background: var(--card-hover);
 }
 
+.icon-btn.active {
+    background: var(--card-hover);
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
 .settings-panel {
     background: rgba(0, 0, 0, 0.2);
     padding: 15px 20px;
@@ -130,6 +136,13 @@ input[type="number"] {
     outline: none;
     cursor: pointer;
     font-size: 0.8rem;
+}
+
+input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
 }
 
 .shortcut-input:focus {
@@ -289,4 +302,91 @@ input[type="number"]:focus {
 .toast.info {
     border-color: #8be9fd;
     color: #8be9fd;
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay:not(.hidden) {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal {
+    background: var(--bg-color);
+    padding: 24px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    width: 80%;
+    max-width: 300px;
+    text-align: center;
+}
+
+.modal p {
+    margin-bottom: 24px;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.modal-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.modal-btn:not(.danger) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.modal-btn:not(.danger):hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.modal-btn.danger {
+    background: var(--danger);
+    color: white;
+}
+
+.modal-btn.danger:hover {
+    filter: brightness(1.1);
+}
+
+.modal-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    /* Safer than display:none for transitions */
+}
+
+.modal-overlay:not(.hidden) {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
 }

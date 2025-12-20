@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
     copyItem: (text) => ipcRenderer.send('copy-item', text),
     clearHistory: () => ipcRenderer.send('clear-history'),
     closeWindow: () => ipcRenderer.send('close-window'),
+    setAutoStart: (val) => ipcRenderer.send('set-autostart', val),
     onUpdateHistory: (callback) => ipcRenderer.on('update-history', (_, value) => callback(value)),
 
     // Snipper

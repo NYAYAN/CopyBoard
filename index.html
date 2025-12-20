@@ -27,7 +27,6 @@
                 <h3>CopyBoard v1.0</h3>
                 <p><strong>Geliştirici:</strong> Nurullah YAYAN</p>
                 <p>📧 nurullah.yayan@gmail.com</p>
-                <p>📞 541 457 27 39</p>
             </div>
         </div>
 
@@ -46,6 +45,10 @@
                 <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
                     class="shortcut-input" title="Ekran görüntüsü alıp üzerinde çizim yapmak için">
             </div>
+            <div class="setting-item">
+                <label for="autostart-check">Başlangıçta Çalıştır:</label>
+                <input type="checkbox" id="autostart-check">
+            </div>
             <button id="clear-history-btn" class="danger-btn">Geçmişi Temizle</button>
         </div>
 
@@ -53,6 +56,16 @@
             <!-- Items will be injected here -->
         </main>
     </div>
+    <div id="confirm-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <p>Tüm geçmişi silmek istediğinizden emin misiniz?</p>
+            <div class="modal-actions">
+                <button id="cancel-clear-btn" class="modal-btn">Vazgeç</button>
+                <button id="confirm-clear-btn" class="modal-btn danger">Sil</button>
+            </div>
+        </div>
+    </div>
+
     <script src="renderer.js"></script>
     <div id="toast" class="toast hidden"></div>
 </body>

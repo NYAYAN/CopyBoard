@@ -25,7 +25,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "license": "installer_info.txt"
     },
     "files": [
       "!**/*.map",

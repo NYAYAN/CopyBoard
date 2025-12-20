@@ -217,14 +217,14 @@ button.active {
 }
 
 button.close:hover {
-    background: #ff5555;
     color: white;
 }
 
 .text-input-container {
     position: absolute;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
+    /* Keep handle at top */
     background: #1e1e2e;
     border: 2px solid #8be9fd;
     border-radius: 4px;
@@ -249,14 +249,14 @@ button.close:hover {
     font-family: Arial, sans-serif;
     outline: none;
     min-width: 200px;
-    max-width: 400px;
+    max-width: 800px;
     min-height: 24px;
     resize: none;
-    /* User shouldn't resize manually */
     overflow: hidden;
-    /* Hide scrollbars, we auto-expand */
     line-height: 1.4;
     display: block;
+    white-space: pre;
+    /* Prevents auto-wrapping */
 }
 
 .text-input-field::placeholder {

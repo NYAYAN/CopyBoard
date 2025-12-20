@@ -68,10 +68,12 @@ function resetUI() {
 
 window.addEventListener('mousedown', (e) => {
     if (e.target.closest('.toolbar')) return;
-    if (e.target === textDragHandle) {
-        state.isDraggingText = true;
-        const r = textInputContainer.getBoundingClientRect();
-        state.dragOffX = e.clientX - r.left; state.dragOffY = e.clientY - r.top;
+    if (e.target.closest('#text-input-container')) {
+        if (e.target === textDragHandle) {
+            state.isDraggingText = true;
+            const r = textInputContainer.getBoundingClientRect();
+            state.dragOffX = e.clientX - r.left; state.dragOffY = e.clientY - r.top;
+        }
         return;
     }
     if (state.selectionRect) {
@@ -90,11 +92,12 @@ window.addEventListener('mousedown', (e) => {
             if (state.activeTool === 'text') {
                 textInputContainer.style.left = e.clientX + 'px'; textInputContainer.style.top = (e.clientY - 20) + 'px';
                 textInputContainer.style.display = 'flex'; textInputContainer.classList.remove('hidden');
-                setTimeout(() => textInput.focus(), 0);
+                textInput.style.width = '200px'; textInput.style.height = 'auto'; // Reset size
+                setTimeout(() => { textInput.focus(); adjustTextArea(); }, 0);
                 return;
             }
 
-            saveState(); // Save state before drawing
+            saveState();
             state.isDrawing = true; state.startX = e.clientX; state.startY = e.clientY;
             if (state.activeTool === 'pen') { drawCtx.beginPath(); drawCtx.moveTo(state.startX, state.startY); }
             else state.savedImageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
@@ -117,6 +120,14 @@ window.addEventListener('mousedown', (e) => {
         selectionBox.style.display = 'block'; selectionBox.classList.remove('hidden');
     }
 });
+
+function adjustTextArea() {
+    textInput.style.width = '200px';
+    textInput.style.width = Math.max(200, Math.min(800, textInput.scrollWidth)) + 'px';
+    textInput.style.height = 'auto';
+    textInput.style.height = textInput.scrollHeight + 'px';
+}
+textInput.addEventListener('input', adjustTextArea);
 
 window.addEventListener('mousemove', (e) => {
     if (state.isDraggingText) {
@@ -153,7 +164,11 @@ window.addEventListener('mousemove', (e) => {
             state.startX = e.clientX; state.startY = e.clientY;
         } else {
             drawCtx.putImageData(state.savedImageData, 0, 0);
-            const w = e.clientX - state.startX, h = e.clientY - state.startY;
+            let w = e.clientX - state.startX, h = e.clientY - state.startY;
+            if (e.shiftKey && (state.activeTool === 'rect' || state.activeTool === 'circle')) {
+                const s = Math.max(Math.abs(w), Math.abs(h));
+                w = w < 0 ? -s : s; h = h < 0 ? -s : s;
+            }
             if (state.activeTool === 'rect') drawCtx.strokeRect(state.startX, state.startY, w, h);
             else if (state.activeTool === 'circle') {
                 drawCtx.beginPath(); drawCtx.ellipse(state.startX + w / 2, state.startY + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, 2 * Math.PI);
@@ -217,7 +232,7 @@ textInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault(); const v = textInput.value.trim();
         if (v) {
-            saveState(); // Save state before adding text
+            saveState();
             drawCtx.save();
             const cp = new Path2D(); cp.rect(state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h);
             drawCtx.clip(cp);

@@ -1,0 +1,17 @@
+CopyBoard - Uygulama Bilgileri
+
+Bu uygulama Nurullah YAYAN tarafindan gelistirilmistir.
+
+Iletisim Bilgileri:
+-------------------
+Gelistirici: Nurullah YAYAN
+E-posta: nurullah.yayan@gmail.com
+
+Uygulama Ozellikleri:
+---------------------
+- Gelismis Pano Gecmisi Yonetimi (Alt + Shift + V)
+- Ekran Uzerinde Cizim ve Not Alma (Alt + Shift + 9)
+- Gorsellerden Metin Okuma (OCR - Alt + Shift + 2)
+- Hizli Kopyalama ve Kaydetme Secenekleri
+
+Uygulamayi kullandiginiz icin tesekkur ederiz. Kuruluma devam etmek icin 'Kabul Ediyorum' veya 'Ileri' butonuna tiklayiniz.

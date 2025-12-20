@@ -9,8 +9,7 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  // If we have the lock, listen for second-instance attempts
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
+  app.on('second-instance', () => {
     if (state.mainWindow) {
       if (state.mainWindow.isMinimized()) state.mainWindow.restore();
       showMain();
@@ -20,11 +19,11 @@ if (!gotTheLock) {
 
 const store = new Store();
 
-
 const state = {
   mainWindow: null, snipperWindow: null, ocrWindow: null, tray: null,
   history: store.get('history', []),
   maxItems: store.get('maxItems', 50),
+  autoStart: store.get('autoStart', true),
   shortcuts: {
     list: store.get('globalShortcut', 'Alt+Shift+V'),
     draw: store.get('globalShortcutImage', 'Alt+Shift+9'),
@@ -45,6 +44,12 @@ function createMain() {
   });
   state.mainWindow.loadFile('index.html');
   state.mainWindow.on('blur', () => state.mainWindow.hide());
+
+  // Only show if not started at login
+  const isStartup = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
+  if (!isStartup) {
+    state.mainWindow.once('ready-to-show', () => showMain());
+  }
 }
 
 function createCapture(type) {
@@ -121,12 +126,9 @@ function addHistory(text) {
 function updateShortcut(key, val, storeKey) {
   globalShortcut.unregister(state.shortcuts[key]);
   if (globalShortcut.register(val, key === 'list' ? showMain : () => capture(key))) {
-    state.shortcuts[key] = val;
-    store.set(storeKey, val);
-    updateTrayMenu(); // Update the tray labels too
-  } else {
-    globalShortcut.register(state.shortcuts[key], key === 'list' ? showMain : () => capture(key));
-  }
+    state.shortcuts[key] = val; store.set(storeKey, val);
+    updateTrayMenu();
+  } else globalShortcut.register(state.shortcuts[key], key === 'list' ? showMain : () => capture(key));
 }
 
 async function capture(mode) {
@@ -146,18 +148,67 @@ async function capture(mode) {
 app.whenReady().then(() => {
   createTray(); createMain();
   setInterval(pollClipboard, 1000);
+
   globalShortcut.register(state.shortcuts.list, showMain);
   globalShortcut.register(state.shortcuts.draw, () => capture('draw'));
   globalShortcut.register(state.shortcuts.ocr, () => capture('ocr'));
 
+  if (app.isPackaged) {
+    // CLEAN LEGACY DEPRECATED KEYS (Cleanup for dev leftovers)
+    app.setLoginItemSettings({ openAtLogin: false, path: process.execPath, name: 'electron.app.CopyBoard' });
+    app.setLoginItemSettings({ openAtLogin: false, path: process.execPath, name: 'CopyBoard' });
+
+    // SET FRESH PRODUCTION KEY
+    app.setLoginItemSettings({
+      openAtLogin: state.autoStart,
+      path: app.getPath('exe'),
+      args: ['--hidden']
+    });
+  }
+
   ipcMain.handle('get-history', () => state.history);
-  ipcMain.handle('get-settings', () => ({ maxItems: state.maxItems, globalShortcut: state.shortcuts.list, globalShortcutImage: state.shortcuts.draw }));
+  ipcMain.handle('get-settings', () => ({
+    maxItems: state.maxItems,
+    globalShortcut: state.shortcuts.list,
+    globalShortcutImage: state.shortcuts.draw,
+    autoStart: state.autoStart
+  }));
+
+  ipcMain.on('set-autostart', (e, val) => {
+    state.autoStart = val;
+    store.set('autoStart', val);
+
+    if (app.isPackaged) {
+      app.setLoginItemSettings({
+        openAtLogin: val,
+        path: app.getPath('exe'),
+        args: ['--hidden']
+      });
+    }
+  });
 
   ipcMain.on('set-shortcut', (e, s) => updateShortcut('list', s, 'globalShortcut'));
   ipcMain.on('set-image-shortcut', (e, s) => updateShortcut('draw', s, 'globalShortcutImage'));
-  ipcMain.on('set-max-items', (e, c) => { state.maxItems = c; store.set('maxItems', c); addHistory(''); }); // Trigger trim
-  ipcMain.on('copy-item', (e, i) => { const t = typeof i === 'string' ? i : i.content; if (t) { clipboard.writeText(t); state.lastText = t; } state.mainWindow.hide(); });
-  ipcMain.on('clear-history', () => { state.history = []; store.set('history', []); state.mainWindow.webContents.send('update-history', []); });
+  ipcMain.on('set-max-items', (e, c) => {
+    state.maxItems = c; store.set('maxItems', c);
+    if (state.history.length > c) {
+      state.history = state.history.slice(0, c);
+      store.set('history', state.history);
+      state.mainWindow.webContents.send('update-history', state.history);
+    }
+  });
+
+  ipcMain.on('copy-item', (e, i) => {
+    const t = typeof i === 'string' ? i : i.content;
+    if (t) { clipboard.writeText(t); state.lastText = t; }
+    state.mainWindow.hide();
+  });
+
+  ipcMain.on('clear-history', () => {
+    state.history = []; store.set('history', []);
+    state.mainWindow.webContents.send('update-history', []);
+  });
+
   ipcMain.on('close-window', () => state.mainWindow.hide());
   ipcMain.on('snip-close', () => { if (state.snipperWindow) state.snipperWindow.close(); if (state.ocrWindow) state.ocrWindow.close(); });
   ipcMain.on('snip-ready', () => { const win = state.lastMode === 'ocr' ? state.ocrWindow : state.snipperWindow; if (win) { win.show(); win.focus(); } });
@@ -166,12 +217,17 @@ app.whenReady().then(() => {
     const p = dialog.showSaveDialogSync(state.snipperWindow, { title: 'Kaydet', defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`), filters: [{ name: 'Images', extensions: ['png'] }] });
     if (p) { fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64')); state.mainWindow.webContents.send('show-toast', 'Kaydedildi.', 'success'); state.snipperWindow.close(); }
   });
+
   ipcMain.on('snip-complete', async (e, d) => {
     if (state.snipperWindow) state.snipperWindow.close(); if (state.ocrWindow) state.ocrWindow.close();
     state.mainWindow.show(); state.mainWindow.webContents.send('show-toast', 'Taranıyor...', 'info');
     try {
       const { data: { text } } = await Tesseract.recognize(Buffer.from(d.split(',')[1], 'base64'), 'eng+tur');
-      const c = text.trim(); if (c) { state.lastText = c; clipboard.writeText(c); addHistory(c); state.mainWindow.webContents.send('show-toast', 'Kopyalandı.', 'success'); }
+      const c = text.trim();
+      if (c) {
+        state.lastText = c; clipboard.writeText(c); addHistory(c);
+        state.mainWindow.webContents.send('show-toast', 'Kopyalandı.', 'success');
+      }
     } catch (err) { console.error(err); }
   });
 });

@@ -72,14 +72,15 @@ function renderHistory(history) {
         return;
     }
 
-    history.forEach(text => {
-        const item = document.createElement('div');
-        item.className = 'history-item';
+    history.forEach(item => {
+        const itemContent = typeof item === 'string' ? item : item.content;
+        const domItem = document.createElement('div');
+        domItem.className = 'history-item';
 
         // Text part
         const textSpan = document.createElement('span');
         textSpan.className = 'history-text';
-        textSpan.textContent = text;
+        textSpan.textContent = itemContent;
 
         // Icon part
         const iconSpan = document.createElement('span');
@@ -87,22 +88,22 @@ function renderHistory(history) {
         iconSpan.textContent = '📋';
         iconSpan.title = 'Kopyala';
 
-        item.appendChild(textSpan);
-        item.appendChild(iconSpan);
+        domItem.appendChild(textSpan);
+        domItem.appendChild(iconSpan);
 
         // Click handler for the whole row
-        item.addEventListener('click', () => {
+        domItem.addEventListener('click', () => {
             // Animate copy feedback
-            item.style.borderColor = 'var(--accent)';
-            iconSpan.textContent = '✅'; // Feedback
+            domItem.style.borderColor = 'var(--accent)';
+            iconSpan.textContent = '✅';
             setTimeout(() => {
-                item.style.borderColor = 'transparent';
+                domItem.style.borderColor = 'transparent';
                 iconSpan.textContent = '📋';
             }, 800);
-            window.api.copyItem(text);
+            window.api.copyItem(itemContent);
         });
 
-        listElement.appendChild(item);
+        listElement.appendChild(domItem);
     });
 }
 

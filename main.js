@@ -50,74 +50,41 @@ function createWindow() {
   mainWindow.on('blur', () => {
     mainWindow.hide();
   });
-
-  createSnipperWindow();
-  createOCRWindow();
 }
 
-function createSnipperWindow() {
-  const { width, height } = screen.getPrimaryDisplay().bounds; // Use bounds for full coverage
-
-  snipperWindow = new BrowserWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
-    show: false,
-    frame: false,
-    transparent: true, // Crucial for overlay feel
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    fullscreen: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true
-    }
-  });
-
-  snipperWindow.loadFile('snipper.html');
-}
-
-function createOCRWindow() {
+// --- Window Management ---
+function createCaptureWindow(type) {
   const { width, height } = screen.getPrimaryDisplay().bounds;
-
-  ocrWindow = new BrowserWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
-    show: false,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    fullscreen: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true
-    }
+  const win = new BrowserWindow({
+    width, height, x: 0, y: 0, show: false, frame: false, transparent: true,
+    alwaysOnTop: true, skipTaskbar: true, resizable: false, fullscreen: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }
   });
 
-  ocrWindow.loadFile('ocr.html');
+  win.loadFile(type === 'ocr' ? 'ocr.html' : 'snipper.html');
+  win.on('closed', () => {
+    if (type === 'ocr') ocrWindow = null;
+    else snipperWindow = null;
+  });
+
+  if (type === 'ocr') ocrWindow = win;
+  else snipperWindow = win;
+  return win;
 }
 
 function createTray() {
   tray = new Tray(path.join(__dirname, 'icon.png'));
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Göster', click: () => showWindow() },
+    { label: 'Uygulamayı Göster', click: () => showWindow() },
+    { type: 'separator' },
+    { label: 'Ekran Görüntüsü (Alt+Shift+9)', click: () => captureAndOpenSnipper('draw') },
+    { label: 'Metin Okuma (Alt+Shift+2)', click: () => captureAndOpenSnipper('ocr') },
+    { type: 'separator' },
     { label: 'Çıkış', click: () => app.quit() }
   ]);
-
   tray.setToolTip('CopyBoard');
   tray.setContextMenu(contextMenu);
-
-  tray.on('click', () => {
-    showWindow();
-  });
+  tray.on('click', () => showWindow());
 }
 
 function showWindow() {
@@ -174,18 +141,24 @@ async function checkClipboard() {
 }
 
 function addHistoryItem(text) {
-  // Remove if exists to move to top
-  clipboardHistory = clipboardHistory.filter(item => item !== text);
-  clipboardHistory.unshift(text);
+  if (!text || text.trim() === '') return;
+  // Remove existing to avoid duplicates and move to top
+  clipboardHistory = clipboardHistory.filter(item => (typeof item === 'string' ? item : item.content) !== text);
 
+  const newItem = {
+    id: Date.now(),
+    content: text,
+    type: 'text',
+    timestamp: new Date().toISOString()
+  };
+
+  clipboardHistory.unshift(newItem);
   if (clipboardHistory.length > maxItems) {
     clipboardHistory = clipboardHistory.slice(0, maxItems);
   }
 
   store.set('history', clipboardHistory);
-  if (mainWindow) {
-    mainWindow.webContents.send('update-history', clipboardHistory);
-  }
+  if (mainWindow) mainWindow.webContents.send('update-history', clipboardHistory);
 }
 
 let lastMode = null; // To know which window to show
@@ -216,15 +189,15 @@ app.whenReady().then(() => {
 
   // Snipper IPC
   ipcMain.on('snip-close', () => {
-    snipperWindow.hide();
-    ocrWindow.hide();
+    if (snipperWindow) snipperWindow.close();
+    if (ocrWindow) ocrWindow.close();
   });
 
   ipcMain.on('snip-ready', (event) => {
-    if (lastMode === 'ocr') {
+    if (lastMode === 'ocr' && ocrWindow) {
       ocrWindow.show();
       ocrWindow.focus();
-    } else {
+    } else if (snipperWindow) {
       snipperWindow.show();
       snipperWindow.focus();
     }
@@ -236,10 +209,7 @@ app.whenReady().then(() => {
       const image = nativeImage.createFromDataURL(dataUrl);
       clipboard.writeImage(image);
       if (mainWindow) mainWindow.webContents.send('show-toast', 'Resim kopyalandı.', 'success');
-      // User might want to keep editing? Normally copy means "I'm done".
-      // Let's keep it open for consistency with drawing tools, OR close?
-      // Lightshot closes after copy. We'll close.
-      snipperWindow.hide();
+      if (snipperWindow) snipperWindow.close();
     } catch (e) {
       console.error(e);
       if (mainWindow) mainWindow.webContents.send('show-toast', 'Kopyalama hatası.', 'error');
@@ -262,8 +232,7 @@ app.whenReady().then(() => {
             if (mainWindow) mainWindow.webContents.send('show-toast', 'Kaydetme başarısız.', 'error');
           } else {
             if (mainWindow) mainWindow.webContents.send('show-toast', 'Resim kaydedildi.', 'success');
-            // Close window on successful save (User request)
-            snipperWindow.hide();
+            if (snipperWindow) snipperWindow.close();
           }
         });
       }
@@ -274,23 +243,24 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('snip-complete', async (event, dataUrl) => {
-    snipperWindow.hide();
-    ocrWindow.hide();
+    // Close capture windows immediately
+    if (snipperWindow) { snipperWindow.close(); snipperWindow = null; }
+    if (ocrWindow) { ocrWindow.close(); ocrWindow = null; }
 
-    // Notify processing
-    if (mainWindow) mainWindow.webContents.send('show-toast', 'Metin taranıyor...', 'info');
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.webContents.send('show-toast', 'Metin taranıyor...', 'info');
+    }
 
     try {
-      // dataUrl is "data:image/png;base64,..."
       const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
-
       const { data: { text: recognizedText } } = await Tesseract.recognize(buffer, 'eng+tur');
       const cleanText = recognizedText.trim();
 
       if (cleanText) {
         lastText = cleanText;
         addHistoryItem(cleanText);
-        clipboard.writeText(cleanText); // Auto copy to clipboard
+        clipboard.writeText(cleanText);
         if (mainWindow) mainWindow.webContents.send('show-toast', 'Metin kopyalandı.', 'success');
       } else {
         if (mainWindow) mainWindow.webContents.send('show-toast', 'Okunabilir metin yok.', 'error');
@@ -303,7 +273,11 @@ app.whenReady().then(() => {
 
   // Initial load
   ipcMain.handle('get-history', () => clipboardHistory);
-  ipcMain.handle('get-settings', () => ({ maxItems, globalShortcut: globalShortcutKey }));
+  ipcMain.handle('get-settings', () => ({
+    maxItems,
+    globalShortcut: globalShortcutKey,
+    globalShortcutImage: globalShortcutImage
+  }));
 
   ipcMain.on('set-shortcut', (event, shortcut) => {
     globalShortcut.unregisterAll();
@@ -328,9 +302,12 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.on('copy-item', (event, text) => {
-    clipboard.writeText(text);
-    lastText = text; // Prevent re-adding immediately
+  ipcMain.on('copy-item', (event, item) => {
+    const text = typeof item === 'string' ? item : item.content;
+    if (text) {
+      clipboard.writeText(text);
+      lastText = text; // Prevent re-adding immediately
+    }
     mainWindow.hide();
   });
 
@@ -397,11 +374,13 @@ async function captureAndOpenSnipper(mode) {
     if (primarySource) {
       const dataUrl = primarySource.thumbnail.toDataURL();
       lastMode = mode;
-      if (mode === 'ocr') {
-        ocrWindow.webContents.send('capture-screen', dataUrl, mode);
-      } else {
-        snipperWindow.webContents.send('capture-screen', dataUrl, mode);
-      }
+
+      const win = createCaptureWindow(mode);
+
+      // Wait for the window to be ready to receive IPC
+      win.webContents.on('did-finish-load', () => {
+        win.webContents.send('capture-screen', dataUrl, mode);
+      });
     }
   } catch (e) {
     console.error('Screen capture failed', e);

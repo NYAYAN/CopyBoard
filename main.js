@@ -183,6 +183,30 @@ app.whenReady().then(() => {
   ipcMain.on('set-shortcut', (e, s) => updateShortcut('list', s, 'globalShortcut'));
   ipcMain.on('set-image-shortcut', (e, s) => updateShortcut('draw', s, 'globalShortcutImage'));
   ipcMain.on('set-video-shortcut', (e, s) => updateShortcut('video', s, 'globalShortcutVideo'));
+  ipcMain.on('set-max-items', (e, count) => {
+    state.maxItems = count;
+    store.set('maxItems', count);
+    // Trim history if needed
+    if (state.history.length > count) {
+      state.history = state.history.slice(0, count);
+      store.set('history', state.history);
+      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+        state.mainWindow.webContents.send('update-history', state.history);
+      }
+    }
+  });
+  ipcMain.on('copy-item', (e, text) => {
+    clipboard.writeText(text);
+    state.lastText = text;
+  });
+  ipcMain.on('clear-history', () => {
+    state.history = [];
+    store.set('history', []);
+    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+      state.mainWindow.webContents.send('update-history', state.history);
+    }
+    showToast('Geçmiş Temizlendi.', 'success');
+  });
   ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });
   ipcMain.on('snip-close', () => { [state.snipperWindow, state.ocrWindow, state.recorderWindow].forEach(w => w && !w.isDestroyed() && w.close()); });
 

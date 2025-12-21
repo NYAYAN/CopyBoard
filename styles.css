@@ -63,6 +63,10 @@ h1 {
 
 .actions {
     -webkit-app-region: no-drag;
+    display: flex;
+    gap: 8px;
+    /* Butonlar arasına boşluk */
+    align-items: center;
 }
 
 .icon-btn {
@@ -72,8 +76,17 @@ h1 {
     font-size: 1.2rem;
     color: var(--text-secondary);
     transition: var(--transition);
-    padding: 4px;
+    width: 36px;
+    /* Sabit genişlik */
+    height: 36px;
+    /* Sabit yükseklik - Tam daire için */
+    display: flex;
+    /* İkonu ortalamak için */
+    justify-content: center;
+    align-items: center;
     border-radius: 50%;
+    outline: none;
+    /* Odaklanma çizgisini kaldır */
 }
 
 .icon-btn:hover {
@@ -96,8 +109,7 @@ h1 {
     gap: 10px;
     transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
     overflow: hidden;
-    max-height: 200px;
-    /* arbitrary max height for transition */
+    max-height: 400px;
 }
 
 .settings-panel.hidden {
@@ -148,6 +160,27 @@ input[type="checkbox"] {
 .shortcut-input:focus {
     border-color: var(--accent);
     background: rgba(255, 255, 255, 0.15);
+}
+
+.settings-select {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    border-radius: 6px;
+    width: 140px;
+    outline: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.settings-select option {
+    background: var(--bg-color);
+    color: var(--text-primary);
+}
+
+.settings-select:focus {
+    border-color: var(--accent);
 }
 
 .about-content {
@@ -223,6 +256,20 @@ input[type="number"]:focus {
     justify-content: space-between;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
+}
+
+.history-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.history-meta {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    display: block;
+    opacity: 0.7;
 }
 
 .history-text {
@@ -231,8 +278,6 @@ input[type="number"]:focus {
     -webkit-box-orient: vertical;
     overflow: hidden;
     word-break: break-all;
-    /* Better for long URL/code */
-    flex: 1;
 }
 
 .copy-icon-btn {

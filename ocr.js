@@ -28,7 +28,7 @@ window.api.onCaptureScreen((imageDataUrl) => {
 
 function reset() {
     isSelecting = false;
-    selectionBox.classList.add('hidden');
+    selectionBox.style.display = 'none';
     selectionBox.style.width = selectionBox.style.height = '0px';
     overlay.style.display = 'block';
 }
@@ -42,7 +42,7 @@ window.addEventListener('mousedown', (e) => {
     startY = e.clientY;
     selectionBox.style.left = startX + 'px';
     selectionBox.style.top = startY + 'px';
-    selectionBox.classList.remove('hidden');
+    selectionBox.style.display = 'block'; // hidden yerine display kontrol et
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -66,8 +66,12 @@ window.addEventListener('mouseup', () => {
     tempCanvas.height = rect.height;
     const tCtx = tempCanvas.getContext('2d');
     tCtx.drawImage(canvas, rect.left, rect.top, rect.width, rect.height, 0, 0, rect.width, rect.height);
-    window.api.sendCrop(tempCanvas.toDataURL('image/png'));
+
+    // OCR işlemi için gönder
+    window.api.sendOCR(tempCanvas.toDataURL('image/png'));
 });
 
 // ESC key to close
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.api.closeSnipper(); });
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.api.closeSnipper();
+});

@@ -17,8 +17,9 @@
                 <h1>CopyBoard</h1>
             </div>
             <div class="actions">
-                <button id="about-btn" class="icon-btn" title="Hakkında">ℹ️</button>
-                <button id="settings-btn" class="icon-btn" title="Ayarlar">⚙️</button>
+                <button id="about-btn" class="icon-btn" title="Hakkında" tabindex="-1">ℹ️</button>
+                <button id="settings-btn" class="icon-btn" title="Ayarlar" tabindex="-1">⚙️</button>
+                <button id="minimize-btn" class="icon-btn" title="Gizle" tabindex="-1">─</button>
             </div>
         </header>
 
@@ -44,6 +45,19 @@
                 <label for="image-shortcut-input">Çizim Modu:</label>
                 <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
                     class="shortcut-input" title="Ekran görüntüsü alıp üzerinde çizim yapmak için">
+            </div>
+            <div class="setting-item">
+                <label for="video-shortcut-input">Video Kayıt:</label>
+                <input type="text" id="video-shortcut-input" placeholder="Tuşlara basın..." readonly
+                    class="shortcut-input" title="Ekranın belirli bir bölgesini videoya kaydetmek için">
+            </div>
+            <div class="setting-item">
+                <label for="video-quality">Video Kalitesi:</label>
+                <select id="video-quality" class="settings-select">
+                    <option value="low">Düşük (720p - 30fps)</option>
+                    <option value="medium">Orta (1080p - 30fps)</option>
+                    <option value="high" selected>Yüksek (4K - 60fps)</option>
+                </select>
             </div>
             <div class="setting-item">
                 <label for="autostart-check">Başlangıçta Çalıştır:</label>

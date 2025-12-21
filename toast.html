@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        :root {
+            --bg: #1e1e2e;
+            --accent: #8957e5;
+            --success: #50fa7b;
+            --info: #8be9fd;
+            --text: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            background: transparent;
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-start;
+        }
+
+        .toast {
+            background: var(--bg);
+            color: var(--text);
+            padding: 12px 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 20px;
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            min-width: 200px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .icon {
+            font-size: 1.2rem;
+        }
+
+        .success .icon {
+            color: var(--success);
+        }
+
+        .info .icon {
+            color: var(--info);
+        }
+
+        .progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background: var(--accent);
+            width: 100%;
+            border-radius: 0 0 0 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="toast" class="toast">
+        <span id="icon" class="icon"></span>
+        <span id="message"></span>
+        <div id="progress" class="progress"></div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const toast = document.getElementById('toast');
+        const msg = document.getElementById('message');
+        const icon = document.getElementById('icon');
+        const progress = document.getElementById('progress');
+
+        ipcRenderer.on('display-toast', (e, text, type) => {
+            msg.textContent = text;
+            toast.className = 'toast show ' + type;
+            icon.textContent = type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️');
+
+            // Auto close after 3s
+            progress.style.transition = 'none';
+            progress.style.width = '100%';
+            setTimeout(() => {
+                progress.style.transition = 'width 3s linear';
+                progress.style.width = '0%';
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => ipcRenderer.send('toast-finished'), 500);
+            }, 3000);
+        });
+    </script>
+</body>
+
+</html>

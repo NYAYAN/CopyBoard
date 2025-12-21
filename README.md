@@ -91,4 +91,3 @@ Setup dosyası oluşturmak için **PowerShell veya VS Code'u Yönetici olarak ç
 
 **Nurullah YAYAN**
 *   📧 nurullah.yayan@gmail.com
-*   📞 541 457 27 39

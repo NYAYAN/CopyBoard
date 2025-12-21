@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CopyBoard Recorder</title>
+    <link rel="stylesheet" href="recorder.css">
+</head>
+
+<body>
+    <canvas id="screen-canvas"></canvas>
+    <div id="overlay"></div>
+    <div id="selection-box" class="hidden">
+        <div class="resize-handle nw" data-handle="nw"></div>
+        <div class="resize-handle ne" data-handle="ne"></div>
+        <div class="resize-handle sw" data-handle="sw"></div>
+        <div class="resize-handle se" data-handle="se"></div>
+
+        <div id="recorder-toolbar" class="toolbar">
+            <span class="toolbar-label" id="quality-label">Kalite:</span>
+            <select id="quality-select" class="toolbar-select">
+                <option value="low">Düşük</option>
+                <option value="medium">Orta</option>
+                <option value="high">Yüksek</option>
+            </select>
+            <div class="divider"></div>
+            <button class="tool-btn" id="btn-fullscreen" title="Tam Ekran Seç">🖥️</button>
+            <button class="tool-btn" id="btn-record" title="Kaydı Başlat">⏺️</button>
+            <button class="tool-btn danger hidden" id="btn-stop" title="Kaydı Durdur">⏹️</button>
+            <div id="timer" class="timer hidden">00:00</div>
+            <div class="divider"></div>
+            <button class="tool-btn" id="btn-close" title="Kapat">❌</button>
+        </div>
+    </div>
+
+    <div class="instruction">Kaydetmek istediğiniz alanı seçin.</div>
+
+    <script src="recorder.js"></script>
+</body>
+
+</html>

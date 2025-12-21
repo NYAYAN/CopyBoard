@@ -6,10 +6,23 @@ const aboutPanel = document.getElementById('about-panel');
 const maxItemsInput = document.getElementById('max-items');
 const shortcutInput = document.getElementById('shortcut-input');
 const imageShortcutInput = document.getElementById('image-shortcut-input');
+const videoShortcutInput = document.getElementById('video-shortcut-input');
+const videoQualitySelect = document.getElementById('video-quality');
 const clearBtn = document.getElementById('clear-history-btn');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmClearBtn = document.getElementById('confirm-clear-btn');
 const cancelClearBtn = document.getElementById('cancel-clear-btn');
+const minimizeBtn = document.getElementById('minimize-btn');
+
+// Minimize handler
+minimizeBtn.addEventListener('click', () => {
+    window.api.closeWindow();
+});
+
+// Remove focus when window is shown
+window.addEventListener('focus', () => {
+    if (document.activeElement) document.activeElement.blur();
+});
 
 // Helper for shortcut recording
 function setupShortcutInput(element, callback) {
@@ -69,6 +82,12 @@ maxItemsInput.addEventListener('change', (e) => {
 // Shortcut Input Handlers
 setupShortcutInput(shortcutInput, (s) => window.api.setShortcut(s));
 setupShortcutInput(imageShortcutInput, (s) => window.api.setImageShortcut(s));
+setupShortcutInput(videoShortcutInput, (s) => window.api.setVideoShortcut(s));
+
+// Video Quality Handler
+videoQualitySelect.addEventListener('change', (e) => {
+    window.api.setVideoQuality(e.target.value);
+});
 
 // Clear History Dialog Toggle
 clearBtn.addEventListener('click', () => {
@@ -95,13 +114,32 @@ function renderHistory(history) {
 
     history.forEach(item => {
         const itemContent = typeof item === 'string' ? item : item.content;
+        const itemDate = typeof item === 'object' && item.timestamp ? new Date(item.timestamp) : new Date();
+
+        // Format timestamp: DD.MM.YYYY HH:mm
+        const dateStr = itemDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const timeStr = itemDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        const metaText = `${dateStr} ${timeStr}`;
+
         const domItem = document.createElement('div');
         domItem.className = 'history-item';
+
+        // Content Wrapper
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'history-content';
 
         // Text part
         const textSpan = document.createElement('span');
         textSpan.className = 'history-text';
         textSpan.textContent = itemContent;
+
+        // Meta part (Time)
+        const metaSpan = document.createElement('small');
+        metaSpan.className = 'history-meta';
+        metaSpan.textContent = metaText;
+
+        contentDiv.appendChild(textSpan);
+        contentDiv.appendChild(metaSpan);
 
         // Icon part
         const iconSpan = document.createElement('span');
@@ -109,7 +147,7 @@ function renderHistory(history) {
         iconSpan.textContent = '📋';
         iconSpan.title = 'Kopyala';
 
-        domItem.appendChild(textSpan);
+        domItem.appendChild(contentDiv);
         domItem.appendChild(iconSpan);
 
         // Click handler for the whole row
@@ -146,6 +184,12 @@ function renderHistory(history) {
     }
     if (settings.globalShortcutImage) {
         imageShortcutInput.value = formatShortcut(settings.globalShortcutImage);
+    }
+    if (settings.globalShortcutVideo) {
+        videoShortcutInput.value = formatShortcut(settings.globalShortcutVideo);
+    }
+    if (settings.videoQuality) {
+        videoQualitySelect.value = settings.videoQuality;
     }
     renderHistory(history);
 })();

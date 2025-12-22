@@ -103,7 +103,7 @@ function createCapture(type = 'draw', display = null) {
     width: display.bounds.width, height: display.bounds.height,
     frame: false, transparent: true, alwaysOnTop: true,
     fullscreen: true, skipTaskbar: true, movable: false, resizable: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js') }
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }
   });
 
   let file = 'snipper.html';
@@ -114,6 +114,9 @@ function createCapture(type = 'draw', display = null) {
 
   // Tüm capture pencereleri en üstte (Video toolbar her zaman görünür)
   win.setAlwaysOnTop(true, 'screen-saver');
+
+  // Güvenlik: Yeni pencere açılışlarını engelle
+  win.webContents.setWindowOpenHandler(() => { return { action: 'deny' }; });
 
   win.on('closed', () => {
     if (type === 'ocr') state.ocrWindow = null;
@@ -159,6 +162,13 @@ app.whenReady().then(() => {
     width: 400, height: 600, frame: false, show: false, skipTaskbar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }
   });
+
+  // Güvenlik: Dış linklerin uygulama içinde açılmasını engelle
+  state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http')) require('electron').shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
   state.mainWindow.loadFile('index.html');
   state.mainWindow.on('blur', () => state.mainWindow.hide());
 

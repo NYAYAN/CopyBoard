@@ -96,8 +96,8 @@ function showMain() {
   }
 }
 
-function createCapture(type = 'draw') {
-  const display = screen.getPrimaryDisplay();
+function createCapture(type = 'draw', display = null) {
+  if (!display) display = screen.getPrimaryDisplay();
   const win = new BrowserWindow({
     x: display.bounds.x, y: display.bounds.y,
     width: display.bounds.width, height: display.bounds.height,
@@ -130,13 +130,18 @@ function createCapture(type = 'draw') {
 
 async function capture(mode) {
   try {
-    const { width, height } = screen.getPrimaryDisplay().bounds;
+    const cursorPoint = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursorPoint);
+    const { width, height } = display.bounds;
+
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
-    if (sources[0]) {
-      const data = sources[0].thumbnail.toDataURL();
-      const sourceId = sources[0].id;
+    const source = sources.find(s => s.display_id == display.id) || sources[0];
+
+    if (source) {
+      const data = source.thumbnail.toDataURL();
+      const sourceId = source.id;
       state.lastMode = mode;
-      const win = createCapture(mode);
+      const win = createCapture(mode, display);
       win.webContents.on('did-finish-load', () => {
         if (!win.isDestroyed()) win.webContents.send('capture-screen', data, mode, sourceId, state.videoQuality);
       });
@@ -208,6 +213,14 @@ app.whenReady().then(() => {
     showToast('Geçmiş Temizlendi.', 'success');
   });
   ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });
+  ipcMain.on('delete-history-item', (e, content) => {
+    state.history = state.history.filter(i => i.content !== content);
+    store.set('history', state.history);
+    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+      state.mainWindow.webContents.send('update-history', state.history);
+    }
+  });
+
   ipcMain.on('snip-close', () => { [state.snipperWindow, state.ocrWindow, state.recorderWindow].forEach(w => w && !w.isDestroyed() && w.close()); });
 
   ipcMain.on('snip-ready', () => {

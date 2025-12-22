@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
     setImageShortcut: (shortcut) => ipcRenderer.send('set-image-shortcut', shortcut),
     setVideoShortcut: (shortcut) => ipcRenderer.send('set-video-shortcut', shortcut),
     copyItem: (text) => ipcRenderer.send('copy-item', text),
+    deleteHistoryItem: (content) => ipcRenderer.send('delete-history-item', content),
     clearHistory: () => ipcRenderer.send('clear-history'),
     closeWindow: () => ipcRenderer.send('close-window'),
     setAutoStart: (val) => ipcRenderer.send('set-autostart', val),

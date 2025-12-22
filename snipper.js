@@ -191,8 +191,21 @@ window.addEventListener('mouseup', () => {
 
 function showToolbar(r) {
     toolbar.style.display = 'flex';
-    let t = r.bottom + 10, l = Math.max(r.left, r.right - toolbar.offsetWidth);
+    let t = r.bottom + 10;
+    // Calculate preferred left position (aligned to right of selection, or left if that's safer?)
+    // Original logic was max(left, right - width). We keep that but clamp it.
+    let l = Math.max(r.left, r.right - toolbar.offsetWidth);
+
+    // Ensure it doesn't go off the right edge
+    if (l + toolbar.offsetWidth > window.innerWidth) {
+        l = window.innerWidth - toolbar.offsetWidth - 10;
+    }
+    // Ensure it doesn't go off the left edge
+    if (l < 10) l = 10;
+
     if (t + toolbar.offsetHeight > window.innerHeight) t = r.top - toolbar.offsetHeight - 10;
+    if (t < 10) t = 10; // Extra safety
+
     toolbar.style.top = t + 'px'; toolbar.style.left = l + 'px';
 }
 

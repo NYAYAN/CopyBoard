@@ -141,25 +141,51 @@ function renderHistory(history) {
         contentDiv.appendChild(textSpan);
         contentDiv.appendChild(metaSpan);
 
-        // Icon part
-        const iconSpan = document.createElement('span');
-        iconSpan.className = 'copy-icon-btn';
-        iconSpan.textContent = '📋';
-        iconSpan.title = 'Kopyala';
+        // Copy Icon
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'action-btn copy-btn';
+        copyBtn.innerHTML = '📋';
+        copyBtn.title = 'Kopyala';
+
+        // Delete Icon
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'action-btn delete-btn';
+        deleteBtn.innerHTML = '✕';
+        deleteBtn.title = 'Sil';
+
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Parent row click'ini engelle
+            window.api.deleteHistoryItem(itemContent);
+        });
 
         domItem.appendChild(contentDiv);
-        domItem.appendChild(iconSpan);
+        domItem.appendChild(copyBtn);
+        domItem.appendChild(deleteBtn);
 
-        // Click handler for the whole row
-        domItem.addEventListener('click', () => {
+        // Click handler for the whole row (Copy)
+        domItem.addEventListener('click', (e) => {
+            // If clicked on delete button, do nothing (handled separately)
+            if (e.target.closest('.delete-btn')) return;
+
             // Animate copy feedback
-            domItem.style.borderColor = 'var(--accent)';
-            iconSpan.textContent = '✅';
+            domItem.classList.add('copied');
+            copyBtn.innerHTML = '✅';
             setTimeout(() => {
-                domItem.style.borderColor = 'transparent';
-                iconSpan.textContent = '📋';
+                domItem.classList.remove('copied');
+                copyBtn.innerHTML = '📋';
             }, 800);
             window.api.copyItem(itemContent);
+        });
+
+        // Delete Handler
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Optional: Animate removal
+            domItem.style.opacity = '0';
+            domItem.style.transform = 'translateX(20px)';
+            setTimeout(() => {
+                window.api.deleteHistoryItem(itemContent);
+            }, 200);
         });
 
         listElement.appendChild(domItem);

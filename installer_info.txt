@@ -1,17 +1,23 @@
-CopyBoard - Uygulama Bilgileri
+CopyBoard v2.1 - Sürüm Notları
 
-Bu uygulama Nurullah YAYAN tarafindan gelistirilmistir.
+Gelişmiş Pano Yöneticisi ve OCR Aracı
 
-Iletisim Bilgileri:
--------------------
-Gelistirici: Nurullah YAYAN
-E-posta: nurullah.yayan@gmail.com
+YENİ ÖZELLİKLER:
+- Favoriler Sistemi: İçerikleri yıldızlayın ve özel sekmeye taşıyın.
+- Akıllı Sıralama: Favori öğeleri sürükle-bırak ile düzenleyin.
+- Manuel Ekleme: "+" butonu ile manuel metin girişi yapın.
+- Gelişmiş OCR: Özel kısayol atama ve gelişmiş metin tanıma.
 
-Uygulama Ozellikleri:
----------------------
-- Gelismis Pano Gecmisi Yonetimi (Alt + Shift + V)
-- Ekran Uzerinde Cizim ve Not Alma (Alt + Shift + 9)
-- Gorsellerden Metin Okuma (OCR - Alt + Shift + 2)
-- Hizli Kopyalama ve Kaydetme Secenekleri
+KISAYOLLAR (Alt Tuşu İle):
+- Alt + V: Pano Listesi
+- Alt + 2: Metin Oku (OCR)
+- Alt + 8: Video Kaydı
+- Alt + 9: Ekran Görüntüsü
 
-Uygulamayi kullandiginiz icin tesekkur ederiz. Kuruluma devam etmek icin 'Kabul Ediyorum' veya 'Ileri' butonuna tiklayiniz.
+DÜZENLEMELER:
+- Tüm kısayol kombinasyonlarından Shift kaldırıldı (Daha hızlı erişim).
+- Minimale indirilmiş, modern ve animasyonlu arayüz.
+- Performans ve kararlılık iyileştirmeleri.
+
+Geliştirici: Nurullah YAYAN
+İletişim: nurullah.yayan@gmail.com

@@ -3,8 +3,29 @@ const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
 const Tesseract = require('tesseract.js');
+const crypto = require('crypto');
 
 const store = new Store();
+
+// --- Migration ---
+let savedHistory = store.get('history', []);
+let hasChanges = false;
+savedHistory = savedHistory.map(item => {
+  if (typeof item === 'string') {
+    hasChanges = true;
+    return { id: crypto.randomUUID(), content: item, timestamp: new Date().toISOString(), isFavorite: false };
+  }
+  if (!item.id) {
+    hasChanges = true;
+    item.id = crypto.randomUUID();
+  }
+  if (item.isFavorite === undefined) {
+    hasChanges = true;
+    item.isFavorite = false;
+  }
+  return item;
+});
+if (hasChanges) store.set('history', savedHistory);
 
 const state = {
   mainWindow: null,
@@ -12,38 +33,35 @@ const state = {
   ocrWindow: null,
   recorderWindow: null,
   toastWindow: null,
-  history: store.get('history', []),
+  history: savedHistory,
   maxItems: store.get('maxItems', 50),
   autoStart: store.get('autoStart', true),
   videoQuality: store.get('videoQuality', 'high'),
   shortcuts: {
-    list: store.get('globalShortcut', 'Alt+Shift+V'),
-    draw: store.get('globalShortcutImage', 'Alt+Shift+9'),
-    video: store.get('globalShortcutVideo', 'Alt+Shift+8'),
-    ocr: 'Alt+Shift+2'
+    list: store.get('globalShortcut', 'Alt+V'),
+    draw: store.get('globalShortcutImage', 'Alt+9'),
+    video: store.get('globalShortcutVideo', 'Alt+8'),
+    ocr: store.get('globalShortcutOcr', 'Alt+2')
   },
   lastText: '',
   lastMode: 'draw',
   tempVideoPath: null
 };
 
-// --- Gelişmiş Bildirim (Toast) Sistemi ---
+// --- Toast ---
 function showToast(message, type = 'info') {
   try {
     if (state.toastWindow && !state.toastWindow.isDestroyed()) {
       state.toastWindow.destroy();
     }
-
     const display = screen.getPrimaryDisplay();
     const { width } = display.workAreaSize;
-
     state.toastWindow = new BrowserWindow({
-      width: 350, height: 100, x: width - 370, y: 50,
+      width: 320, height: 100, x: width - 370, y: 50,
       frame: false, transparent: true, alwaysOnTop: true,
       skipTaskbar: true, resizable: false, show: false,
       webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
-
     state.toastWindow.setAlwaysOnTop(true, 'screen-saver');
     state.toastWindow.loadFile(path.join(__dirname, 'toast.html'));
     state.toastWindow.once('ready-to-show', () => {
@@ -56,14 +74,32 @@ function showToast(message, type = 'info') {
   } catch (e) { console.error('Toast Error:', e); }
 }
 
-ipcMain.on('toast-finished', () => {
-  if (state.toastWindow && !state.toastWindow.isDestroyed()) state.toastWindow.destroy();
-});
-
 function addHistory(content) {
-  if (!content || state.history.some(i => i.content === content)) return;
-  state.history.unshift({ content, timestamp: new Date().toISOString() });
-  if (state.history.length > state.maxItems) state.history = state.history.slice(0, state.maxItems);
+  if (!content) return;
+  const existingIndex = state.history.findIndex(i => i.content === content);
+  let isFav = false;
+  if (existingIndex !== -1) {
+    isFav = state.history[existingIndex].isFavorite;
+    state.history.splice(existingIndex, 1);
+  }
+  const newItem = {
+    id: crypto.randomUUID(),
+    content,
+    timestamp: new Date().toISOString(),
+    isFavorite: isFav
+  };
+  state.history.unshift(newItem);
+  if (state.history.length > state.maxItems) {
+    let deleted = false;
+    for (let i = state.history.length - 1; i >= 0; i--) {
+      if (!state.history[i].isFavorite) {
+        state.history.splice(i, 1);
+        deleted = true;
+        break;
+      }
+    }
+    if (!deleted && state.history.length > state.maxItems) state.history.pop();
+  }
   store.set('history', state.history);
   if (state.mainWindow && !state.mainWindow.isDestroyed()) {
     state.mainWindow.webContents.send('update-history', state.history);
@@ -84,12 +120,10 @@ function showMain() {
   if (state.mainWindow && !state.mainWindow.isDestroyed()) {
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const { width, height } = display.workAreaSize;
-    // Main pencereyi video kaydının da üstüne çıkarmak için 'screen-saver' seviyesine yükseltiyoruz
     state.mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    // Sağ alt köşede aç (Saat ve system tray yanında)
     state.mainWindow.setPosition(
-      display.workArea.x + width - 420,
-      display.workArea.y + height - 620
+      display.workArea.x + width - 380,
+      display.workArea.y + height - 560
     );
     state.mainWindow.show();
     state.mainWindow.focus();
@@ -111,11 +145,7 @@ function createCapture(type = 'draw', display = null) {
   if (type === 'video') file = 'recorder.html';
 
   win.loadFile(path.join(__dirname, file));
-
-  // Tüm capture pencereleri en üstte (Video toolbar her zaman görünür)
   win.setAlwaysOnTop(true, 'screen-saver');
-
-  // Güvenlik: Yeni pencere açılışlarını engelle
   win.webContents.setWindowOpenHandler(() => { return { action: 'deny' }; });
 
   win.on('closed', () => {
@@ -149,21 +179,31 @@ async function capture(mode) {
         if (!win.isDestroyed()) win.webContents.send('capture-screen', data, mode, sourceId, state.videoQuality);
       });
     }
-  } catch (e) { console.error(e); }
+  } catch (e) { showToast('Capture Hatası', 'error'); console.error(e); }
 }
 
 app.whenReady().then(() => {
   const tray = new Tray(path.join(__dirname, 'icon.png'));
   tray.setToolTip('CopyBoard');
-  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Göster', click: showMain }, { label: 'Çıkış', click: () => app.quit() }]));
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Göster', click: showMain },
+    { type: 'separator' },
+    { label: 'Ekran Görüntüsü Al', click: () => capture('draw') },
+    { label: 'Metin Oku (OCR)', click: () => capture('ocr') },
+    { label: 'Video Kaydet', click: () => capture('video') },
+    { type: 'separator' },
+    { label: 'Çıkış', click: () => app.quit() }
+  ]);
+
+  tray.setContextMenu(contextMenu);
   tray.on('click', showMain);
 
   state.mainWindow = new BrowserWindow({
-    width: 400, height: 600, frame: false, show: false, skipTaskbar: true,
+    width: 350, height: 550, frame: false, show: false, skipTaskbar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }
   });
 
-  // Güvenlik: Dış linklerin uygulama içinde açılmasını engelle
   state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) require('electron').shell.openExternal(url);
     return { action: 'deny' };
@@ -186,10 +226,12 @@ app.whenReady().then(() => {
     app.setLoginItemSettings({ openAtLogin: state.autoStart, path: app.getPath('exe'), args: ['--hidden'] });
   }
 
+  // --- IPC Handlers ---
   ipcMain.handle('get-history', () => state.history);
   ipcMain.handle('get-settings', () => ({
     maxItems: state.maxItems, globalShortcut: state.shortcuts.list,
     globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
+    globalShortcutOcr: state.shortcuts.ocr,
     autoStart: state.autoStart, videoQuality: state.videoQuality
   }));
 
@@ -198,10 +240,11 @@ app.whenReady().then(() => {
   ipcMain.on('set-shortcut', (e, s) => updateShortcut('list', s, 'globalShortcut'));
   ipcMain.on('set-image-shortcut', (e, s) => updateShortcut('draw', s, 'globalShortcutImage'));
   ipcMain.on('set-video-shortcut', (e, s) => updateShortcut('video', s, 'globalShortcutVideo'));
+  ipcMain.on('set-ocr-shortcut', (e, s) => updateShortcut('ocr', s, 'globalShortcutOcr'));
+
   ipcMain.on('set-max-items', (e, count) => {
     state.maxItems = count;
     store.set('maxItems', count);
-    // Trim history if needed
     if (state.history.length > count) {
       state.history = state.history.slice(0, count);
       store.set('history', state.history);
@@ -210,10 +253,41 @@ app.whenReady().then(() => {
       }
     }
   });
+
   ipcMain.on('copy-item', (e, text) => {
     clipboard.writeText(text);
     state.lastText = text;
   });
+
+  ipcMain.on('add-manual-item', (e, content) => {
+    addHistory(content);
+    showToast('Öğe Eklendi', 'success');
+  });
+
+  ipcMain.on('toggle-favorite', (e, id) => {
+    const item = state.history.find(i => i.id === id);
+    if (item) {
+      item.isFavorite = !item.isFavorite;
+      store.set('history', state.history);
+      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+        state.mainWindow.webContents.send('update-history', state.history);
+      }
+    }
+  });
+
+  ipcMain.on('reorder-history', (e, newHistory) => {
+    state.history = newHistory;
+    store.set('history', state.history);
+  });
+
+  ipcMain.on('delete-history-item', (e, id) => {
+    state.history = state.history.filter(i => i.id !== id);
+    store.set('history', state.history);
+    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+      state.mainWindow.webContents.send('update-history', state.history);
+    }
+  });
+
   ipcMain.on('clear-history', () => {
     state.history = [];
     store.set('history', []);
@@ -222,14 +296,9 @@ app.whenReady().then(() => {
     }
     showToast('Geçmiş Temizlendi.', 'success');
   });
+
   ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });
-  ipcMain.on('delete-history-item', (e, content) => {
-    state.history = state.history.filter(i => i.content !== content);
-    store.set('history', state.history);
-    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-      state.mainWindow.webContents.send('update-history', state.history);
-    }
-  });
+  ipcMain.on('toast-finished', () => { if (state.toastWindow && !state.toastWindow.isDestroyed()) state.toastWindow.destroy(); });
 
   ipcMain.on('snip-close', () => { [state.snipperWindow, state.ocrWindow, state.recorderWindow].forEach(w => w && !w.isDestroyed() && w.close()); });
 
@@ -241,25 +310,27 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('snip-copy-image', (e, d) => {
-    clipboard.writeImage(require('electron').nativeImage.createFromDataURL(d));
-    showToast('Resim Kopyalandı.', 'success');
-    if (state.snipperWindow) state.snipperWindow.close();
+    if (state.snipperWindow && !state.snipperWindow.isDestroyed()) {
+      clipboard.writeImage(require('electron').nativeImage.createFromDataURL(d));
+      showToast('Resim Kopyalandı.', 'success');
+      state.snipperWindow.close();
+    }
   });
 
   ipcMain.on('snip-save-image', (e, d) => {
     const p = dialog.showSaveDialogSync(state.snipperWindow, { title: 'Kaydet', defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`), filters: [{ name: 'Images', extensions: ['png'] }] });
     if (p) { fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64')); showToast('Resim Kaydedildi.', 'success'); }
-    if (state.snipperWindow) state.snipperWindow.close();
+    if (state.snipperWindow && !state.snipperWindow.isDestroyed()) state.snipperWindow.close();
   });
 
   ipcMain.on('record-start', () => { state.tempVideoPath = path.join(app.getPath('temp'), `temp_video_${Date.now()}.webm`); });
   ipcMain.on('record-chunk', (e, arrayBuffer) => { if (state.tempVideoPath) fs.appendFileSync(state.tempVideoPath, Buffer.from(arrayBuffer)); });
   ipcMain.on('record-stop', (e) => {
     const p = dialog.showSaveDialogSync(state.recorderWindow, { title: 'Videoyu Kaydet', defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`), filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }] });
-    if (p) { fs.copyFileSync(state.tempVideoPath, p); showToast('Video Kaydedildi.', 'success'); }
-    if (fs.existsSync(state.tempVideoPath)) fs.unlinkSync(state.tempVideoPath);
+    if (p) { if (fs.existsSync(state.tempVideoPath)) fs.copyFileSync(state.tempVideoPath, p); showToast('Video Kaydedildi.', 'success'); }
+    if (state.tempVideoPath && fs.existsSync(state.tempVideoPath)) fs.unlinkSync(state.tempVideoPath);
     state.tempVideoPath = null;
-    if (state.recorderWindow) state.recorderWindow.close();
+    if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
   });
 
   ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
@@ -268,18 +339,12 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('ocr-process', async (e, d) => {
-    if (state.ocrWindow) state.ocrWindow.close(); // Sadece OCR penceresi ile ilgilenir
+    if (state.ocrWindow && !state.ocrWindow.isDestroyed()) state.ocrWindow.close();
     showToast('Metin Taranıyor...', 'info');
     try {
-      // Worker'ı başlat (Sözlük parametreleri initialize sırasında!)
-      const worker = await Tesseract.createWorker('eng+tur', 1, {
-        load_system_dawg: '0',
-        load_freq_dawg: '0'
-      });
-
+      const worker = await Tesseract.createWorker('eng+tur', 1, { load_system_dawg: '0', load_freq_dawg: '0' });
       const { data: { text } } = await worker.recognize(Buffer.from(d.split(',')[1], 'base64'));
       await worker.terminate();
-
       const c = text.trim();
       if (c) { state.lastText = c; clipboard.writeText(c); addHistory(c); showToast('Metin Kopyalandı.', 'success'); }
     } catch (err) { console.error(err); }

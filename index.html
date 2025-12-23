@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CopyBoard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -18,15 +19,21 @@
                 <h1>CopyBoard</h1>
             </div>
             <div class="actions">
+                <button id="add-manual-btn" class="icon-btn" title="Manuel Ekle" tabindex="-1">➕</button>
                 <button id="about-btn" class="icon-btn" title="Hakkında" tabindex="-1">ℹ️</button>
                 <button id="settings-btn" class="icon-btn" title="Ayarlar" tabindex="-1">⚙️</button>
                 <button id="minimize-btn" class="icon-btn" title="Gizle" tabindex="-1">─</button>
             </div>
         </header>
 
+        <div class="tabs-container">
+            <button class="tab-btn active" data-tab="all">Tümü</button>
+            <button class="tab-btn" data-tab="favorites">Favoriler ⭐</button>
+        </div>
+
         <div id="about-panel" class="settings-panel hidden">
             <div class="about-content">
-                <h3>CopyBoard v1.0</h3>
+                <h3>CopyBoard v2.1.0</h3>
                 <p><strong>Geliştirici:</strong> Nurullah YAYAN</p>
                 <p>📧 nurullah.yayan@gmail.com</p>
             </div>
@@ -46,6 +53,11 @@
                 <label for="image-shortcut-input">Çizim Modu:</label>
                 <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
                     class="shortcut-input" title="Ekran görüntüsü alıp üzerinde çizim yapmak için">
+            </div>
+            <div class="setting-item">
+                <label for="ocr-shortcut-input">Metin Oku (OCR):</label>
+                <input type="text" id="ocr-shortcut-input" placeholder="Tuşlara basın..." readonly
+                    class="shortcut-input" title="Ekrandaki yazıları kopyalamak için">
             </div>
             <div class="setting-item">
                 <label for="video-shortcut-input">Video Kayıt:</label>
@@ -71,12 +83,28 @@
             <!-- Items will be injected here -->
         </main>
     </div>
+
+    <!-- Confirm Clear Modal -->
     <div id="confirm-modal" class="modal-overlay hidden">
         <div class="modal">
             <p>Tüm geçmişi silmek istediğinizden emin misiniz?</p>
             <div class="modal-actions">
                 <button id="cancel-clear-btn" class="modal-btn">Vazgeç</button>
                 <button id="confirm-clear-btn" class="modal-btn danger">Sil</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Add Modal -->
+    <div id="add-item-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>Yeni Öğe Ekle</h3>
+            <textarea id="manual-text-input" placeholder="Metni buraya yapıştırın veya yazın..." rows="4"
+                style="width: 100%; margin: 10px 0; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; resize: none;"></textarea>
+            <div class="modal-actions">
+                <button id="cancel-add-btn" class="modal-btn">İptal</button>
+                <button id="confirm-add-btn" class="modal-btn"
+                    style="background: var(--accent); color: white;">Ekle</button>
             </div>
         </div>
     </div>

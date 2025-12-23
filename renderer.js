@@ -1,11 +1,13 @@
 const listElement = document.getElementById('history-list');
 const settingsBtn = document.getElementById('settings-btn');
 const aboutBtn = document.getElementById('about-btn');
+const addManualBtn = document.getElementById('add-manual-btn');
 const settingsPanel = document.getElementById('settings-panel');
 const aboutPanel = document.getElementById('about-panel');
 const maxItemsInput = document.getElementById('max-items');
 const shortcutInput = document.getElementById('shortcut-input');
 const imageShortcutInput = document.getElementById('image-shortcut-input');
+const ocrShortcutInput = document.getElementById('ocr-shortcut-input');
 const videoShortcutInput = document.getElementById('video-shortcut-input');
 const videoQualitySelect = document.getElementById('video-quality');
 const clearBtn = document.getElementById('clear-history-btn');
@@ -13,42 +15,57 @@ const confirmModal = document.getElementById('confirm-modal');
 const confirmClearBtn = document.getElementById('confirm-clear-btn');
 const cancelClearBtn = document.getElementById('cancel-clear-btn');
 const minimizeBtn = document.getElementById('minimize-btn');
+const addItemModal = document.getElementById('add-item-modal');
+const manualTextInput = document.getElementById('manual-text-input');
+const confirmAddBtn = document.getElementById('confirm-add-btn');
+const cancelAddBtn = document.getElementById('cancel-add-btn');
+const tabBtns = document.querySelectorAll('.tab-btn');
 
-// Minimize handler
-minimizeBtn.addEventListener('click', () => {
-    window.api.closeWindow();
+let currentHistory = [];
+let activeTab = 'all';
+
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (activeTab === btn.dataset.tab) return;
+
+        listElement.classList.add('tab-switching');
+
+        setTimeout(() => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeTab = btn.dataset.tab;
+            renderHistory(currentHistory);
+
+            // Reflow'u tetikle ve animasyonu geri al
+            setTimeout(() => {
+                listElement.classList.remove('tab-switching');
+            }, 50);
+        }, 150);
+    });
 });
 
-// Remove focus when window is shown
+minimizeBtn.addEventListener('click', () => window.api.closeWindow());
+
 window.addEventListener('focus', () => {
     if (document.activeElement) document.activeElement.blur();
 });
 
-// Helper for shortcut recording
-function setupShortcutInput(element, callback) {
-    element.addEventListener('keydown', (e) => {
-        e.preventDefault();
+addManualBtn.addEventListener('click', () => {
+    addItemModal.classList.remove('hidden');
+    manualTextInput.value = '';
+    manualTextInput.focus();
+});
 
-        const keys = [];
-        if (e.ctrlKey) keys.push('CommandOrControl');
-        if (e.altKey) keys.push('Alt');
-        if (e.shiftKey) keys.push('Shift');
+cancelAddBtn.addEventListener('click', () => addItemModal.classList.add('hidden'));
 
-        // Get code for regular keys (e.g. KeyV -> V, Digit1 -> 1)
-        let key = e.key.toUpperCase();
-        if (key === 'CONTROL' || key === 'ALT' || key === 'SHIFT' || key === 'META') return;
+confirmAddBtn.addEventListener('click', () => {
+    const text = manualTextInput.value.trim();
+    if (text) {
+        window.api.addManualItem(text);
+        addItemModal.classList.add('hidden');
+    }
+});
 
-        keys.push(key);
-
-        const shortcutForMain = keys.join('+');
-        const shortcutForDisplay = keys.join(' + ').replace('CommandOrControl', 'Ctrl');
-
-        element.value = shortcutForDisplay;
-        callback(shortcutForMain);
-    });
-}
-
-// Toggle Settings
 settingsBtn.addEventListener('click', () => {
     aboutPanel.classList.add('hidden');
     aboutBtn.classList.remove('active');
@@ -56,7 +73,6 @@ settingsBtn.addEventListener('click', () => {
     settingsBtn.classList.toggle('active');
 });
 
-// Toggle About
 aboutBtn.addEventListener('click', () => {
     settingsPanel.classList.add('hidden');
     settingsBtn.classList.remove('active');
@@ -64,76 +80,143 @@ aboutBtn.addEventListener('click', () => {
     aboutBtn.classList.toggle('active');
 });
 
-const autoStartCheck = document.getElementById('autostart-check');
-
-// Update Startup Setting
-autoStartCheck.addEventListener('change', (e) => {
+document.getElementById('autostart-check').addEventListener('change', (e) => {
     window.api.setAutoStart(e.target.checked);
 });
 
-// Update Max Items
 maxItemsInput.addEventListener('change', (e) => {
     const value = parseInt(e.target.value);
-    if (value > 0) {
-        window.api.setMaxItems(value);
-    }
+    if (value > 0) window.api.setMaxItems(value);
 });
 
-// Shortcut Input Handlers
+function setupShortcutInput(element, callback) {
+    element.addEventListener('keydown', (e) => {
+        e.preventDefault();
+
+        // ESC tuşunu yasakla
+        if (e.key === 'Escape') return;
+
+        const keys = [];
+        if (e.ctrlKey) keys.push('CommandOrControl');
+        if (e.altKey) keys.push('Alt');
+        if (e.shiftKey) keys.push('Shift');
+        let key = e.key.toUpperCase();
+        if (['CONTROL', 'ALT', 'SHIFT', 'META'].includes(key)) return;
+        keys.push(key);
+        element.value = keys.join(' + ').replace('CommandOrControl', 'Ctrl');
+        callback(keys.join('+'));
+    });
+}
+
 setupShortcutInput(shortcutInput, (s) => window.api.setShortcut(s));
 setupShortcutInput(imageShortcutInput, (s) => window.api.setImageShortcut(s));
+setupShortcutInput(ocrShortcutInput, (s) => window.api.setOcrShortcut(s));
 setupShortcutInput(videoShortcutInput, (s) => window.api.setVideoShortcut(s));
 
-// Video Quality Handler
-videoQualitySelect.addEventListener('change', (e) => {
-    window.api.setVideoQuality(e.target.value);
-});
+videoQualitySelect.addEventListener('change', (e) => window.api.setVideoQuality(e.target.value));
 
-// Clear History Dialog Toggle
-clearBtn.addEventListener('click', () => {
-    confirmModal.classList.remove('hidden');
-});
-
-cancelClearBtn.addEventListener('click', () => {
-    confirmModal.classList.add('hidden');
-});
-
+clearBtn.addEventListener('click', () => confirmModal.classList.remove('hidden'));
+cancelClearBtn.addEventListener('click', () => confirmModal.classList.add('hidden'));
 confirmClearBtn.addEventListener('click', () => {
     window.api.clearHistory();
     confirmModal.classList.add('hidden');
 });
 
-// Render List
+function getFilteredHistory(history) {
+    if (activeTab === 'favorites') {
+        return history.filter(i => i.isFavorite);
+    }
+    return history;
+}
+
+let dragStartIndex;
+
+function onDragStart(e) {
+    if (activeTab !== 'favorites') return;
+    dragStartIndex = +this.getAttribute('data-list-index');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    this.classList.add('dragging');
+}
+
+function onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function onDrop(e) {
+    e.stopPropagation();
+    if (activeTab !== 'favorites') return;
+
+    const dragEndIndex = +this.getAttribute('data-list-index');
+    const item = this;
+
+    if (dragStartIndex !== dragEndIndex) {
+        swapFavorites(dragStartIndex, dragEndIndex);
+        item.classList.remove('dragging');
+    }
+}
+
+function swapFavorites(fromIndex, toIndex) {
+    const favorites = currentHistory.filter(i => i.isFavorite);
+    const itemA = favorites[fromIndex];
+    const itemB = favorites[toIndex];
+    const realIndexA = currentHistory.findIndex(i => i.id === itemA.id);
+    const realIndexB = currentHistory.findIndex(i => i.id === itemB.id);
+
+    const temp = currentHistory[realIndexA];
+    currentHistory[realIndexA] = currentHistory[realIndexB];
+    currentHistory[realIndexB] = temp;
+
+    window.api.reorderHistory(currentHistory);
+    renderHistory(currentHistory);
+}
+
 function renderHistory(history) {
     listElement.innerHTML = '';
+    currentHistory = history;
 
-    if (history.length === 0) {
-        listElement.innerHTML = '<div class="empty-state">Henüz kopyalanan öge yok.</div>';
+    const filtered = getFilteredHistory(history);
+
+    if (filtered.length === 0) {
+        listElement.innerHTML = '<div class="empty-state">Liste boş.</div>';
         return;
     }
 
-    history.forEach(item => {
-        const itemContent = typeof item === 'string' ? item : item.content;
-        const itemDate = typeof item === 'object' && item.timestamp ? new Date(item.timestamp) : new Date();
+    filtered.forEach((item, index) => {
+        const itemContent = item.content;
+        const itemDate = item.timestamp ? new Date(item.timestamp) : new Date();
 
-        // Format timestamp: DD.MM.YYYY HH:mm
         const dateStr = itemDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
         const timeStr = itemDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
         const metaText = `${dateStr} ${timeStr}`;
 
         const domItem = document.createElement('div');
         domItem.className = 'history-item';
+        domItem.setAttribute('data-list-index', index);
 
-        // Content Wrapper
+        if (activeTab === 'favorites') {
+            domItem.setAttribute('draggable', 'true');
+            domItem.addEventListener('dragstart', onDragStart);
+            domItem.addEventListener('dragover', onDragOver);
+            domItem.addEventListener('drop', onDrop);
+            domItem.addEventListener('dragend', () => domItem.classList.remove('dragging'));
+        }
+
+        if (activeTab === 'favorites') {
+            const dragHandle = document.createElement('span');
+            dragHandle.className = 'drag-handle';
+            dragHandle.innerHTML = '⋮⋮';
+            domItem.appendChild(dragHandle);
+        }
+
         const contentDiv = document.createElement('div');
         contentDiv.className = 'history-content';
 
-        // Text part
         const textSpan = document.createElement('span');
         textSpan.className = 'history-text';
         textSpan.textContent = itemContent;
 
-        // Meta part (Time)
         const metaSpan = document.createElement('small');
         metaSpan.className = 'history-meta';
         metaSpan.textContent = metaText;
@@ -141,33 +224,41 @@ function renderHistory(history) {
         contentDiv.appendChild(textSpan);
         contentDiv.appendChild(metaSpan);
 
-        // Copy Icon
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'history-actions';
+
+        const starBtn = document.createElement('button');
+        starBtn.className = `action-btn star-btn ${item.isFavorite ? 'active' : ''}`;
+        starBtn.innerHTML = item.isFavorite ? '⭐' : '☆';
+        starBtn.title = item.isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle';
+        starBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.api.toggleFavorite(item.id);
+        });
+
         const copyBtn = document.createElement('button');
         copyBtn.className = 'action-btn copy-btn';
         copyBtn.innerHTML = '📋';
         copyBtn.title = 'Kopyala';
 
-        // Delete Icon
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn delete-btn';
         deleteBtn.innerHTML = '✕';
         deleteBtn.title = 'Sil';
-
         deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Parent row click'ini engelle
-            window.api.deleteHistoryItem(itemContent);
+            e.stopPropagation();
+            window.api.deleteHistoryItem(item.id);
         });
 
+        actionsDiv.appendChild(starBtn);
+        actionsDiv.appendChild(copyBtn);
+        actionsDiv.appendChild(deleteBtn);
+
         domItem.appendChild(contentDiv);
-        domItem.appendChild(copyBtn);
-        domItem.appendChild(deleteBtn);
+        domItem.appendChild(actionsDiv);
 
-        // Click handler for the whole row (Copy)
         domItem.addEventListener('click', (e) => {
-            // If clicked on delete button, do nothing (handled separately)
-            if (e.target.closest('.delete-btn')) return;
-
-            // Animate copy feedback
+            if (e.target.closest('.action-btn')) return;
             domItem.classList.add('copied');
             copyBtn.innerHTML = '✅';
             setTimeout(() => {
@@ -177,75 +268,39 @@ function renderHistory(history) {
             window.api.copyItem(itemContent);
         });
 
-        // Delete Handler
-        deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            // Optional: Animate removal
-            domItem.style.opacity = '0';
-            domItem.style.transform = 'translateX(20px)';
-            setTimeout(() => {
-                window.api.deleteHistoryItem(itemContent);
-            }, 200);
-        });
-
         listElement.appendChild(domItem);
     });
 }
 
-// Initial Load
 (async () => {
     const history = await window.api.getHistory();
     const settings = await window.api.getSettings();
-
     maxItemsInput.value = settings.maxItems;
-    autoStartCheck.checked = settings.autoStart;
+    document.getElementById('autostart-check').checked = settings.autoStart;
 
-    function formatShortcut(s) {
-        if (!s) return '';
-        return s.split('+').join(' + ').replace('CommandOrControl', 'Ctrl');
-    }
+    function format(s) { return s ? s.split('+').join(' + ').replace('CommandOrControl', 'Ctrl') : ''; }
 
-    if (settings.globalShortcut) {
-        shortcutInput.value = formatShortcut(settings.globalShortcut);
-    }
-    if (settings.globalShortcutImage) {
-        imageShortcutInput.value = formatShortcut(settings.globalShortcutImage);
-    }
-    if (settings.globalShortcutVideo) {
-        videoShortcutInput.value = formatShortcut(settings.globalShortcutVideo);
-    }
-    if (settings.videoQuality) {
-        videoQualitySelect.value = settings.videoQuality;
-    }
+    shortcutInput.value = format(settings.globalShortcut);
+    imageShortcutInput.value = format(settings.globalShortcutImage);
+    ocrShortcutInput.value = format(settings.globalShortcutOcr);
+    videoShortcutInput.value = format(settings.globalShortcutVideo);
+    if (settings.videoQuality) videoQualitySelect.value = settings.videoQuality;
+
     renderHistory(history);
 })();
 
-// Listen for updates
 window.api.onUpdateHistory((history) => {
+    currentHistory = history;
     renderHistory(history);
 });
 
-// Toast Notification
 const toastElement = document.getElementById('toast');
 let toastTimeout;
-
-function showToast(message, type = 'info') {
+window.api.onShowToast((message, type) => {
     toastElement.textContent = message;
     toastElement.className = `toast visible ${type}`;
-
     clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => {
-        toastElement.className = 'toast hidden';
-    }, 3000);
-}
-
-window.api.onShowToast((message, type) => {
-    showToast(message, type);
+    toastTimeout = setTimeout(() => toastElement.className = 'toast hidden', 3000);
 });
 
-// Close window on Escape key
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        window.api.closeWindow();
-    }
-});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.api.closeWindow(); });

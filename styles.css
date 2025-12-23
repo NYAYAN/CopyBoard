@@ -7,6 +7,7 @@
     --accent: #8957e5;
     --accent-hover: #a27bf6;
     --danger: #ff5555;
+    --warning: #f1fa8c;
     --border-radius: 12px;
     --transition: 0.2s ease;
 }
@@ -36,36 +37,34 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
+    padding: 10px 14px;
     background: rgba(30, 30, 46, 0.8);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     z-index: 10;
     -webkit-app-region: drag;
-    /* Allow dragging window */
 }
 
 .logo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
 }
 
 .logo .icon {
-    font-size: 1rem;
+    font-size: 0.9rem;
 }
 
 h1 {
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
 }
 
 .actions {
     -webkit-app-region: no-drag;
     display: flex;
-    gap: 8px;
-    /* Butonlar arasına boşluk */
+    gap: 4px;
     align-items: center;
 }
 
@@ -73,20 +72,16 @@ h1 {
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 0.9rem;
     color: var(--text-secondary);
     transition: var(--transition);
-    width: 30px;
-    /* Sabit genişlik */
-    height: 30px;
-    /* Sabit yükseklik - Tam daire için */
+    width: 26px;
+    height: 26px;
     display: flex;
-    /* İkonu ortalamak için */
     justify-content: center;
     align-items: center;
     border-radius: 50%;
     outline: none;
-    /* Odaklanma çizgisini kaldır */
 }
 
 .icon-btn:hover {
@@ -100,109 +95,93 @@ h1 {
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
+/* Tabs */
+.tabs-container {
+    display: flex;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 3px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    /* border-radius: 8px; */
+    transition: var(--transition);
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+    color: white;
+    background: var(--accent);
+    font-weight: 500;
+}
+
+/* Settings & About */
 .settings-panel {
     background: rgba(0, 0, 0, 0.2);
-    padding: 15px 20px;
+    padding: 10px 16px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+    gap: 8px;
+    transition: all 0.3s ease;
     overflow: hidden;
     max-height: 400px;
 }
 
 .settings-panel.hidden {
     max-height: 0;
-    padding: 0 20px;
-    opacity: 0;
+    padding: 0 16px;
     border-bottom: none;
+    opacity: 0;
 }
 
 .setting-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
 }
 
-input[type="number"] {
+/* Inputs */
+input[type="number"],
+.shortcut-input,
+.settings-select {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
     padding: 3px 6px;
     border-radius: 6px;
-    width: 60px;
-    text-align: center;
     outline: none;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    text-align: center;
 }
 
-.shortcut-input {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    padding: 4px 8px;
-    border-radius: 6px;
-    width: 140px;
-    text-align: center;
-    outline: none;
+input[type="number"] {
+    width: 50px;
+}
+
+.shortcut-input,
+.settings-select {
+    width: 130px;
     cursor: pointer;
-    font-size: 0.8rem;
 }
 
 input[type="checkbox"] {
     accent-color: var(--accent);
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     cursor: pointer;
-}
-
-.shortcut-input:focus {
-    border-color: var(--accent);
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.settings-select {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    padding: 4px 8px;
-    border-radius: 6px;
-    width: 140px;
-    outline: none;
-    cursor: pointer;
-    font-size: 0.8rem;
-}
-
-.settings-select option {
-    background: var(--bg-color);
-    color: var(--text-primary);
-}
-
-.settings-select:focus {
-    border-color: var(--accent);
-}
-
-.about-content {
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    line-height: 1.5;
-    padding: 10px 0;
-}
-
-.about-content h3 {
-    color: var(--accent);
-    margin-bottom: 10px;
-}
-
-.about-content strong {
-    color: var(--text-primary);
-}
-
-input[type="number"]:focus {
-    border-color: var(--accent);
 }
 
 .danger-btn {
@@ -212,7 +191,7 @@ input[type="number"]:focus {
     padding: 8px;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     width: 100%;
     transition: var(--transition);
 }
@@ -221,47 +200,61 @@ input[type="number"]:focus {
     background: rgba(255, 85, 85, 0.2);
 }
 
+.about-content {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    padding: 16px 0;
+}
+
+.about-content h3 {
+    color: var(--accent);
+    margin-bottom: 12px;
+    font-size: 1rem;
+}
+
+.about-content strong {
+    color: var(--text-primary);
+}
+
+.about-content p {
+    margin-bottom: 4px;
+}
+
+/* History List */
 .history-list {
     flex: 1;
     overflow-y: auto;
-    padding: 10px 15px;
+    padding: 0;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.history-list.tab-switching {
+    opacity: 0;
+    transform: translateY(8px);
 }
 
 .history-list::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
 }
 
 .history-list::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-}
-
-.history-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
 }
 
 .history-item {
-    background: transparent;
-    margin-bottom: 0;
-    padding: 10px 14px;
-    padding-left: 36px;
-    /* Space for copy button (Left) */
-    padding-right: 30px;
-    /* Space for delete button (Right) */
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background 0.1s;
     font-size: 0.8rem;
-    /* Reduced from 0.9rem */
-    color: var(--text-primary);
-    position: relative;
-    line-height: 1.5;
-
-    display: flex;
-    flex-direction: column;
-    /* Stack content since actions are absolute now */
-    align-items: flex-start;
-    gap: 4px;
+    gap: 8px;
 }
 
 .history-item:hover {
@@ -269,30 +262,26 @@ input[type="number"]:focus {
 }
 
 .history-item.copied {
-    animation: flash 0.4s;
+    background: rgba(80, 250, 123, 0.1);
 }
 
-@keyframes flash {
-    0% {
-        background: rgba(137, 87, 229, 0.2);
-    }
+.history-item.dragging {
+    opacity: 0.5;
+    background: rgba(255, 255, 255, 0.05);
+}
 
-    100% {
-        background: rgba(255, 255, 255, 0.03);
-    }
+.drag-handle {
+    cursor: grab;
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 1rem;
+    padding: 0 2px;
 }
 
 .history-content {
-    width: 100%;
-}
-
-.history-meta {
-    font-size: 0.65rem;
-    /* Reduced from 0.75rem */
-    color: var(--text-secondary);
-    margin-top: 2px;
-    display: block;
-    opacity: 0.6;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .history-text {
@@ -302,102 +291,49 @@ input[type="number"]:focus {
     -webkit-box-orient: vertical;
     overflow: hidden;
     word-break: break-all;
+    line-height: 1.35;
 }
 
-/* On mobile or touch, maybe always show? Assuming desktop for now based on context */
+.history-meta {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    margin-top: 1px;
+}
+
+.history-actions {
+    display: flex;
+    gap: 3px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.history-item:hover .history-actions {
+    opacity: 1;
+}
 
 .action-btn {
-    position: absolute;
     background: transparent;
     border: none;
     cursor: pointer;
     color: var(--text-secondary);
-    font-size: 0.9rem;
-    padding: 6px;
+    font-size: 0.95rem;
+    padding: 3px;
     border-radius: 4px;
-    transition: all 0.2s;
-    opacity: 0;
-}
-
-.history-item:hover .action-btn {
-    opacity: 1;
-}
-
-.copy-btn {
-    top: 50%;
-    transform: translateY(-50%);
-    left: 6px;
-    right: auto;
-}
-
-.delete-btn {
-    top: 50%;
-    transform: translateY(-50%);
-    right: 8px;
-    left: auto;
-    font-size: 0.8rem;
+    transition: var(--transition);
 }
 
 .action-btn:hover {
-    color: var(--text-primary);
     background: rgba(255, 255, 255, 0.1);
-}
-
-.copy-btn:hover {
-    color: var(--accent);
-}
-
-.delete-btn:hover {
-    color: var(--danger);
-    background: rgba(255, 85, 85, 0.1);
-}
-
-.empty-state {
-    text-align: center;
-    margin-top: 50px;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
-
-.toast {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(30, 30, 46, 0.95);
     color: var(--text-primary);
-    padding: 10px 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-    font-size: 0.9rem;
-    z-index: 1000;
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    pointer-events: none;
 }
 
-.toast.visible {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
+.star-btn.active {
+    color: var(--warning);
+    opacity: 1 !important;
 }
 
-.toast.success {
-    border-color: #50fa7b;
-    color: #50fa7b;
-}
-
-.toast.error {
-    border-color: #ff5555;
-    color: #ff5555;
-}
-
-.toast.info {
-    border-color: #8be9fd;
-    color: #8be9fd;
-}
-
-/* Modal Styles */
+/* Modals */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -410,36 +346,35 @@ input[type="number"]:focus {
     justify-content: center;
     align-items: center;
     z-index: 2000;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.2s;
 }
 
-.modal-overlay:not(.hidden) {
-    opacity: 1;
-    pointer-events: auto;
+.modal-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
 }
 
 .modal {
-    background: var(--bg-color);
-    padding: 24px;
+    background: #252535;
+    padding: 20px;
     border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    width: 80%;
+    width: 85%;
     max-width: 300px;
     text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.modal p {
-    margin-bottom: 24px;
-    font-size: 1rem;
-    line-height: 1.5;
+.modal h3 {
+    font-size: 0.95rem;
+    margin-bottom: 12px;
 }
 
 .modal-actions {
     display: flex;
-    gap: 12px;
+    gap: 10px;
+    margin-top: 16px;
 }
 
 .modal-btn {
@@ -448,7 +383,7 @@ input[type="number"]:focus {
     border-radius: 8px;
     border: none;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 500;
     transition: var(--transition);
 }
@@ -471,15 +406,23 @@ input[type="number"]:focus {
     filter: brightness(1.1);
 }
 
-.modal-overlay.hidden {
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
-    /* Safer than display:none for transitions */
+/* Toast */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 46, 0.95);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    z-index: 3000;
 }
 
-.modal-overlay:not(.hidden) {
-    opacity: 1;
-    pointer-events: auto;
-    visibility: visible;
+.empty-state {
+    text-align: center;
+    margin-top: 50px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    opacity: 0.6;
 }

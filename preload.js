@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('api', {
     setVideoShortcut: (shortcut) => ipcRenderer.send('set-video-shortcut', shortcut),
     setOcrShortcut: (shortcut) => ipcRenderer.send('set-ocr-shortcut', shortcut),
     copyItem: (text) => ipcRenderer.send('copy-item', text),
-    deleteHistoryItem: (id) => ipcRenderer.send('delete-history-item', id),
+    deleteHistoryItem: (content, source) => ipcRenderer.send('delete-history-item', content, source),
     toggleFavorite: (id) => ipcRenderer.send('toggle-favorite', id),
     addManualItem: (content) => ipcRenderer.send('add-manual-item', content),
     reorderHistory: (history) => ipcRenderer.send('reorder-history', history),
@@ -30,5 +30,6 @@ contextBridge.exposeInMainWorld('api', {
     recordStop: () => ipcRenderer.send('record-stop'),
     closeSnipper: () => ipcRenderer.send('snip-close'),
     notifyReady: () => ipcRenderer.send('snip-ready'),
-    onShowToast: (callback) => ipcRenderer.on('show-toast', (_, message, type) => callback(message, type))
+    onShowToast: (callback) => ipcRenderer.on('show-toast', (_, message, type) => callback(message, type)),
+    onResetView: (callback) => ipcRenderer.on('reset-view', callback)
 });

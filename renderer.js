@@ -126,7 +126,7 @@ function getFilteredHistory(history) {
     if (activeTab === 'favorites') {
         return history.filter(i => i.isFavorite);
     }
-    return history;
+    return history.filter(i => !i.hiddenFromHistory);
 }
 
 let dragStartIndex;
@@ -240,6 +240,13 @@ function renderHistory(history) {
         copyBtn.className = 'action-btn copy-btn';
         copyBtn.innerHTML = '📋';
         copyBtn.title = 'Kopyala';
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Animate only this button
+            copyBtn.innerHTML = '✅';
+            setTimeout(() => { copyBtn.innerHTML = '📋'; }, 800);
+            window.api.copyItem(itemContent);
+        });
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn delete-btn';
@@ -247,7 +254,7 @@ function renderHistory(history) {
         deleteBtn.title = 'Sil';
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.api.deleteHistoryItem(item.id);
+            window.api.deleteHistoryItem(item.id, activeTab);
         });
 
         actionsDiv.appendChild(starBtn);
@@ -301,6 +308,21 @@ window.api.onShowToast((message, type) => {
     toastElement.className = `toast visible ${type}`;
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => toastElement.className = 'toast hidden', 3000);
+});
+
+window.api.onResetView(() => {
+    // Close panels
+    settingsPanel.classList.add('hidden');
+    aboutPanel.classList.add('hidden');
+    settingsBtn.classList.remove('active');
+    aboutBtn.classList.remove('active');
+    addItemModal.classList.add('hidden');
+
+    // Switch to 'all' tab if not already
+    if (activeTab !== 'all') {
+        const allTabBtn = document.querySelector('.tab-btn[data-tab="all"]');
+        if (allTabBtn) allTabBtn.click();
+    }
 });
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.api.closeWindow(); });

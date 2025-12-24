@@ -127,6 +127,7 @@ function showMain() {
     );
     state.mainWindow.show();
     state.mainWindow.focus();
+    state.mainWindow.webContents.send('reset-view');
   }
 }
 
@@ -257,6 +258,7 @@ app.whenReady().then(() => {
   ipcMain.on('copy-item', (e, text) => {
     clipboard.writeText(text);
     state.lastText = text;
+    if (state.mainWindow) state.mainWindow.hide();
   });
 
   ipcMain.on('add-manual-item', (e, content) => {
@@ -268,6 +270,7 @@ app.whenReady().then(() => {
     const item = state.history.find(i => i.id === id);
     if (item) {
       item.isFavorite = !item.isFavorite;
+      if (!item.isFavorite) item.hiddenFromHistory = false; // Move back to All if removed from favorites
       store.set('history', state.history);
       if (state.mainWindow && !state.mainWindow.isDestroyed()) {
         state.mainWindow.webContents.send('update-history', state.history);
@@ -280,21 +283,43 @@ app.whenReady().then(() => {
     store.set('history', state.history);
   });
 
-  ipcMain.on('delete-history-item', (e, id) => {
-    state.history = state.history.filter(i => i.id !== id);
-    store.set('history', state.history);
-    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-      state.mainWindow.webContents.send('update-history', state.history);
+  ipcMain.on('delete-history-item', (e, id, source) => {
+    const index = state.history.findIndex(i => i.id === id);
+    if (index !== -1) {
+      const item = state.history[index];
+
+      if (source === 'favorites') {
+        // Deleting from favorites (X button) -> Completely delete from memory
+        state.history.splice(index, 1);
+      } else {
+        // Deleting from History (All)
+        if (item.isFavorite) {
+          item.hiddenFromHistory = true;
+        } else {
+          state.history.splice(index, 1);
+        }
+      }
+
+      store.set('history', state.history);
+      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+        state.mainWindow.webContents.send('update-history', state.history);
+      }
     }
   });
 
   ipcMain.on('clear-history', () => {
-    state.history = [];
-    store.set('history', []);
+    // Keep favorites but hide them from history view
+    state.history.forEach(item => {
+      if (item.isFavorite) item.hiddenFromHistory = true;
+    });
+    // Remove items that are NOT favorites
+    state.history = state.history.filter(i => i.isFavorite);
+
+    store.set('history', state.history);
     if (state.mainWindow && !state.mainWindow.isDestroyed()) {
       state.mainWindow.webContents.send('update-history', state.history);
     }
-    showToast('Geçmiş Temizlendi.', 'success');
+    showToast('Geçmiş Temizlendi (Favoriler Saklandı).', 'success');
   });
 
   ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });
@@ -327,8 +352,19 @@ app.whenReady().then(() => {
   ipcMain.on('record-chunk', (e, arrayBuffer) => { if (state.tempVideoPath) fs.appendFileSync(state.tempVideoPath, Buffer.from(arrayBuffer)); });
   ipcMain.on('record-stop', (e) => {
     const p = dialog.showSaveDialogSync(state.recorderWindow, { title: 'Videoyu Kaydet', defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`), filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }] });
-    if (p) { if (fs.existsSync(state.tempVideoPath)) fs.copyFileSync(state.tempVideoPath, p); showToast('Video Kaydedildi.', 'success'); }
-    if (state.tempVideoPath && fs.existsSync(state.tempVideoPath)) fs.unlinkSync(state.tempVideoPath);
+
+    if (p) {
+      if (fs.existsSync(state.tempVideoPath)) {
+        fs.copyFileSync(state.tempVideoPath, p);
+        showToast('Video Kaydedildi.', 'success');
+        fs.unlinkSync(state.tempVideoPath); // Only delete if saved successfully
+      }
+    } else {
+      // Cancelled
+      showToast('Kayıt iptal edildi. Geçici dosya: ' + path.basename(state.tempVideoPath), 'info');
+      require('electron').shell.showItemInFolder(state.tempVideoPath); // Open folder to show file
+    }
+
     state.tempVideoPath = null;
     if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
   });

@@ -74,7 +74,7 @@ Setup dosyası oluşturmak için **PowerShell veya VS Code'u Yönetici olarak ç
 *Bu işlem ilk seferde internetten gerekli araçları (NSIS) indireceği için birkaç dakika sürebilir.*
 
 **✅ Başarılı olursa:**
-- `dist/` klasöründe `CopyBoard Setup 1.0.0.exe` oluşacaktır.
+- `dist/` klasöründe `CopyBoard Setup 2.1.1.exe` oluşacaktır.
 
 **❌ Hata alırsanız (winCodeSign hatası vb.):**
 - VS Code'u kapatın ve yukarıdaki adımları VS Code yerine PowerShell'de deneyin

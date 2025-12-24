@@ -1,4 +1,4 @@
-CopyBoard v2.1 - Sürüm Notları
+﻿CopyBoard v2.1.1 - Sürüm Notları
 
 Gelişmiş Pano Yöneticisi ve OCR Aracı
 

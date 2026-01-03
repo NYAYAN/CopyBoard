@@ -89,6 +89,9 @@ maxItemsInput.addEventListener('change', (e) => {
     if (value > 0) window.api.setMaxItems(value);
 });
 
+// Detect platform
+const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
 function setupShortcutInput(element, callback) {
     element.addEventListener('keydown', (e) => {
         e.preventDefault();
@@ -97,13 +100,37 @@ function setupShortcutInput(element, callback) {
         if (e.key === 'Escape') return;
 
         const keys = [];
-        if (e.ctrlKey) keys.push('CommandOrControl');
+
+        // Platform specific modifier handling for CommandOrControl
+        if (isMac) {
+            if (e.metaKey) keys.push('CommandOrControl');
+            if (e.ctrlKey) keys.push('Ctrl');
+        } else {
+            if (e.ctrlKey) keys.push('CommandOrControl');
+        }
+
         if (e.altKey) keys.push('Alt');
         if (e.shiftKey) keys.push('Shift');
-        let key = e.key.toUpperCase();
-        if (['CONTROL', 'ALT', 'SHIFT', 'META'].includes(key)) return;
-        keys.push(key);
-        element.value = keys.join(' + ').replace('CommandOrControl', 'Ctrl');
+
+        // Use e.code to avoid locale specific characters (e.g. Option+V = √ on Mac)
+        let code = e.code;
+        if (code.startsWith('Key')) code = code.slice(3);
+        if (code.startsWith('Digit')) code = code.slice(5);
+
+        // Ignore modifier key presses themselves (e.g. just pressing Cmd)
+        if (['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'].includes(e.code)) return;
+
+        keys.push(code.toUpperCase());
+
+        // Display logic
+        const displayKeys = keys.map(k => {
+            if (k === 'CommandOrControl') return isMac ? 'Cmd' : 'Ctrl';
+            if (k === 'Control') return 'Ctrl'; // Or '⌃'
+            if (k === 'Option') return 'Option'; // Or '⌥'
+            return k;
+        });
+
+        element.value = displayKeys.join(' + ');
         callback(keys.join('+'));
     });
 }
@@ -285,7 +312,14 @@ function renderHistory(history) {
     maxItemsInput.value = settings.maxItems;
     document.getElementById('autostart-check').checked = settings.autoStart;
 
-    function format(s) { return s ? s.split('+').join(' + ').replace('CommandOrControl', 'Ctrl') : ''; }
+    function format(s) {
+        return s ? s.split('+').map(k => {
+            if (k === 'CommandOrControl') return isMac ? 'Cmd' : 'Ctrl';
+            if (k === 'Control') return 'Ctrl';
+            if (k === 'Option') return 'Option';
+            return k;
+        }).join(' + ') : '';
+    }
 
     shortcutInput.value = format(settings.globalShortcut);
     imageShortcutInput.value = format(settings.globalShortcutImage);

@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('api', {
     // Snipper & OCR & Recorder
     onCaptureScreen: (callback) => ipcRenderer.on('capture-screen', (_, data, mode, sourceId, quality) => callback(data, mode, sourceId, quality)),
     sendOCR: (dataUrl) => ipcRenderer.send('ocr-process', dataUrl),
-    sendCopyImage: (dataUrl) => ipcRenderer.send('snip-copy-image', dataUrl),
+    sendCopyImage: (dataUrl) => ipcRenderer.send('snip-copy-v2', dataUrl), // RENAMED due to channel blocking
     sendSaveImage: (dataUrl) => ipcRenderer.send('snip-save-image', dataUrl),
     recordStart: () => ipcRenderer.send('record-start'),
     recordChunk: (buffer) => ipcRenderer.send('record-chunk', buffer),
@@ -31,5 +31,6 @@ contextBridge.exposeInMainWorld('api', {
     closeSnipper: () => ipcRenderer.send('snip-close'),
     notifyReady: () => ipcRenderer.send('snip-ready'),
     onShowToast: (callback) => ipcRenderer.on('show-toast', (_, message, type) => callback(message, type)),
-    onResetView: (callback) => ipcRenderer.on('reset-view', callback)
+    onResetView: (callback) => ipcRenderer.on('reset-view', callback),
+    sendDebugLog: (msg) => ipcRenderer.send('debug-log', msg) // NEW DEBUG CHANNEL
 });

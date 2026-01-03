@@ -21,6 +21,18 @@
       "verifyUpdateCodeSignature": false,
       "forceCodeSigning": false
     },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "icon.icns",
+      "category": "public.app-category.utilities",
+      "identity": null
+    },
+    "dmg": {
+      "icon": "icon.icns"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

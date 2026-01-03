@@ -8,6 +8,12 @@ const crypto = require('crypto');
 const store = new Store();
 
 // --- Migration ---
+// GLOBAL ERROR HANDLER
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  dialog.showErrorBox('Beklenmeyen Hata', error.stack || error.message);
+});
+
 let savedHistory = store.get('history', []);
 let hasChanges = false;
 savedHistory = savedHistory.map(item => {
@@ -108,6 +114,19 @@ function addHistory(content) {
 }
 
 function updateShortcut(key, shortcut, storeKey) {
+  // Validate shortcut - must contain only ASCII characters
+  const isValidShortcut = (s) => {
+    if (!s) return false;
+    // Check if all characters are ASCII
+    return /^[\x00-\x7F]+$/.test(s);
+  };
+
+  if (!isValidShortcut(shortcut)) {
+    console.error(`Invalid shortcut rejected: "${shortcut}" - contains non-ASCII characters`);
+    showToast('Geçersiz Kısayol - Sadece ASCII karakterler kullanın', 'error');
+    return;
+  }
+
   try { globalShortcut.unregister(state.shortcuts[key]); } catch (e) { }
   state.shortcuts[key] = shortcut;
   store.set(storeKey, shortcut);
@@ -138,7 +157,17 @@ function createCapture(type = 'draw', display = null) {
     x: display.bounds.x, y: display.bounds.y,
     width: display.bounds.width, height: display.bounds.height,
     frame: false, transparent: true, alwaysOnTop: true,
-    fullscreen: true, skipTaskbar: true, movable: false, resizable: false,
+    width: display.bounds.width, height: display.bounds.height,
+    frame: false, transparent: true, alwaysOnTop: true,
+    fullscreen: process.platform !== 'darwin', // Use native fullscreen on Windows
+    simpleFullscreen: process.platform === 'darwin', // Use simple on Mac
+    skipTaskbar: true, movable: false, resizable: false,
+    enableLargerThanScreen: true,
+    hasShadow: false,
+    // type: 'panel', // REMOVED: Can cause input issues
+    enableLargerThanScreen: true,
+    hasShadow: false,
+    focusable: true, // EXPLICITLY FOCUSABLE
     webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }
   });
 
@@ -147,7 +176,12 @@ function createCapture(type = 'draw', display = null) {
   if (type === 'video') file = 'recorder.html';
 
   win.loadFile(path.join(__dirname, file));
-  win.setAlwaysOnTop(true, 'screen-saver');
+
+  // Window Level Logic
+  // Windows: 'screen-saver' is robust for overlays.
+  // macOS: 'pop-up-menu' is the best balance for overlays that need input.
+  const level = process.platform === 'darwin' ? 'pop-up-menu' : 'screen-saver';
+  win.setAlwaysOnTop(true, level);
   win.webContents.setWindowOpenHandler(() => { return { action: 'deny' }; });
 
   win.on('closed', () => {
@@ -155,6 +189,23 @@ function createCapture(type = 'draw', display = null) {
     if (type === 'ocr') state.ocrWindow = null;
     else if (type === 'video') state.recorderWindow = null;
     else state.snipperWindow = null;
+  });
+
+  if (process.platform === 'darwin') {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    win.setKiosk(false);
+    // Force simple fullscreen behavior if needed, though simpleFullscreen: true in constructor usually suffices
+  }
+
+
+  // --- GLOBAL SAFETY SHORTCUT FOR THIS WINDOW ---
+  // In case UI freezes, Cmd+Escape (or just Escape) should close it.
+  // We handle this via local checking in renderer, but let's ensure it here too.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'Escape') {
+      win.close();
+      event.preventDefault();
+    }
   });
 
   if (type === 'ocr') state.ocrWindow = win;
@@ -198,7 +249,16 @@ async function capture(mode) {
 }
 
 app.whenReady().then(() => {
-  const tray = new Tray(path.join(__dirname, 'icon.png'));
+  // Log registered IPC channels for debugging
+  console.log('=== IPC LISTENERS BEING REGISTERED ===');
+
+  let iconPath = process.platform === 'darwin'
+    ? path.join(__dirname, 'trayIcon.png')
+    : path.join(__dirname, 'icon.png');
+  if (process.platform === 'darwin') {
+    app.dock.hide();
+  }
+  const tray = new Tray(iconPath);
   tray.setToolTip('CopyBoard');
 
   const contextMenu = Menu.buildFromTemplate([
@@ -216,6 +276,9 @@ app.whenReady().then(() => {
 
   state.mainWindow = new BrowserWindow({
     width: 350, height: 550, frame: false, show: false, skipTaskbar: true,
+    transparent: process.platform === 'darwin',
+    vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
+    visualEffectState: 'active',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }
   });
 
@@ -232,10 +295,27 @@ app.whenReady().then(() => {
     if (t && t !== state.lastText) { state.lastText = t; addHistory(t); }
   }, 1000);
 
-  globalShortcut.register(state.shortcuts.list, showMain);
-  globalShortcut.register(state.shortcuts.draw, () => capture('draw'));
-  globalShortcut.register(state.shortcuts.video, () => capture('video'));
-  globalShortcut.register(state.shortcuts.ocr, () => capture('ocr'));
+  // Unregister all existing shortcuts before re-registering
+  globalShortcut.unregisterAll();
+
+  try {
+    state.globalShortcut = state.shortcuts.list;
+    state.imageShortcut = state.shortcuts.draw;
+    state.videoShortcut = state.shortcuts.video;
+    state.ocrShortcut = state.shortcuts.ocr;
+
+    if (state.globalShortcut) globalShortcut.register(state.globalShortcut, showMain);
+    if (state.imageShortcut) globalShortcut.register(state.imageShortcut, () => capture('draw'));
+    if (state.videoShortcut) globalShortcut.register(state.videoShortcut, () => capture('video'));
+    if (state.ocrShortcut) globalShortcut.register(state.ocrShortcut, () => capture('ocr'));
+  } catch (err) {
+    console.error('Shortcut registration failed:', err);
+    showToast('Kısayol kaydedilemedi: ' + err.message, 'error');
+  }
+
+  // The store.set for globalShortcut is already handled in updateShortcut,
+  // but if these are initial loads, they might need to be set here if not already.
+  // Assuming state.shortcuts are loaded from store initially, so no need to set them again here.
 
   if (app.isPackaged) {
     app.setLoginItemSettings({ openAtLogin: state.autoStart, path: app.getPath('exe'), args: ['--hidden'] });
@@ -336,36 +416,118 @@ app.whenReady().then(() => {
     showToast('Geçmiş Temizlendi (Favoriler Saklandı).', 'success');
   });
 
+  // DEBUG LOG HANDLER
+  ipcMain.on('debug-log', (e, msg) => {
+    console.log('[Renderer Debug]:', msg);
+    // dialog.showMessageBox({ title: 'Renderer Debug', message: msg, buttons: ['OK'] });
+  });
+
   ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });
   ipcMain.on('toast-finished', () => { if (state.toastWindow && !state.toastWindow.isDestroyed()) state.toastWindow.destroy(); });
 
-  ipcMain.on('snip-close', () => { [state.snipperWindow, state.ocrWindow, state.recorderWindow].forEach(w => w && !w.isDestroyed() && w.close()); });
+  ipcMain.on('snip-close', (e) => {
+    console.log('=== IPC RECEIVED: snip-close ===');
+    let win = BrowserWindow.fromWebContents(e.sender);
+    // Fallback if sender lookup fails (can happen with some overlay configs)
+    if (!win) {
+      if (state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;
+      else if (state.ocrWindow && !state.ocrWindow.isDestroyed()) win = state.ocrWindow;
+      else if (state.recorderWindow && !state.recorderWindow.isDestroyed()) win = state.recorderWindow;
+    }
+
+    if (win && !win.isDestroyed()) win.close();
+
+    // Safety cleanup for all
+    if (state.ocrWindow && !state.ocrWindow.isDestroyed()) state.ocrWindow.close();
+    if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
+    if (state.snipperWindow && !state.snipperWindow.isDestroyed()) state.snipperWindow.close();
+  });
 
   ipcMain.on('snip-ready', () => {
     let win = state.snipperWindow;
     if (state.lastMode === 'ocr') win = state.ocrWindow;
     if (state.lastMode === 'video') win = state.recorderWindow;
-    if (win && !win.isDestroyed()) { win.show(); win.focus(); }
+    if (win && !win.isDestroyed()) {
+      win.show();
+      win.focus(); // Force focus
+
+      // SUPER FORCE: macOS sometimes reverts transparent windows to ignore events.
+      // We force it to accept events.
+      win.setIgnoreMouseEvents(false);
+
+      if (process.platform === 'darwin') {
+        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+        // Add a safety loop to KEEP it interactive
+        // (This gets cleared when window closes since it's associated with the window variable scope if we held it, 
+        // but here we just fire it attached to state).
+        // A cleaner way relies on the window instance.
+        const focusInterval = setInterval(() => {
+          if (win && !win.isDestroyed() && win.isVisible()) {
+            win.setIgnoreMouseEvents(false);
+            win.moveTop(); // Ensure it stays on top
+          } else {
+            clearInterval(focusInterval);
+          }
+        }, 1000);
+      }
+    }
   });
 
-  ipcMain.on('snip-copy-image', (e, d) => {
-    if (state.snipperWindow && !state.snipperWindow.isDestroyed()) {
-      clipboard.writeImage(require('electron').nativeImage.createFromDataURL(d));
-      showToast('Resim Kopyalandı.', 'success');
-      state.snipperWindow.close();
+  // RENAMED CHANNEL: snip-copy-v2
+  ipcMain.on('snip-copy-v2', (e, d) => {
+    console.log('=== IPC RECEIVED: snip-copy-v2 ===', d ? d.length : 'No Data');
+
+    // Explicitly use state window for now to rule out sender lookup issues
+    let win = state.snipperWindow;
+
+    if (win && !win.isDestroyed()) {
+      try {
+        const img = require('electron').nativeImage.createFromDataURL(d);
+        clipboard.writeImage(img);
+        console.log('Image written to clipboard');
+        showToast('Resim Kopyalandı.', 'success');
+      } catch (err) {
+        console.error('Copy failed:', err);
+        showToast('Kopyalama Hatası: ' + err.message, 'error');
+      }
+      // Wait a bit longer before closing to ensure clipboard op finishes
+      setTimeout(() => win.close(), 500);
+    } else {
+      console.error('Snipper window not found or destroyed');
     }
   });
 
   ipcMain.on('snip-save-image', (e, d) => {
-    const p = dialog.showSaveDialogSync(state.snipperWindow, { title: 'Kaydet', defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`), filters: [{ name: 'Images', extensions: ['png'] }] });
-    if (p) { fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64')); showToast('Resim Kaydedildi.', 'success'); }
-    if (state.snipperWindow && !state.snipperWindow.isDestroyed()) state.snipperWindow.close();
+    console.log('IPC: snip-save-image received', d.length); // DEBUG
+    let win = BrowserWindow.fromWebContents(e.sender);
+    if (!win && state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;
+
+    // macOS: Detach dialog to prevent it being hidden/failing with alwaysOnTop windows
+    // Windows: Keep parent to ensure it stays on top of the fullscreen window
+    const parent = process.platform === 'darwin' ? null : win;
+
+    // Temporarily disable alwaysOnTop on macOS to allow dialog to be seen
+    if (process.platform === 'darwin' && win && !win.isDestroyed()) {
+      win.setAlwaysOnTop(false);
+    }
+
+    const p = dialog.showSaveDialogSync(parent, { title: 'Kaydet', defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`), filters: [{ name: 'Images', extensions: ['png'] }] });
+
+    if (p) {
+      fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64'));
+      showToast('Resim Kaydedildi.', 'success');
+    }
+
+    // Close the window after save (or cancel) is complete
+    if (win && !win.isDestroyed()) win.close();
   });
 
   ipcMain.on('record-start', () => { state.tempVideoPath = path.join(app.getPath('temp'), `temp_video_${Date.now()}.webm`); });
   ipcMain.on('record-chunk', (e, arrayBuffer) => { if (state.tempVideoPath) fs.appendFileSync(state.tempVideoPath, Buffer.from(arrayBuffer)); });
   ipcMain.on('record-stop', (e) => {
-    const p = dialog.showSaveDialogSync(state.recorderWindow, { title: 'Videoyu Kaydet', defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`), filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }] });
+    const parent = process.platform === 'darwin' ? null : state.recorderWindow;
+    const p = dialog.showSaveDialogSync(parent, { title: 'Videoyu Kaydet', defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`), filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }] });
 
     if (p) {
       if (fs.existsSync(state.tempVideoPath)) {
@@ -389,7 +551,10 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('ocr-process', async (e, d) => {
-    if (state.ocrWindow && !state.ocrWindow.isDestroyed()) state.ocrWindow.close();
+    let win = BrowserWindow.fromWebContents(e.sender);
+    if (!win && state.ocrWindow && !state.ocrWindow.isDestroyed()) win = state.ocrWindow;
+    if (win && !win.isDestroyed()) win.close();
+
     showToast('Metin Taranıyor...', 'info');
     try {
       const worker = await Tesseract.createWorker('eng+tur', 1, { load_system_dawg: '0', load_freq_dawg: '0' });

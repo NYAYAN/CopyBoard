@@ -138,10 +138,15 @@ body.drawing #selection-box {
     color: white;
     padding: 8px 16px;
     border-radius: 20px;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-size: 14px;
+    font-weight: 500;
     z-index: 10;
     pointer-events: none;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 /* Toolbar */
@@ -150,13 +155,17 @@ body.drawing #selection-box {
     display: none;
     /* CHANGED FROM FLEX TO NONE */
     gap: 8px;
-    background: #1e1e2e;
+    background: rgba(30, 30, 46, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     padding: 6px;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 50;
+    z-index: 9999;
     pointer-events: auto;
+    -webkit-app-region: no-drag;
+    cursor: default;
 }
 
 .tool-group,
@@ -207,7 +216,8 @@ button {
 }
 
 button:hover {
-    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.1);
+    background: rgba(255, 255, 255, 0.15);
     color: #fff;
 }
 

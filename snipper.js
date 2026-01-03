@@ -41,6 +41,14 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+// --- Preload Verification ---
+if (!window.api) {
+    alert('CRITICAL: window.api is UNDEFINED! Preload script failed to load.');
+} else {
+    console.log('window.api is available:', Object.keys(window.api));
+}
+
+// --- Capture & Initialize Screen ---
 window.api.onCaptureScreen((dataUrl) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -233,13 +241,55 @@ function getFinalImage() {
     const tctx = tc.getContext('2d');
     tctx.drawImage(canvas, state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h, 0, 0, state.selectionRect.w, state.selectionRect.h);
     tctx.drawImage(drawCanvas, state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h, 0, 0, state.selectionRect.w, state.selectionRect.h);
-    return tc.toDataURL('image/png');
+    // Use JPEG 0.9 to reduce IPC payload size (Fix for Mac Retina stalling)
+    return tc.toDataURL('image/jpeg', 0.9);
 }
 
-document.getElementById('btn-close').addEventListener('click', () => window.api.closeSnipper());
-document.getElementById('btn-copy').addEventListener('click', () => { const d = getFinalImage(); if (d) window.api.sendCopyImage(d); });
-document.getElementById('btn-save').addEventListener('click', () => { const d = getFinalImage(); if (d) window.api.sendSaveImage(d); });
-document.getElementById('btn-undo').addEventListener('click', undo);
+// Use mousedown to ensure events are caught even if click is swallowed
+// Use mousedown to ensure events are caught even if click is swallowed
+const buttons = {
+    'btn-close': () => window.api.closeSnipper(),
+    'btn-copy': () => {
+        const d = safeGetImage();
+        if (d) {
+            // DEBUG: Send log
+            window.api.sendDebugLog('Renderer: Sending Copy Request with Real Data... Size: ' + d.length);
+            window.api.sendCopyImage(d);
+        }
+    },
+    'btn-save': () => { const d = safeGetImage(); if (d) window.api.sendSaveImage(d); },
+    'btn-undo': () => undo()
+};
+
+Object.entries(buttons).forEach(([id, action]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        // Removed e.preventDefault() to allow normal interaction/focus
+        btn.style.backgroundColor = '#00ff00'; // GREEN for success feedback
+        setTimeout(() => btn.style.backgroundColor = '', 200);
+        try {
+            action();
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    });
+});
+
+function safeGetImage() {
+    try {
+        const img = getFinalImage();
+        if (!img) {
+            alert('Selection empty! Please draw a box first.');
+            return null;
+        }
+        return img;
+    } catch (e) {
+        alert('Image generation failed: ' + e.message);
+        return null;
+    }
+}
 
 textInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

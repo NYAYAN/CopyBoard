@@ -45,7 +45,8 @@ const state = {
   },
   lastText: '',
   lastMode: 'draw',
-  tempVideoPath: null
+  tempVideoPath: null,
+  isCapturing: false
 };
 
 // --- Toast ---
@@ -150,6 +151,7 @@ function createCapture(type = 'draw', display = null) {
   win.webContents.setWindowOpenHandler(() => { return { action: 'deny' }; });
 
   win.on('closed', () => {
+    state.isCapturing = false;
     if (type === 'ocr') state.ocrWindow = null;
     else if (type === 'video') state.recorderWindow = null;
     else state.snipperWindow = null;
@@ -163,6 +165,12 @@ function createCapture(type = 'draw', display = null) {
 }
 
 async function capture(mode) {
+  if (state.isCapturing) {
+    showToast('İşlem devam ediyor...', 'warning');
+    return;
+  }
+  state.isCapturing = true;
+
   try {
     const cursorPoint = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursorPoint);
@@ -179,8 +187,14 @@ async function capture(mode) {
       win.webContents.on('did-finish-load', () => {
         if (!win.isDestroyed()) win.webContents.send('capture-screen', data, mode, sourceId, state.videoQuality);
       });
+    } else {
+      state.isCapturing = false;
     }
-  } catch (e) { showToast('Capture Hatası', 'error'); console.error(e); }
+  } catch (e) {
+    state.isCapturing = false;
+    showToast('Capture Hatası', 'error');
+    console.error(e);
+  }
 }
 
 app.whenReady().then(() => {

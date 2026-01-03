@@ -38,6 +38,7 @@ const state = {
   snipperWindow: null,
   ocrWindow: null,
   recorderWindow: null,
+  tray: null,
   toastWindow: null,
   history: savedHistory,
   maxItems: store.get('maxItems', 50),
@@ -259,6 +260,7 @@ app.whenReady().then(() => {
     app.dock.hide();
   }
   const tray = new Tray(iconPath);
+  state.tray = tray;
   tray.setToolTip('CopyBoard');
 
   const contextMenu = Menu.buildFromTemplate([
@@ -290,10 +292,16 @@ app.whenReady().then(() => {
   state.mainWindow.loadFile('index.html');
   state.mainWindow.on('blur', () => state.mainWindow.hide());
 
-  setInterval(() => {
+  const clipboardInterval = setInterval(() => {
     const t = clipboard.readText();
     if (t && t !== state.lastText) { state.lastText = t; addHistory(t); }
   }, 1000);
+
+  // --- CLEANUP ON QUIT to prevent 0x80000003 error ---
+  app.on('before-quit', () => {
+    clearInterval(clipboardInterval);
+    if (state.tray && !state.tray.isDestroyed()) state.tray.destroy();
+  });
 
   // Unregister all existing shortcuts before re-registering
   globalShortcut.unregisterAll();

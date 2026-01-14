@@ -360,4 +360,12 @@ window.api.onResetView(() => {
     }
 });
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.api.closeWindow(); });
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.api.closeWindow();
+
+    // --- Manual Update Check Shortcut (Alt+U) ---
+    if (e.altKey && e.key.toLowerCase() === 'u') {
+        console.log('Manual update check triggered via Alt+U');
+        window.api.checkForUpdates();
+    }
+});

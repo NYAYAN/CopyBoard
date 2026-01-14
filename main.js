@@ -276,6 +276,7 @@ function createUpdateWindow(updateInfo) {
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: false,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -529,23 +530,92 @@ app.whenReady().then(() => {
   ipcMain.on('toast-finished', () => { if (state.toastWindow && !state.toastWindow.isDestroyed()) state.toastWindow.destroy(); });
 
   // --- Update IPC Handlers ---
+  // --- Update IPC Handlers ---
   ipcMain.on('check-for-updates', () => {
     state.manualUpdateCheck = true;
-    if (app.isPackaged) {
-      autoUpdater.checkForUpdates();
-    } else {
-      console.log('Auto-update only works in packaged app');
-      showToast('Güncelleme kontrolü sadece yayınlanmış sürümde çalışır', 'info');
+
+
+
+    try {
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('Check for updates failed:', err);
+        showToast('Güncelleme kontrolü başarısız oldu', 'error');
+      });
+    } catch (err) {
+      console.error('Check for updates error:', err);
     }
   });
 
   ipcMain.on('download-update', () => {
-    autoUpdater.downloadUpdate();
+    try {
+      // Add error handling for download start
+      const downloadPromise = autoUpdater.downloadUpdate();
+
+      // If it returns a promise (newer electron-updater versions)
+      if (downloadPromise && typeof downloadPromise.catch === 'function') {
+        downloadPromise.catch(err => {
+          console.error('Download update failed:', err);
+          if (updateWindow && !updateWindow.isDestroyed()) {
+            updateWindow.webContents.send('update-error', err.message || 'İndirme başlatılamadı');
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Download update synchronous error:', err);
+      if (updateWindow && !updateWindow.isDestroyed()) {
+        updateWindow.webContents.send('update-error', err.message || 'Beklenmeyen hata');
+      }
+    }
   });
 
   ipcMain.on('install-update', () => {
-    autoUpdater.quitAndInstall(false, true);
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (err) {
+      console.error('Install update error:', err);
+    }
   });
+
+  // --- AutoUpdater Events ---
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info);
+    createUpdateWindow(info);
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('Update not available');
+    if (state.manualUpdateCheck) {
+      showToast('Zaten en güncel sürümü kullanıyorsunuz.', 'info');
+      state.manualUpdateCheck = false;
+    }
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    if (updateWindow && !updateWindow.isDestroyed()) {
+      updateWindow.webContents.send('download-progress', progressObj);
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info);
+    if (updateWindow && !updateWindow.isDestroyed()) {
+      updateWindow.webContents.send('update-downloaded', info);
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('AutoUpdater error:', err);
+    if (state.manualUpdateCheck) {
+      showToast('Güncelleme kontrolü sırasında hata oluştu.', 'error');
+      state.manualUpdateCheck = false;
+    }
+
+    // Also send error to update window if open
+    if (updateWindow && !updateWindow.isDestroyed()) {
+      updateWindow.webContents.send('update-error', err.message || 'Güncelleme hatası');
+    }
+  });
+
 
   ipcMain.on('snip-close', (e) => {
     console.log('=== IPC RECEIVED: snip-close ===');

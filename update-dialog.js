@@ -22,6 +22,32 @@ ipcRenderer.on('update-info', (event, info) => {
     }
 });
 
+// Handle update errors
+ipcRenderer.on('update-error', (event, message) => {
+    const updateBtn = document.getElementById('updateBtn');
+    const laterBtn = document.getElementById('laterBtn');
+    const progressLabel = document.querySelector('.progress-label');
+
+    // Reset UI
+    updateBtn.disabled = false;
+    laterBtn.disabled = false;
+
+    // Show error in button or progress area
+    updateBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+    Tekrar Dene
+    `;
+
+    if (progressLabel) {
+        progressLabel.textContent = `Hata: ${message}`;
+        progressLabel.style.color = '#ff5555';
+    } else {
+        alert('Güncelleme hatası: ' + message);
+    }
+});
+
 // Format release notes from markdown to HTML
 function formatReleaseNotes(notes) {
     if (!notes) return 'Yeni özellikler ve iyileştirmeler.';

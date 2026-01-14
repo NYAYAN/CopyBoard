@@ -1,6 +1,6 @@
 {
   "name": "copyboard",
-  "version": "2.2.1",
+  "version": "2.2.0",
   "description": "Gelişmiş Pano Yöneticisi ve OCR Aracı",
   "main": "main.js",
   "repository": {

@@ -2,6 +2,13 @@
 
 ## ✨ Yeni Özellikler
 
+### 🔄 Otomatik Güncelleme Sistemi
+Artık yeni versiyonlar için web sitesini kontrol etmenize gerek yok!
+- **Otomatik Kontrol:** Uygulama açılışında (10 saniye sonra) yeni versiyon kontrolü yapılır.
+- **Akıllı Bildirim:** Yeni versiyon varsa modern ve kullanıcı dostu bir dialog ile bildirilir.
+- **Tek Tıkla Güncelleme:** "Şimdi Güncelle" butonu ile indirme ve kurulum otomatize edildi.
+- **İlerleme Takibi:** İndirme durumu ve hızı anlık olarak takip edilebilir.
+
 ### 🌫️ Blur (Bulanıklaştırma) Aracı
 Hassas bilgileri gizlemek için yeni blur tool eklendi!
 - 10x10 pixelation efekti ile profesyonel bulanıklaştırma

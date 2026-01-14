@@ -38,6 +38,12 @@ Gelişmiş pano yöneticisi, ekran görüntüsü aracı ve OCR (Resimden Yazıya
 - Yüksek/Orta/Düşük kalite seçenekleri
 - WebM formatında kaydetme
 
+### 🔄 Otomatik Güncelleme
+- **Otomatik Kontrol:** Uygulama her açıldığında yeni versiyon kontrolü
+- **Bildirim Sistemi:** Yeni versiyon geldiğinde modern bildirim dialogu
+- **Tek Tıkla Güncelleme:** Arka planda indirme ve otomatik kurulum
+- **İlerleme Takibi:** İndirme durumu ve hızı gösterimi
+
 ## ⌨️ Kısayollar
 
 | Kısayol | İşlev |

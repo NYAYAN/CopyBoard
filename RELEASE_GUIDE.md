@@ -41,8 +41,12 @@ npm run dist
 4. Tag olarak `v2.2.0` seç
 5. Release title: `v2.2.0 - Blur Tool & UI Improvements 🎨⚡`
 6. Description kısmına `RELEASE_NOTES.md` içeriğini yapıştır
-7. `CopyBoard Setup 2.2.0.exe` dosyasını sürükle-bırak ile ekle
+7. **ÖNEMLİ**: Aşağıdaki dosyaları sürükle-bırak ile ekle:
+   - `CopyBoard Setup 2.2.0.exe` (dist klasöründe)
+   - `latest.yml` (dist klasöründe - otomatik güncelleme için gerekli)
 8. "Publish release" butonuna tıkla
+
+> **Not**: `latest.yml` dosyası electron-builder tarafından otomatik oluşturulur ve auto-update sisteminin çalışması için gereklidir. Bu dosyayı mutlaka release'e ekleyin!
 
 ## 5️⃣ Release Notes İçeriği
 

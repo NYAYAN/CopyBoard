@@ -49,6 +49,9 @@ header {
     display: flex;
     align-items: center;
     gap: 6px;
+    -webkit-app-region: no-drag;
+    position: relative;
+    z-index: 20;
 }
 
 .logo .icon {
@@ -59,7 +62,10 @@ h1 {
     font-size: 0.85rem;
     font-weight: 600;
     letter-spacing: 0.3px;
+    pointer-events: none;
 }
+
+
 
 .actions {
     -webkit-app-region: no-drag;
@@ -255,6 +261,7 @@ input[type="checkbox"] {
     transition: background 0.1s;
     font-size: 0.8rem;
     gap: 8px;
+    position: relative;
 }
 
 .history-item:hover {
@@ -282,6 +289,11 @@ input[type="checkbox"] {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    padding-right: 0;
+}
+
+.history-item.favorites-tab .history-content {
+    padding-right: 15px;
 }
 
 .history-text {
@@ -306,14 +318,22 @@ input[type="checkbox"] {
     gap: 3px;
     opacity: 0;
     transition: opacity 0.2s;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(90deg, transparent, var(--bg-color) 20%, var(--bg-color));
+    padding-left: 20px;
+    pointer-events: none;
 }
 
 .history-item:hover .history-actions {
     opacity: 1;
+    pointer-events: auto;
 }
 
 .action-btn {
-    background: transparent;
+    background: rgba(30, 30, 46, 0.9);
     border: none;
     cursor: pointer;
     color: var(--text-secondary);

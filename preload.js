@@ -32,5 +32,13 @@ contextBridge.exposeInMainWorld('api', {
     notifyReady: () => ipcRenderer.send('snip-ready'),
     onShowToast: (callback) => ipcRenderer.on('show-toast', (_, message, type) => callback(message, type)),
     onResetView: (callback) => ipcRenderer.on('reset-view', callback),
-    sendDebugLog: (msg) => ipcRenderer.send('debug-log', msg) // NEW DEBUG CHANNEL
+    sendDebugLog: (msg) => ipcRenderer.send('debug-log', msg), // NEW DEBUG CHANNEL
+
+    // Auto-Update
+    checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+    downloadUpdate: () => ipcRenderer.send('download-update'),
+    installUpdate: () => ipcRenderer.send('install-update'),
+    onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),
+    onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (_, info) => callback(info)),
+    onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (_, progress) => callback(progress))
 });

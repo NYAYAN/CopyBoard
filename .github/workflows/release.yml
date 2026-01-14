@@ -1,63 +1,40 @@
-name: Build, Sign and Release
+name: Build and Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
 
 jobs:
   build-and-release:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+
     steps:
-      - name: Checkout
+      - name: Check out Git repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 18
+          cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
-
-      - name: Decode PFX (from secret `PFX_BASE64`)
-        if: ${{ secrets.PFX_BASE64 }}
-        shell: pwsh
-        run: |
-          $pfx = [System.Convert]::FromBase64String("${{ secrets.PFX_BASE64 }}")
-          [System.IO.File]::WriteAllBytes("cert.pfx", $pfx)
-
-      - name: Sign installer(s) with signtool
-        if: ${{ secrets.PFX_BASE64 && secrets.PFX_PASSWORD }}
-        shell: pwsh
-        run: |
-          $signtoolPaths = Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $signtoolPaths) { Write-Error "signtool.exe not found on runner"; exit 1 }
-          $exeFiles = Get-ChildItem -Path dist -Filter "*.exe"
-          foreach ($f in $exeFiles) {
-            & $signtoolPaths sign /fd SHA256 /a /f "$PWD\cert.pfx" /p "${{ secrets.PFX_PASSWORD }}" "$($f.FullName)"
-          }
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Build and Publish Windows
+        if: matrix.os == 'windows-latest'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist -- --win --publish always
 
-      - name: Upload installer asset(s)
-        uses: actions/upload-release-asset@v1
+      - name: Build and Publish Mac
+        if: matrix.os == 'macos-latest'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: "dist/CopyBoard Setup 1.0.0.exe"
-          asset_name: "CopyBoard-Setup-${{ github.ref_name }}.exe"
-          asset_content_type: application/octet-stream
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist -- --mac --publish always

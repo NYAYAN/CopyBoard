@@ -3,6 +3,12 @@
 ## [2.2.0] - 2026-01-14
 
 ### ✨ Yeni Özellikler
+- **Otomatik Güncelleme Sistemi**: Yeni versiyonlar artık otomatize edildi
+  - 10 saniye içinde otomatik kontrol
+  - Modern güncelleme bildirim dialogu
+  - Progress bar ile indirme takibi
+  - Tek tıkla güncelleme ve yeniden başlatma
+
 - **Blur (Bulanıklaştırma) Aracı**: Hassas bilgileri gizlemek için yeni blur tool eklendi
   - 10x10 pixelation efekti
   - Gerçek zamanlı önizleme

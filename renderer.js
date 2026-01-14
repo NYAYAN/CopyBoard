@@ -223,6 +223,7 @@ function renderHistory(history) {
         domItem.setAttribute('data-list-index', index);
 
         if (activeTab === 'favorites') {
+            domItem.classList.add('favorites-tab');
             domItem.setAttribute('draggable', 'true');
             domItem.addEventListener('dragstart', onDragStart);
             domItem.addEventListener('dragover', onDragOver);

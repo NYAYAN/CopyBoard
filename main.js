@@ -4,6 +4,7 @@ const fs = require('fs');
 const Store = require('electron-store');
 const Tesseract = require('tesseract.js');
 const crypto = require('crypto');
+const { autoUpdater } = require('electron-updater');
 
 const store = new Store();
 
@@ -53,7 +54,8 @@ const state = {
   lastText: '',
   lastMode: 'draw',
   tempVideoPath: null,
-  isCapturing: false
+  isCapturing: false,
+  manualUpdateCheck: false
 };
 
 // --- Toast ---
@@ -249,6 +251,99 @@ async function capture(mode) {
   }
 }
 
+// --- Auto-Update Configuration ---
+autoUpdater.autoDownload = false; // Don't auto-download, ask user first
+autoUpdater.autoInstallOnAppQuit = true;
+
+let updateWindow = null;
+
+function createUpdateWindow(updateInfo) {
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    updateWindow.focus();
+    return;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const { width, height } = display.workAreaSize;
+
+  updateWindow = new BrowserWindow({
+    width: 380,
+    height: 500,
+    x: Math.floor(display.workArea.x + (width - 350) / 2),
+    y: Math.floor(display.workArea.y + (height - 500) / 2),
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  updateWindow.loadFile(path.join(__dirname, 'update-dialog.html'));
+
+  updateWindow.once('ready-to-show', () => {
+    if (updateWindow && !updateWindow.isDestroyed()) {
+      updateWindow.show();
+      // Send update info to dialog
+      updateWindow.webContents.send('update-info', {
+        version: updateInfo.version,
+        currentVersion: app.getVersion(),
+        releaseNotes: updateInfo.releaseNotes
+      });
+    }
+  });
+
+  updateWindow.on('closed', () => {
+    updateWindow = null;
+  });
+}
+
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for updates...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info.version);
+  createUpdateWindow(info);
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('No updates available');
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('Update error:', err);
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    updateWindow.close();
+  }
+  // Only show error if user manually checked
+  if (state.manualUpdateCheck) {
+    showToast('Güncelleme kontrolü başarısız oldu', 'error');
+    state.manualUpdateCheck = false;
+  }
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  console.log(`Download progress: ${Math.round(progressObj.percent)}%`);
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    updateWindow.webContents.send('download-progress', progressObj);
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info.version);
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    updateWindow.webContents.send('update-downloaded');
+  } else {
+    // If dialog was closed, show toast
+    showToast('Güncelleme indirildi! Uygulamayı yeniden başlatın.', 'success');
+  }
+});
+
 app.whenReady().then(() => {
   // Log registered IPC channels for debugging
   console.log('=== IPC LISTENERS BEING REGISTERED ===');
@@ -433,6 +528,25 @@ app.whenReady().then(() => {
   ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });
   ipcMain.on('toast-finished', () => { if (state.toastWindow && !state.toastWindow.isDestroyed()) state.toastWindow.destroy(); });
 
+  // --- Update IPC Handlers ---
+  ipcMain.on('check-for-updates', () => {
+    state.manualUpdateCheck = true;
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdates();
+    } else {
+      console.log('Auto-update only works in packaged app');
+      showToast('Güncelleme kontrolü sadece yayınlanmış sürümde çalışır', 'info');
+    }
+  });
+
+  ipcMain.on('download-update', () => {
+    autoUpdater.downloadUpdate();
+  });
+
+  ipcMain.on('install-update', () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+
   ipcMain.on('snip-close', (e) => {
     console.log('=== IPC RECEIVED: snip-close ===');
     let win = BrowserWindow.fromWebContents(e.sender);
@@ -578,6 +692,15 @@ app.whenReady().then(() => {
       if (c) { state.lastText = c; clipboard.writeText(c); addHistory(c); showToast('Metin Kopyalandı.', 'success'); }
     } catch (err) { console.error(err); }
   });
+
+  // --- Check for updates on startup (only in packaged app) ---
+  if (app.isPackaged) {
+    // Wait 10 seconds after app starts to check for updates
+    setTimeout(() => {
+      console.log('Checking for updates...');
+      autoUpdater.checkForUpdates();
+    }, 10000);
+  }
 });
 
 app.on('will-quit', () => globalShortcut.unregisterAll());

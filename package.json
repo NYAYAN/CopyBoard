@@ -3,6 +3,10 @@
   "version": "2.2.0",
   "description": "Gelişmiş Pano Yöneticisi ve OCR Aracı",
   "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NYAYAN/CopyBoard.git"
+  },
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
@@ -15,6 +19,13 @@
   "build": {
     "appId": "com.nurullahyayan.copyboard",
     "productName": "CopyBoard",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "NYAYAN",
+        "repo": "CopyBoard"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "icon.png",
@@ -53,6 +64,7 @@
   },
   "dependencies": {
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.3.9",
     "tesseract.js": "^5.1.1",
     "uuid": "^13.0.0"
   }

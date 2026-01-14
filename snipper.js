@@ -56,6 +56,7 @@ window.api.onCaptureScreen((dataUrl) => {
     const img = new Image();
     img.onload = () => {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Reduced delay for faster copying
         setTimeout(() => window.api.notifyReady(), 50);
     };
     img.src = dataUrl;
@@ -170,6 +171,14 @@ window.addEventListener('mousemove', (e) => {
             drawCtx.beginPath(); drawCtx.moveTo(state.startX, state.startY);
             drawCtx.lineTo(e.clientX, e.clientY); drawCtx.stroke();
             state.startX = e.clientX; state.startY = e.clientY;
+        } else if (state.activeTool === 'blur') {
+            drawCtx.putImageData(state.savedImageData, 0, 0);
+            let w = e.clientX - state.startX, h = e.clientY - state.startY;
+            if (Math.abs(w) > 5 && Math.abs(h) > 5) {
+                const x = Math.min(state.startX, e.clientX);
+                const y = Math.min(state.startY, e.clientY);
+                applyBlur(x, y, Math.abs(w), Math.abs(h));
+            }
         } else {
             drawCtx.putImageData(state.savedImageData, 0, 0);
             let w = e.clientX - state.startX, h = e.clientY - state.startY;
@@ -225,6 +234,61 @@ function drawArrow(c, fx, fy, tx, ty) {
     c.stroke();
 }
 
+function applyBlur(x, y, w, h) {
+    // Create a temporary canvas to merge both layers
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = w;
+    tempCanvas.height = h;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // Draw screen canvas first
+    tempCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+    // Draw drawing canvas on top
+    tempCtx.drawImage(drawCanvas, x, y, w, h, 0, 0, w, h);
+
+    // Get merged image data
+    const imageData = tempCtx.getImageData(0, 0, w, h);
+    const pixelSize = 10; // Blur intensity (pixelation size)
+
+    // Apply pixelation effect
+    for (let py = 0; py < h; py += pixelSize) {
+        for (let px = 0; px < w; px += pixelSize) {
+            let r = 0, g = 0, b = 0, a = 0, count = 0;
+
+            // Calculate average color in block
+            for (let dy = 0; dy < pixelSize && py + dy < h; dy++) {
+                for (let dx = 0; dx < pixelSize && px + dx < w; dx++) {
+                    const i = ((py + dy) * w + (px + dx)) * 4;
+                    r += imageData.data[i];
+                    g += imageData.data[i + 1];
+                    b += imageData.data[i + 2];
+                    a += imageData.data[i + 3];
+                    count++;
+                }
+            }
+
+            r = Math.floor(r / count);
+            g = Math.floor(g / count);
+            b = Math.floor(b / count);
+            a = Math.floor(a / count);
+
+            // Fill block with average color
+            for (let dy = 0; dy < pixelSize && py + dy < h; dy++) {
+                for (let dx = 0; dx < pixelSize && px + dx < w; dx++) {
+                    const i = ((py + dy) * w + (px + dx)) * 4;
+                    imageData.data[i] = r;
+                    imageData.data[i + 1] = g;
+                    imageData.data[i + 2] = b;
+                    imageData.data[i + 3] = a;
+                }
+            }
+        }
+    }
+
+    // Draw blurred result to drawing canvas
+    drawCtx.putImageData(imageData, x, y);
+}
+
 document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', () => {
     const t = b.dataset.tool;
     const isActive = state.activeTool === t;
@@ -241,8 +305,8 @@ function getFinalImage() {
     const tctx = tc.getContext('2d');
     tctx.drawImage(canvas, state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h, 0, 0, state.selectionRect.w, state.selectionRect.h);
     tctx.drawImage(drawCanvas, state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h, 0, 0, state.selectionRect.w, state.selectionRect.h);
-    // Use JPEG 0.9 to reduce IPC payload size (Fix for Mac Retina stalling)
-    return tc.toDataURL('image/jpeg', 0.9);
+    // Use JPEG with high quality for faster encoding
+    return tc.toDataURL('image/jpeg', 0.95);
 }
 
 // Use mousedown to ensure events are caught even if click is swallowed
@@ -266,9 +330,6 @@ Object.entries(buttons).forEach(([id, action]) => {
     if (!btn) return;
     btn.addEventListener('mousedown', (e) => {
         e.stopPropagation();
-        // Removed e.preventDefault() to allow normal interaction/focus
-        btn.style.backgroundColor = '#00ff00'; // GREEN for success feedback
-        setTimeout(() => btn.style.backgroundColor = '', 200);
         try {
             action();
         } catch (err) {
@@ -317,3 +378,14 @@ document.querySelectorAll('.color-dot').forEach(d => d.addEventListener('click',
     d.classList.add('active');
     drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
 }));
+
+// Color palette toggle
+const colorToggle = document.getElementById('color-toggle');
+const colorGroup = document.querySelector('.color-group');
+colorToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    colorGroup.classList.toggle('collapsed');
+    colorGroup.classList.toggle('expanded');
+    colorToggle.classList.toggle('active');
+});
+

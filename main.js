@@ -499,8 +499,8 @@ app.whenReady().then(() => {
         console.error('Copy failed:', err);
         showToast('Kopyalama Hatası: ' + err.message, 'error');
       }
-      // Wait a bit longer before closing to ensure clipboard op finishes
-      setTimeout(() => win.close(), 500);
+      // Reduced delay for faster copying
+      setTimeout(() => win.close(), 100);
     } else {
       console.error('Snipper window not found or destroyed');
     }
@@ -525,11 +525,17 @@ app.whenReady().then(() => {
     if (p) {
       fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64'));
       showToast('Resim Kaydedildi.', 'success');
+      // Only close window if save was successful
+      if (win && !win.isDestroyed()) win.close();
+    } else {
+      // User cancelled - restore alwaysOnTop and keep window open
+      if (process.platform === 'darwin' && win && !win.isDestroyed()) {
+        win.setAlwaysOnTop(true, 'pop-up-menu');
+      }
+      showToast('Kaydetme iptal edildi.', 'info');
     }
-
-    // Close the window after save (or cancel) is complete
-    if (win && !win.isDestroyed()) win.close();
   });
+
 
   ipcMain.on('record-start', () => { state.tempVideoPath = path.join(app.getPath('temp'), `temp_video_${Date.now()}.webm`); });
   ipcMain.on('record-chunk', (e, arrayBuffer) => { if (state.tempVideoPath) fs.appendFileSync(state.tempVideoPath, Buffer.from(arrayBuffer)); });

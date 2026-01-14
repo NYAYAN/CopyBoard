@@ -24,14 +24,53 @@
     <!-- Toolbar -->
     <div id="toolbar" class="toolbar hidden">
         <div class="tool-group">
-            <button class="tool-btn" data-tool="pen" title="Kalem">✏️</button>
-            <button class="tool-btn" data-tool="rect" title="Kare">⬜</button>
-            <button class="tool-btn" data-tool="circle" title="Yuvarlak">⭕</button>
-            <button class="tool-btn" data-tool="text" title="Metin">T</button>
-            <button class="tool-btn" data-tool="arrow" title="Ok">↗️</button>
+            <button class="tool-btn" data-tool="pen" title="Kalem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                </svg>
+            </button>
+            <button class="tool-btn" data-tool="rect" title="Kare">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+            </button>
+            <button class="tool-btn" data-tool="circle" title="Yuvarlak">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9" />
+                </svg>
+            </button>
+            <button class="tool-btn" data-tool="text" title="Metin">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 7 4 4 20 4 20 7" />
+                    <line x1="9" y1="20" x2="15" y2="20" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
+                </svg>
+            </button>
+            <button class="tool-btn" data-tool="arrow" title="Ok">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <line x1="4" y1="20" x2="20" y2="4" />
+                    <polyline points="14 4 20 4 20 10" />
+                </svg>
+            </button>
+            <button class="tool-btn" data-tool="blur" title="Bulanıklaştır">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="12" cy="12" r="7" opacity="0.5" />
+                    <circle cx="12" cy="12" r="10" opacity="0.3" />
+                </svg>
+            </button>
         </div>
         <div class="divider"></div>
-        <div class="color-group">
+        <button class="color-toggle-btn" id="color-toggle" title="Renkler">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 2v20M2 12h20" />
+            </svg>
+        </button>
+        <div class="color-group collapsed">
             <div class="color-dot active" data-color="#ff0000" style="background: #ff0000;"></div>
             <div class="color-dot" data-color="#00ff00" style="background: #00ff00;"></div>
             <div class="color-dot" data-color="#0000ff" style="background: #0000ff;"></div>
@@ -41,10 +80,32 @@
         </div>
         <div class="divider"></div>
         <div class="action-group">
-            <button class="action-btn" id="btn-undo" title="Geri Al">↩️</button>
-            <button class="action-btn" id="btn-copy" title="Kopyala">📋</button>
-            <button class="action-btn" id="btn-save" title="Kaydet">💾</button>
-            <button class="action-btn close" id="btn-close" title="Kapat">❌</button>
+            <button class="action-btn" id="btn-undo" title="Geri Al">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M3 7v6h6" />
+                    <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3" />
+                </svg>
+            </button>
+            <button class="action-btn" id="btn-copy" title="Kopyala">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+            </button>
+            <button class="action-btn" id="btn-save" title="Kaydet">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                </svg>
+            </button>
+            <button class="action-btn close" id="btn-close" title="Kapat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
         </div>
     </div>
 

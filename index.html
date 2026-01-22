@@ -57,7 +57,7 @@
 
         <div id="about-panel" class="settings-panel hidden">
             <div class="about-content">
-                <h3>CopyBoard v2.1.1</h3>
+                <h3>CopyBoard v2.3.0</h3>
                 <p><strong>Geliştirici:</strong> Nurullah YAYAN</p>
                 <p>📧 nurullah.yayan@gmail.com</p>
             </div>
@@ -123,12 +123,33 @@
     <div id="add-item-modal" class="modal-overlay hidden">
         <div class="modal">
             <h3>Yeni Öğe Ekle</h3>
-            <textarea id="manual-text-input" placeholder="Metni buraya yapıştırın veya yazın..." rows="4"
-                style="width: 100%; margin: 10px 0; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; resize: none;"></textarea>
+            <textarea id="manual-text-input" placeholder="Metni buraya yapıştırın veya yazın..." rows="4"></textarea>
             <div class="modal-actions">
                 <button id="cancel-add-btn" class="modal-btn">İptal</button>
                 <button id="confirm-add-btn" class="modal-btn"
                     style="background: var(--accent); color: white;">Ekle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Note Modal -->
+    <div id="note-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3 id="note-modal-title">Not</h3>
+
+            <div id="note-view-content" class="note-view hidden"></div>
+            <textarea id="note-input" class="hidden" placeholder="Bu öğe için notunuzu girin..." rows="4"></textarea>
+
+            <div class="modal-actions" id="note-view-actions">
+                <button id="close-note-btn" class="modal-btn">Kapat</button>
+                <button id="edit-note-btn" class="modal-btn"
+                    style="background: var(--accent); color: white;">Düzenle</button>
+            </div>
+
+            <div class="modal-actions hidden" id="note-edit-actions">
+                <button id="cancel-note-btn" class="modal-btn">Vazgeç</button>
+                <button id="save-note-btn" class="modal-btn"
+                    style="background: var(--accent); color: white;">Kaydet</button>
             </div>
         </div>
     </div>

@@ -182,6 +182,7 @@ async function startRecording() {
         document.body.classList.add('is-recording');
         btnRecord.classList.add('hidden');
         btnFullscreen.classList.add('hidden');
+        if (btnResetSize) btnResetSize.classList.add('hidden'); // Hide reset button during recording
         if (qualitySelect) qualitySelect.classList.add('hidden');
         if (qualityLabel) qualityLabel.classList.add('hidden');
         btnStop.classList.remove('hidden');
@@ -224,5 +225,24 @@ function stopRecording() {
 }
 
 btnRecord.addEventListener('click', startRecording);
+const btnResetSize = document.getElementById('btn-reset-size');
+if (btnResetSize) {
+    btnResetSize.addEventListener('click', () => {
+        if (state.isRecording) return;
+        const w = 500, h = 500;
+        const left = Math.floor((window.innerWidth - w) / 2);
+        const top = Math.floor((window.innerHeight - h) / 2);
+
+        state.selectionRect = { x: left, y: top, w: w, h: h };
+        selectionBox.style.width = w + 'px';
+        selectionBox.style.height = h + 'px';
+        selectionBox.style.left = left + 'px';
+        selectionBox.style.top = top + 'px';
+        selectionBox.style.display = 'block';
+        selectionBox.classList.remove('hidden');
+        overlay.style.display = 'none';
+        if (instruction) instruction.style.display = 'none';
+    });
+}
 btnStop.addEventListener('click', (e) => { e.stopPropagation(); stopRecording(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (state.isRecording) stopRecording(); window.api.closeSnipper(); } });

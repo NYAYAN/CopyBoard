@@ -223,7 +223,12 @@ function showToolbar(r) {
     if (t + toolbar.offsetHeight > window.innerHeight) t = r.top - toolbar.offsetHeight - 10;
     if (t < 10) t = 10; // Extra safety
 
-    toolbar.style.top = t + 'px'; toolbar.style.left = l + 'px';
+    toolbar.style.top = t + 'px';
+
+    // Calculate right position to anchor it
+    const rightPos = window.innerWidth - (l + toolbar.offsetWidth);
+    toolbar.style.left = 'auto';
+    toolbar.style.right = rightPos + 'px';
 }
 
 function drawArrow(c, fx, fy, tx, ty) {
@@ -371,6 +376,10 @@ textInput.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') window.api.closeSnipper();
     if (e.ctrlKey && e.key.toLowerCase() === 'z') undo();
+    if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault(); // Prevent default copy which might fail if nothing focusable
+        buttons['btn-copy']();
+    }
 });
 
 document.querySelectorAll('.color-dot').forEach(d => d.addEventListener('click', () => {

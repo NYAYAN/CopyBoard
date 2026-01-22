@@ -8,6 +8,20 @@ const { autoUpdater } = require('electron-updater');
 
 const store = new Store();
 
+// --- Single Instance Lock ---
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    if (state.mainWindow) {
+      showMain();
+    }
+  });
+}
+
 // --- Migration ---
 // GLOBAL ERROR HANDLER
 process.on('uncaughtException', (error) => {
@@ -150,7 +164,6 @@ function showMain() {
     );
     state.mainWindow.show();
     state.mainWindow.focus();
-    state.mainWindow.webContents.send('reset-view');
   }
 }
 
@@ -386,7 +399,12 @@ app.whenReady().then(() => {
   });
 
   state.mainWindow.loadFile('index.html');
-  state.mainWindow.on('blur', () => state.mainWindow.hide());
+  state.mainWindow.on('blur', () => {
+    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+      state.mainWindow.webContents.send('reset-view');
+      state.mainWindow.hide();
+    }
+  });
 
   const clipboardInterval = setInterval(() => {
     const t = clipboard.readText();
@@ -476,6 +494,19 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.on('set-item-note', (e, id, note) => {
+    const item = state.history.find(i => i.id === id);
+    if (item) {
+      item.note = note;
+      store.set('history', state.history);
+      // We don't necessarily need to resend the whole history if we update locally, 
+      // but to be safe and consistent we can.
+      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+        state.mainWindow.webContents.send('update-history', state.history);
+      }
+    }
+  });
+
   ipcMain.on('reorder-history', (e, newHistory) => {
     state.history = newHistory;
     store.set('history', state.history);
@@ -527,6 +558,10 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });
+  ipcMain.on('minimize-window', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (win) win.minimize();
+  });
   ipcMain.on('toast-finished', () => { if (state.toastWindow && !state.toastWindow.isDestroyed()) state.toastWindow.destroy(); });
 
   // --- Update IPC Handlers ---

@@ -19,6 +19,23 @@ const addItemModal = document.getElementById('add-item-modal');
 const manualTextInput = document.getElementById('manual-text-input');
 const confirmAddBtn = document.getElementById('confirm-add-btn');
 const cancelAddBtn = document.getElementById('cancel-add-btn');
+
+// Note Modal Elements
+// Note Modal Elements
+const noteModal = document.getElementById('note-modal');
+const noteModalTitle = document.getElementById('note-modal-title');
+const noteViewContent = document.getElementById('note-view-content');
+const noteInput = document.getElementById('note-input');
+const noteViewActions = document.getElementById('note-view-actions');
+const noteEditActions = document.getElementById('note-edit-actions');
+
+const closeNoteBtn = document.getElementById('close-note-btn');
+const editNoteBtn = document.getElementById('edit-note-btn');
+const saveNoteBtn = document.getElementById('save-note-btn');
+const cancelNoteBtn = document.getElementById('cancel-note-btn');
+
+let currentNoteItemId = null;
+
 const tabBtns = document.querySelectorAll('.tab-btn');
 
 let currentHistory = [];
@@ -63,6 +80,82 @@ confirmAddBtn.addEventListener('click', () => {
     if (text) {
         window.api.addManualItem(text);
         addItemModal.classList.add('hidden');
+    }
+});
+
+// Note UI Handlers
+// Note UI Handlers
+function openNoteModal(item) {
+    currentNoteItemId = item.id;
+    noteModal.classList.remove('hidden');
+
+    if (item.note && item.note.trim().length > 0) {
+        // VIEW MODE
+        showNoteViewMode(item.note);
+    } else {
+        // EDIT MODE (New Note)
+        showNoteEditMode('');
+    }
+}
+
+function showNoteViewMode(text) {
+    noteModalTitle.textContent = 'Not';
+    noteViewContent.textContent = text;
+    noteInput.value = text; // Keep sync for edit
+
+    noteViewContent.classList.remove('hidden');
+    noteInput.classList.add('hidden');
+
+    noteViewActions.classList.remove('hidden');
+    noteEditActions.classList.add('hidden');
+}
+
+function showNoteEditMode(text) {
+    noteModalTitle.textContent = text ? 'Notu Düzenle' : 'Not Ekle';
+    noteInput.value = text;
+
+    noteViewContent.classList.add('hidden');
+    noteInput.classList.remove('hidden');
+
+    noteViewActions.classList.add('hidden');
+    noteEditActions.classList.remove('hidden');
+
+    noteInput.focus();
+}
+
+// Button Listeners
+closeNoteBtn.addEventListener('click', () => {
+    noteModal.classList.add('hidden');
+    currentNoteItemId = null;
+});
+
+editNoteBtn.addEventListener('click', () => {
+    showNoteEditMode(noteInput.value);
+});
+
+cancelNoteBtn.addEventListener('click', () => {
+    // If it was an existing note, go back to view mode? 
+    // Or just close? User requested "Close" or "Edit".
+    // Usually Cancel in edit mode implies "Stop editing, revert".
+    const item = currentHistory.find(i => i.id === currentNoteItemId);
+
+    if (item && item.note) {
+        showNoteViewMode(item.note);
+    } else {
+        noteModal.classList.add('hidden');
+        currentNoteItemId = null;
+    }
+});
+
+saveNoteBtn.addEventListener('click', () => {
+    if (currentNoteItemId) {
+        const note = noteInput.value.trim();
+        window.api.setItemNote(currentNoteItemId, note);
+        // After save, close modal or switch to view? 
+        // User asked "edit demeden direk kapat diyebilmeliyim" -> implies flow is flexible.
+        // Standard UX: Save closes modal.
+        noteModal.classList.add('hidden');
+        currentNoteItemId = null;
     }
 });
 
@@ -221,6 +314,7 @@ function renderHistory(history) {
         const domItem = document.createElement('div');
         domItem.className = 'history-item';
         domItem.setAttribute('data-list-index', index);
+        domItem.title = itemContent; // Show full content on hover
 
         if (activeTab === 'favorites') {
             domItem.classList.add('favorites-tab');
@@ -254,6 +348,20 @@ function renderHistory(history) {
 
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'history-actions';
+
+        if (activeTab === 'favorites') {
+            const infoBtn = document.createElement('button');
+            infoBtn.className = `action-btn info-btn ${item.note ? 'has-note' : ''}`;
+            infoBtn.innerHTML = item.note ? '📝' : 'ℹ️'; // Icon changes if note exists
+            infoBtn.title = item.note ? 'Notu Düzenle' : 'Not Ekle';
+            if (item.note) infoBtn.title += `\nNot: ${item.note.substring(0, 50)}${item.note.length > 50 ? '...' : ''}`;
+
+            infoBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openNoteModal(item);
+            });
+            actionsDiv.appendChild(infoBtn);
+        }
 
         const starBtn = document.createElement('button');
         starBtn.className = `action-btn star-btn ${item.isFavorite ? 'active' : ''}`;
@@ -352,6 +460,10 @@ window.api.onResetView(() => {
     settingsBtn.classList.remove('active');
     aboutBtn.classList.remove('active');
     addItemModal.classList.add('hidden');
+
+    // Close Note Modal
+    noteModal.classList.add('hidden');
+    currentNoteItemId = null;
 
     // Switch to 'all' tab if not already
     if (activeTab !== 'all') {

@@ -1,0 +1,40 @@
+export const elements = {
+    listElement: document.getElementById('history-list'),
+    settingsBtn: document.getElementById('settings-btn'),
+    aboutBtn: document.getElementById('about-btn'),
+    addManualBtn: document.getElementById('add-manual-btn'),
+    settingsPanel: document.getElementById('settings-panel'),
+    aboutPanel: document.getElementById('about-panel'),
+    maxItemsInput: document.getElementById('max-items'),
+    shortcutInput: document.getElementById('shortcut-input'),
+    imageShortcutInput: document.getElementById('image-shortcut-input'),
+    ocrShortcutInput: document.getElementById('ocr-shortcut-input'),
+    videoShortcutInput: document.getElementById('video-shortcut-input'),
+    videoQualitySelect: document.getElementById('video-quality'),
+    clearBtn: document.getElementById('clear-history-btn'),
+    confirmModal: document.getElementById('confirm-modal'),
+    confirmClearBtn: document.getElementById('confirm-clear-btn'),
+    cancelClearBtn: document.getElementById('cancel-clear-btn'),
+    minimizeBtn: document.getElementById('minimize-btn'),
+    addItemModal: document.getElementById('add-item-modal'),
+    manualTextInput: document.getElementById('manual-text-input'),
+    confirmAddBtn: document.getElementById('confirm-add-btn'),
+    cancelAddBtn: document.getElementById('cancel-add-btn'),
+
+    // Note Modal
+    noteModal: document.getElementById('note-modal'),
+    noteModalTitle: document.getElementById('note-modal-title'),
+    noteViewContent: document.getElementById('note-view-content'),
+    noteInput: document.getElementById('note-input'),
+    noteViewActions: document.getElementById('note-view-actions'),
+    noteEditActions: document.getElementById('note-edit-actions'),
+    closeNoteBtn: document.getElementById('close-note-btn'),
+    editNoteBtn: document.getElementById('edit-note-btn'),
+    saveNoteBtn: document.getElementById('save-note-btn'),
+    cancelNoteBtn: document.getElementById('cancel-note-btn'),
+
+    // Other
+    tabBtns: document.querySelectorAll('.tab-btn'),
+    autostartCheck: document.getElementById('autostart-check'),
+    toastElement: document.getElementById('toast')
+};

@@ -2,7 +2,7 @@
   "name": "copyboard",
   "version": "2.3.0",
   "description": "Gelişmiş Pano Yöneticisi ve OCR Aracı",
-  "main": "main.js",
+  "main": "src/main/main.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/NYAYAN/CopyBoard.git"
@@ -53,6 +53,10 @@
       "license": "installer_info.txt"
     },
     "files": [
+      "src/**/*",
+      "package.json",
+      "icon.png",
+      "trayIcon.png",
       "!**/*.map",
       "!**/*.idb",
       "!**/*.pdb"

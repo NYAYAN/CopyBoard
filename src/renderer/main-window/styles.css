@@ -183,6 +183,13 @@ input[type="number"] {
     cursor: pointer;
 }
 
+.settings-select option {
+    background-color: #1e1e2e;
+    /* Fallback */
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+}
+
 input[type="checkbox"] {
     accent-color: var(--accent);
     width: 16px;

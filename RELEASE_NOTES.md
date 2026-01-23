@@ -1,94 +1,43 @@
-# CopyBoard v2.2.0 - Blur Tool & UI Improvements 🎨⚡
+# CopyBoard v2.3.0 - Modular Architecture & Security Update 🏗️🔒
 
-## ✨ Yeni Özellikler
+## 🏗️ Mimari Değişiklikler (Modular Refactoring)
 
-### 🔄 Otomatik Güncelleme Sistemi
-Artık yeni versiyonlar için web sitesini kontrol etmenize gerek yok!
-- **Otomatik Kontrol:** Uygulama açılışında (10 saniye sonra) yeni versiyon kontrolü yapılır.
-- **Akıllı Bildirim:** Yeni versiyon varsa modern ve kullanıcı dostu bir dialog ile bildirilir.
-- **Tek Tıkla Güncelleme:** "Şimdi Güncelle" butonu ile indirme ve kurulum otomatize edildi.
-- **İlerleme Takibi:** İndirme durumu ve hızı anlık olarak takip edilebilir.
+CopyBoard altyapısı, daha sürdürülebilir, güvenli ve genişletilebilir olması için tamamen yenilendi:
+- **Backend (Main Process):** Monolitik yapıdan servis tabanlı (Service-Oriented) mimariye geçildi.
+  - `state.js`, `window-manager.js`, `tray-manager.js`, `ipc-handlers.js`, `history-manager.js` vb.
+- **Frontend (Renderer Process):** Modern **ES Modules** yapısına geçildi, kod okunabilirliği ve performansı artırıldı.
+- **Güvenlik:** Hassas dosyalar repodan temizlendi, `.gitignore` güncellendi.
+- **Build Optimizasyonu:** `electron-builder` ayarları optimize edildi, gereksiz dosyalar paketten çıkarıldı.
 
-### 🌫️ Blur (Bulanıklaştırma) Aracı
-Hassas bilgileri gizlemek için yeni blur tool eklendi!
-- 10x10 pixelation efekti ile profesyonel bulanıklaştırma
-- Gerçek zamanlı önizleme
-- Yüzler, kişisel veriler ve hassas bilgiler için ideal
-- Undo ile geri alınabilir
+## ✨ Yeni Özellikler & İyileştirmeler
 
-### 🎨 Daraltılabilir Renk Paleti
-- Toggle butonu ile açılıp kapanabilen renk seçenekleri
-- Daha az yer kaplıyor
-- Smooth animasyon efekti
-- Varsayılan olarak kapalı
+### ⭐ Favori Sıralama (Drag & Drop)
+- Favoriler listesindeki öğeleri artık **sürükle-bırak** yöntemiyle dilediğiniz gibi sıralayabilirsiniz.
 
-## 🎨 Tasarım İyileştirmeleri
+### 📝 Detaylı Kurulum Bilgileri
+- Kurulum sihirbazına (Installer) uygulamanın tüm özelliklerini ve kısayollarını anlatan detaylı bir bilgilendirme ekranı eklendi.
 
-### Modern SVG İkonlar
-Tüm emoji ikonlar profesyonel SVG ikonlara dönüştürüldü:
-- ✏️ Kalem, ⬜ Kare, ⭕ Yuvarlak, T Metin, ↗️ Ok → Modern outline SVG'ler
-- 🌫️ Yeni blur ikonu
-- Daha keskin ve profesyonel görünüm
-- Renk değişimlerine duyarlı
-
-### Kompakt Toolbar
-- Araç çubuğu %12.5 daha az yer kaplıyor
-- Optimize edilmiş buton boyutları (28px)
-- Azaltılmış gap (3px)
-
-### Belirgin Kopyala/Kaydet Butonları
-- Daha büyük boyut (32px vs 28px)
-- Mor tonlu arka plan ile vurgu
-- Hover efekti ile daha görünür
-- Şekil araçlarından net ayrışma
-
-## ⚡ Performans İyileştirmeleri
-
-### %80 Daha Hızlı Kopyalama
-- **PNG → JPEG 0.95**: 3-5x daha hızlı encoding
-- **Gecikme azaltıldı**: 500ms → 100ms
-- **Daha küçük dosya**: Hızlı IPC transferi
-- **Toplam**: %80+ daha hızlı kopyalama
-
-## 🐛 Hata Düzeltmeleri
-
-### Kaydetme Davranışı
-- ✅ Kaydetme penceresini iptal edince çizimler artık kaybolmuyor
-- ✅ Snipper açık kalıyor
-- ✅ Sonra kopyalama yapılabiliyor
-
-### Kopyala Butonu
-- ✅ Tıklayınca arka plan rengi artık değişmiyor
-- ✅ Daha temiz ve profesyonel görünüm
+### 🐛 Hata Düzeltmeleri
+- **Video Kalite Ayarı:** Ayarlar ekranındaki video kalitesi (Yüksek/Orta/Düşük) seçeneklerinin görünmemesi (beyaz yazı) sorunu giderildi.
+- **Başlangıç Hatası:** Nadiren görülen `startClipboardWatcher` hatası giderildi.
+- **Video Kayıt:** Kayıt sürecindeki kararlılık artırıldı.
 
 ## 📦 Kurulum
 
-### Windows
-1. `CopyBoard-Setup-2.2.0.exe` dosyasını indirin
-2. Kurulum sihirbazını takip edin
-3. Uygulamayı başlatın
+1. `CopyBoard-Setup-2.3.0.exe` dosyasını indirin.
+2. Kurulum sihirbazını takip edin.
+3. Uygulamayı başlatın.
 
-### Kısayollar
+### Otomatik Güncelleme
+Eski bir sürümü kullanıyorsanız, uygulamayı açtığınızda otomatik olarak yeni sürümü algılayacak ve güncelleme isteyecektir.
+
+## ⌨️ Kısayollar (Hatırlatma)
+
 - **Alt+V**: Pano listesini göster
-- **Alt+9**: Ekran görüntüsü al (çizim araçları)
+- **Alt+9**: Ekran görüntüsü al (Çizim & Blur)
 - **Alt+8**: Video kaydet
-- **Alt+2**: OCR (metin tanıma)
-
-## 🎯 Kullanım İpuçları
-
-### Blur Tool Nasıl Kullanılır?
-1. Ekran görüntüsü alın (Alt+9)
-2. Alanı seçin
-3. Blur butonuna tıklayın (🌫️ ikonu)
-4. Bulanıklaştırmak istediğiniz alanı çizin
-5. Kopyala veya Kaydet
-
-### Renk Paleti
-- Renk butonu (🎨) ile paleti açın/kapatın
-- Daha az yer kaplar, gerektiğinde açılır
-
-## 🙏 Teşekkürler
-Bu sürüm kullanıcı geri bildirimleri doğrultusunda geliştirilmiştir.
+- **Alt+2**: OCR (Resimden yazı okuma)
+- **Ctrl+C**: (Snipping modunda) Görüntüyü kopyala
 
 ---
 

@@ -1,4 +1,4 @@
-# Release v2.2.0 - Adım Adım Kılavuz
+# Release v2.3.0 - Adım Adım Kılavuz
 
 ## 1️⃣ Git Commit ve Push
 
@@ -7,7 +7,7 @@
 git add .
 
 # Commit oluştur
-git commit -m "Release v2.2.0: Blur tool, modern UI, and performance improvements"
+git commit -m "Release v2.3.0: Modular Architecture, Security Fixes, and UI Improvements"
 
 # Ana branch'e push et
 git push origin main
@@ -17,10 +17,10 @@ git push origin main
 
 ```bash
 # Tag oluştur
-git tag -a v2.2.0 -m "Version 2.2.0 - Blur Tool & UI Improvements"
+git tag -a v2.3.0 -m "Version 2.3.0 - Modular Architecture & Refactoring"
 
 # Tag'i push et
-git push origin v2.2.0
+git push origin v2.3.0
 ```
 
 ## 3️⃣ Build Oluştur
@@ -31,18 +31,18 @@ git push origin v2.2.0
 npm run dist
 ```
 
-Çıktı: `dist/CopyBoard Setup 2.2.0.exe`
+Çıktı: `dist/CopyBoard Setup 2.3.0.exe`
 
 ## 4️⃣ GitHub Release Oluştur
 
 1. GitHub'da repository'ye git: https://github.com/NYAYAN/CopyBoard
 2. "Releases" sekmesine tıkla
 3. "Draft a new release" butonuna tıkla
-4. Tag olarak `v2.2.0` seç
-5. Release title: `v2.2.0 - Blur Tool & UI Improvements 🎨⚡`
+4. Tag olarak `v2.3.0` seç
+5. Release title: `v2.3.0 - Modular Architecture & Security Update 🏗️🔒`
 6. Description kısmına `RELEASE_NOTES.md` içeriğini yapıştır
 7. **ÖNEMLİ**: Aşağıdaki dosyaları sürükle-bırak ile ekle:
-   - `CopyBoard Setup 2.2.0.exe` (dist klasöründe)
+   - `CopyBoard Setup 2.3.0.exe` (dist klasöründe)
    - `latest.yml` (dist klasöründe - otomatik güncelleme için gerekli)
 8. "Publish release" butonuna tıkla
 
@@ -54,10 +54,11 @@ npm run dist
 
 ## ✅ Kontrol Listesi
 
-- [ ] package.json versiyonu 2.2.0 olarak güncellendi
-- [ ] CHANGELOG.md oluşturuldu
-- [ ] RELEASE_NOTES.md oluşturuldu
-- [ ] README.md güncellendi (kısayollar eklendi)
+- [ ] package.json versiyonu 2.3.0 olarak güncellendi
+- [ ] CHANGELOG.md güncellendi
+- [ ] RELEASE_NOTES.md güncellendi
+- [ ] README.md güncellendi
+- [ ] Gereksiz dosyalar gitignore'a eklendi ve repodan temizlendi
 - [ ] Git commit yapıldı
 - [ ] Git tag oluşturuldu ve push edildi
 - [ ] Build oluşturuldu (npm run dist)

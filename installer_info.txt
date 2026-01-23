@@ -1,23 +1,45 @@
-﻿CopyBoard v2.1.1 - Sürüm Notları
+﻿CopyBoard v2.3.0 - Sürüm Notları
 
 Gelişmiş Pano Yöneticisi ve OCR Aracı
 
-YENİ ÖZELLİKLER:
-- Favoriler Sistemi: İçerikleri yıldızlayın ve özel sekmeye taşıyın.
-- Akıllı Sıralama: Favori öğeleri sürükle-bırak ile düzenleyin.
-- Manuel Ekleme: "+" butonu ile manuel metin girişi yapın.
-- Gelişmiş OCR: Özel kısayol atama ve gelişmiş metin tanıma.
+CopyBoard, günlük iş akışınızı hızlandırmak için tasarlanmış kapsamlı bir üretkenlik aracıdır.
 
-KISAYOLLAR (Alt Tuşu İle):
+DETAYLI ÖZELLİKLER:
+
+1. Pano Yöneticisi (Clipboard Manager):
+   - Kopyalanan tüm metinleri otomatik olarak saklar.
+   - Pano geçmişinizde arama yapabilir ve eski kopyalara tek tıkla ulaşabilirsiniz.
+
+2. Favoriler ve Notlar:
+   - Sık kullandığınız metinleri "Favoriler" sekmesine ekleyerek sabitleyebilirsiniz.
+   - Favori öğelerinize özel notlar ekleyerek (örneğin "Müşteri mail taslağı") içeriği hatırlamanızı kolaylaştırır.
+   - Sürükle-bırak özelliği ile favori listenizi dilediğiniz gibi sıralayabilirsiniz.
+
+3. Geçmiş Yönetimi:
+   - "Geçmişi Temizle" diyerek gereksiz kalabalıktan kurtulabilirsiniz.
+   - Bu işlem sırasında Favori öğeleriniz KORUNUR, silinmez.
+
+4. Özelleştirilebilir Kısayollar:
+   - Uygulamanın tüm fonksiyonları (Liste açma, Ekran görüntüsü vb.) için kendi klavye kısayollarınızı belirleyebilirsiniz.
+
+5. Ekran Alıntısı Aracı (Snipping Tool):
+   - Ekranın istediğiniz bir bölümünün görüntüsünü alabilirsiniz.
+   - Alınan görüntü üzerinde çizim yapabilir (Ok, Kalem, Şekiller) ve metin ekleyebilirsiniz.
+   - Görüntüyü panoya kopyalamak için butonları kullanabilir veya doğrudan "Ctrl + C" yapabilirsiniz.
+
+6. Video Ekran Kaydı:
+   - İster tam ekran, isterseniz de sadece belirlediğiniz özel bir alanın videosunu çekebilirsiniz.
+   - WebM formatında yüksek kaliteli kayıtlar alır.
+
+7. Gelişmiş OCR (Resimden Metin Okuma):
+   - Ekranda gördüğünüz herhangi bir yazıyı (bu bir resim, PDF veya video karesi olabilir) seçerek metne dönüştürebilir ve kopyalayabilirsiniz.
+   - Türkçe ve İngilizce metinleri destekler.
+
+KISAYOLLAR (Varsayılan):
 - Alt + V: Pano Listesi
 - Alt + 2: Metin Oku (OCR)
 - Alt + 8: Video Kaydı
 - Alt + 9: Ekran Görüntüsü
-
-DÜZENLEMELER:
-- Tüm kısayol kombinasyonlarından Shift kaldırıldı (Daha hızlı erişim).
-- Minimale indirilmiş, modern ve animasyonlu arayüz.
-- Performans ve kararlılık iyileştirmeleri.
 
 Geliştirici: Nurullah YAYAN
 İletişim: nurullah.yayan@gmail.com

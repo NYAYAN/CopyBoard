@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.3.0] - 2026-01-24
+
+### 🏗️ Mimari Değişiklikler
+- **Modüler Yapı**: Uygulama altyapısı tamamen yenilendi
+  - Backend: Servis tabanlı mimari (State, Window, Tray, IPC vb.)
+  - Frontend: ES Modules yapısına geçiş
+  - Daha temiz ve bakımı kolay kod tabanı
+
+### ✨ Yeni Özellikler & İyileştirmeler
+- **Favori Sıralama**: Favoriler listesinde sürükle-bırak ile sıralama özelliği
+- **Güvenlik**: Hassas dosyalar temizlendi ve .gitignore güncellendi
+- **Installer Bilgileri**: Kurulum ekranı için detaylı özellik açıklamaları
+
+### 🐛 Hata Düzeltmeleri
+- **UI Düzeltmesi**: Ayarlar menüsündeki Video Kalitesi seçiminde yaşanan görünürlük sorunu (beyaz yazı) giderildi
+- **Pano İzleyici**: Başlangıçta yaşanan `startClipboardWatcher` hatası düzeltildi
+- **Build**: Dosya paketleme ayarları optimize edildi
+
+
 ## [2.2.0] - 2026-01-14
 
 ### ✨ Yeni Özellikler

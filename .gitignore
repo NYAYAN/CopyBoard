@@ -1,9 +1,16 @@
 .DS_Store
 node_modules
-yarn.lock
-package-lock.json
 dist
 CopyBoard-win32-x64
-# Security - Certificates
+
+# Security - Certificates & Keys
 *.pfx
 *.base64.txt
+.env
+
+# Large Files / Tesseract Models
+*.traineddata
+
+# Cache
+__pycache__
+*.log

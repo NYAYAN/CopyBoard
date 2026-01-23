@@ -1,199 +1,131 @@
-# CopyBoard
+# CopyBoard v2.3.0
 
-Gelişmiş pano yöneticisi, ekran görüntüsü aracı ve OCR (Resimden Yazıya Çevirme) uygulaması.
+> **Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR (Resimden Yazıya Çevirme) Uygulaması**
 
-![Version](https://img.shields.io/badge/version-2.2.0-blue)
+![Version](https://img.shields.io/badge/version-2.3.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-ISC-green)
 
-## ✨ Özellikler
-
-### 📋 Pano Yönetimi
-- **Otomatik Geçmiş:** Kopyalanan tüm metinleri otomatik saklar
-- **Favoriler:** Önemli öğeleri favorilere ekleyin
-- **Hızlı Erişim:** `Alt+V` ile anında açılır
-- **Özelleştirilebilir:** Geçmiş limiti ayarlanabilir
-
-### 📸 Ekran Görüntüsü Araçları
-- **Çizim Araçları:**
-  - ✏️ Kalem - Serbest çizim
-  - ⬜ Kare - Dikdörtgen çizimi
-  - ⭕ Yuvarlak - Daire/elips çizimi
-  - 📝 Metin - Metin ekleme
-  - ➡️ Ok - Ok işareti çizimi
-  - 🌫️ **YENİ: Blur** - Hassas bilgileri bulanıklaştırma
-
-- **Renk Seçenekleri:** 6 farklı renk (daraltılabilir palet)
-- **Geri Al:** Çizimleri geri alabilme
-- **Hızlı Kopyalama:** %80 daha hızlı kopyalama
-- **Kaydetme:** PNG formatında kaydetme
-
-### 🔍 OCR (Optik Karakter Tanıma)
-- Ekrandan seçilen alandaki yazıyı otomatik tanır
-- Türkçe ve İngilizce dil desteği
-- Tanınan metin otomatik panoya kopyalanır
-
-### 🎥 Video Kayıt
-- Ekran kaydı yapabilme
-- Yüksek/Orta/Düşük kalite seçenekleri
-- WebM formatında kaydetme
-
-### 🔄 Otomatik Güncelleme
-- **Otomatik Kontrol:** Uygulama her açıldığında yeni versiyon kontrolü
-- **Bildirim Sistemi:** Yeni versiyon geldiğinde modern bildirim dialogu
-- **Tek Tıkla Güncelleme:** Arka planda indirme ve otomatik kurulum
-- **İlerleme Takibi:** İndirme durumu ve hızı gösterimi
-
-## ⌨️ Kısayollar
-
-| Kısayol | İşlev |
-|---------|-------|
-| `Alt+V` | Pano listesini göster |
-| `Alt+9` | Ekran görüntüsü al (çizim araçları) |
-| `Alt+8` | Video kaydı başlat |
-| `Alt+2` | OCR (metin tanıma) |
-| `Ctrl+Z` | Geri al (çizim modunda) |
-| `ESC` | Ekran görüntüsü modundan çık |
-
-> 💡 **Not:** Kısayollar uygulama ayarlarından özelleştirilebilir.
-
-## 🚀 Hızlı Başlangıç
-
-### Kullanıcılar İçin
-1. [Releases](https://github.com/NYAYAN/CopyBoard/releases) sayfasından en son sürümü indirin
-2. `CopyBoard-Setup-2.2.0.exe` dosyasını çalıştırın
-3. Kurulum sihirbazını takip edin
-4. Uygulama otomatik başlayacaktır
-
-### Geliştiriciler İçin
-
-```bash
-# 1. Gerekli paketleri yükle
-npm install
-
-# 2. Uygulamayı test et (Geliştirici Modu)
-npm start
-
-# 3. Setup dosyası oluştur
-npm run dist
-```
+CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artırmak için tasarlanmış modern bir üretkenlik aracıdır. Pano geçmişinizi yönetin, ekran görüntüleri alın, videolar kaydedin ve resimlerdeki yazıları anında metne dönüştürün.
 
 ---
 
-## 📦 Detaylı Kurulum (Geliştiriciler)
+## ✨ Özellikler
+
+### 📋 1. Gelişmiş Pano Yöneticisi
+- **Otomatik Kayıt:** Kopyaladığınız her metin otomatik olarak geçmişe kaydedilir.
+- **Arama:** Geçmiş kayıtları arasında anında arama yapın.
+- **Geçmiş Temizleme:** İşiniz bittiğinde geçmişi tek tıkla temizleyin (Favorileriniz güvende kalır!).
+
+### ⭐ 2. Favoriler ve Notlar
+- **Sabitleme:** Sık kullandığınız metinleri "Favoriler" sekmesine ekleyin.
+- **Not Ekleme:** Favori öğelerinize özel notlar ekleyerek (örn: "Müşteri Mail Taslağı") içeriği hatırlamanızı kolaylaştırın.
+- **Sürükle-Bırak:** Favori listenizi dilediğiniz gibi sürükleyip bırakarak sıralayın.
+
+### 📸 3. Ekran Alıntısı Aracı (Snipping Tool)
+- **Hızlı Seçim:** Ekranın dilediğiniz bölümünü seçin.
+- **Çizim Araçları:**
+  - ✏️ **Kalem:** Serbest çizim yapın.
+  - ⬜ **Şekiller:** Kare, Daire ve Ok işaretleri ekleyin.
+  - 📝 **Metin:** Görüntü üzerine notlar yazın.
+  - 🌫️ **Blur (Bulanıklaştırma):** Hassas bilgileri (şifre, kimlik vb.) sansürleyin.
+- **Kopyalama & Kaydetme:** Görüntüyü direkt panoya kopyalayın (`Ctrl+C`) veya PNG olarak kaydedin.
+
+### 🎥 4. Video Ekran Kaydı
+- **Esnek Kayıt:** İster tam ekran, isterseniz sadece seçtiğiniz belirli bir alanın videosunu çekin.
+- **Format:** WebM formatında yüksek kaliteli kayıtlar alın.
+- **Kalite Seçenekleri:** Yüksek, Orta veya Düşük kalite ayarları.
+
+### 🔍 5. Gelişmiş OCR (Optik Karakter Tanıma)
+- **Metin Tanıma:** Ekranda gördüğünüz herhangi bir yazıyı (resim, PDF, video karesi vb.) seçerek anında metne dönüştürün.
+- **Dil Desteği:** Türkçe ve İngilizce metinleri yüksek doğrulukla tanır.
+- **Otomatik Kopyalama:** Tanınan metin otomatik olarak panoya kopyalanır.
+
+### 🔄 6. Otomatik Güncelleme
+- Uygulama başlangıcında otomatik güncelleme kontrolü.
+- Yeni sürümlerin arka planda indirilmesi ve tek tıkla kurulumu.
+
+---
+
+## ⌨️ Kısayollar
+
+| Kısayol | İşlev | Açıklama |
+|---------|-------|----------|
+| `Alt + V` | **Pano Listesi** | Pano geçmişi ve favoriler penceresini açar. |
+| `Alt + 9` | **Ekran Görüntüsü** | Ekran alıntısı aracını başlatır. |
+| `Alt + 8` | **Video Kaydı** | Video kaydı arayüzünü açar. |
+| `Alt + 2` | **OCR (Metin Oku)** | Ekrandan metin okuma aracını başlatır. |
+| `Ctrl + C` | **Kopyala** | (Snipping Modunda) Seçili alanı panoya kopyalar. |
+| `ESC` | **Çıkış** | Aktif araçtan veya pencereden çıkar. |
+
+> **Not:** Kısayollar uygulama ayarlarından özelleştirilebilir.
+
+---
+
+## 🚀 Kurulum (Kullanıcılar İçin)
+
+1. **[Releases](https://github.com/NYAYAN/CopyBoard/releases)** sayfasından en son sürümü (`CopyBoard-Setup-2.3.0.exe`) indirin.
+2. İndirdiğiniz dosyayı çalıştırın.
+3. Kurulum tamamlandığında uygulama otomatik olarak başlayacak ve sistem tepsisine (saat yanı) yerleşecektir.
+
+---
+
+## 🛠 Geliştirici Kılavuzu
+
+Proje modern bir mimariye taşınmış ve modüler hale getirilmiştir.
 
 ### Gereksinimler
-- **Node.js** (v16 veya üzeri)
-- **npm** (Node.js ile birlikte gelir)
+- **Node.js** (v16+)
+- **npm**
 
-### Adımlar
+### Proje Yapısı (v2.3.0)
+```
+src/
+├── main/              # Backend (Electron Main Process)
+│   ├── services/      # Ayrıştırılmış Servisler (State, Window, Tray, IPC vb.)
+│   └── main.js        # Ana giriş noktası
+├── renderer/          # Frontend (Electron Renderer Process)
+│   ├── main-window/   # Ana Pano Arayüzü (ES Modules)
+│   ├── snipper/       # Ekran Alıntısı Aracı
+│   ├── ocr/           # OCR Aracı
+│   └── recorder/      # Video Kaydedici
+└── preload/           # Preload Scriptleri
+```
 
-1. **Bağımlılıkları yükleyin:**
+### Kurulum ve Çalıştırma
+
+1. **Repoyu klonlayın:**
+   ```bash
+   git clone https://github.com/NYAYAN/CopyBoard.git
+   cd CopyBoard
+   ```
+
+2. **Bağımlılıkları yükleyin:**
    ```bash
    npm install
    ```
 
-2. **Geliştirme modunda çalıştırın:**
+3. **Geliştirme modunda başlatın:**
    ```bash
    npm start
    ```
 
-3. **Portable versiyon oluşturun:**
-   ```bash
-   npx electron-packager . CopyBoard --platform=win32 --arch=x64 --icon=icon.png --overwrite
-   ```
-   Çıktı: `CopyBoard-win32-x64` klasörü
-
-4. **Setup dosyası oluşturun:**
+4. **Production Build (Setup) oluşturun:**
    ```bash
    npm run dist
    ```
-   Çıktı: `dist/CopyBoard Setup 2.2.0.exe`
+   *Not: Bu işlem `dist/` klasöründe kurulum dosyasını oluşturur.*
 
-### ⚠️ Setup Oluşturma Notları
-
-Setup dosyası oluşturmak için **PowerShell'i Yönetici olarak çalıştırmalısınız**:
-
-1. Başlat menüsünde "PowerShell" yazın
-2. Sağ tıklayıp **"Yönetici olarak çalıştır"** seçin
-3. Proje klasörüne gidin:
-   ```bash
-   cd d:\Work\Other\CopyBoard
-   ```
-4. Build komutunu çalıştırın:
-   ```bash
-   npm run dist
-   ```
-
-## 🎯 Kullanım İpuçları
-
-### Blur (Bulanıklaştırma) Nasıl Kullanılır?
-1. `Alt+9` ile ekran görüntüsü modunu açın
-2. Görüntü alanını seçin
-3. Blur butonuna (🌫️) tıklayın
-4. Bulanıklaştırmak istediğiniz alanı dikdörtgen olarak çizin
-5. Alan otomatik olarak pixellenip bulanıklaşacaktır
-6. Kopyala veya Kaydet butonuna basın
-
-### Renk Paleti
-- Renk butonu (🎨) ile paleti açın/kapatın
-- Varsayılan olarak kapalıdır (daha az yer kaplar)
-- 6 farklı renk seçeneği
-
-### Kaydetme İpucu
-- Kaydet penceresini iptal ederseniz çizimleriniz kaybolmaz
-- İptal ettikten sonra kopyalama yapabilirsiniz
-
-## 🆕 Sürüm 2.2.0 Yenilikleri
-
-### ✨ Yeni Özellikler
-- 🌫️ **Blur Tool**: Hassas bilgileri bulanıklaştırma aracı
-- 🎨 **Daraltılabilir Renk Paleti**: Toggle ile açılıp kapanan renk seçenekleri
-
-### 🎨 Tasarım İyileştirmeleri
-- Modern SVG ikonlar (emoji yerine)
-- %12.5 daha kompakt toolbar
-- Daha belirgin Kopyala/Kaydet butonları
-
-### ⚡ Performans
-- %80 daha hızlı kopyalama
-- JPEG 0.95 formatı ile optimize edilmiş encoding
-
-### 🐛 Hata Düzeltmeleri
-- Kaydetme iptalinde çizimlerin kaybolması düzeltildi
-- Kopyala butonunda gereksiz renk değişimi kaldırıldı
-
-Detaylı değişiklikler için: [CHANGELOG.md](CHANGELOG.md)
-
-## 🛠 Teknolojiler
-
-- **Electron** - Desktop uygulama framework
-- **Tesseract.js** - OCR motoru
-- **electron-store** - Veri saklama
-- **HTML/CSS/JavaScript** - UI
-
-## 📝 Lisans
-
-ISC License
+---
 
 ## 👤 Yapımcı
 
 **Nurullah YAYAN**
-- 📧 nurullah.yayan@gmail.com
-- 🐙 [GitHub](https://github.com/NYAYAN)
-
-## 🤝 Katkıda Bulunma
-
-1. Bu repository'yi fork edin
-2. Feature branch oluşturun (`git checkout -b feature/AmazingFeature`)
-3. Değişikliklerinizi commit edin (`git commit -m 'Add some AmazingFeature'`)
-4. Branch'inizi push edin (`git push origin feature/AmazingFeature`)
-5. Pull Request oluşturun
-
-## 🐛 Hata Bildirimi
-
-Hata bulursanız veya öneriniz varsa [Issues](https://github.com/NYAYAN/CopyBoard/issues) sayfasından bildirebilirsiniz.
+- 📧 E-posta: nurullah.yayan@gmail.com
+- 🐙 GitHub: [NYAYAN](https://github.com/NYAYAN)
 
 ---
 
-⭐ Bu projeyi beğendiyseniz yıldız vermeyi unutmayın!
+## 📝 Lisans
+
+Bu proje **ISC** lisansı ile lisanslanmıştır. Detaylar için `LICENSE` dosyasına bakabilirsiniz.

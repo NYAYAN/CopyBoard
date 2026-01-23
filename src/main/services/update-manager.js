@@ -44,7 +44,8 @@ function createUpdateWindow(updateInfo) {
             updateWindow.webContents.send('update-info', {
                 version: updateInfo.version,
                 currentVersion: app.getVersion(),
-                releaseNotes: updateInfo.releaseNotes
+                releaseNotes: updateInfo.releaseNotes,
+                isMac: process.platform === 'darwin'
             });
         }
     });
@@ -72,9 +73,11 @@ function initAutoUpdater() {
 
     autoUpdater.on('error', (err) => {
         console.error('Update error:', err);
-        if (updateWindow && !updateWindow.isDestroyed()) {
-            updateWindow.close();
-        }
+        // Do not close window on error, let user see the message
+        // if (updateWindow && !updateWindow.isDestroyed()) {
+        //     updateWindow.close();
+        // }
+
         if (state.manualUpdateCheck) {
             showToast('Güncelleme kontrolü başarısız oldu', 'error');
             state.manualUpdateCheck = false;

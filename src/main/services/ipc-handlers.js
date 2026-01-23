@@ -103,6 +103,15 @@ function registerIpcHandlers() {
     ipcMain.on('check-for-updates', checkForUpdates);
     ipcMain.on('download-update', downloadUpdate);
     ipcMain.on('install-update', installUpdate);
+    ipcMain.on('open-url', (e, url) => {
+        require('electron').shell.openExternal(url);
+        // Close update window if it exists
+        if (state.updateWindow && !state.updateWindow.isDestroyed()) {
+            state.updateWindow.close();
+        }
+        // Also try to close via browserwindow from sender if needed, though update-manager handles its own window variable.
+        // We will rely on the renderer closing itself or update-manager handling it.
+    });
 
     // Capture / Snipper
     ipcMain.on('snip-close', (e) => {
@@ -124,19 +133,29 @@ function registerIpcHandlers() {
         if (win && !win.isDestroyed()) {
             win.show();
             win.focus();
-            win.setIgnoreMouseEvents(false);
+
+            // Only force mouse events ON for snipper/ocr initially. 
+            // Recorder manages its own state via set-ignore-mouse-events.
+            if (state.lastMode !== 'video') {
+                win.setIgnoreMouseEvents(false);
+            }
 
             if (process.platform === 'darwin') {
                 win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-                // Force loop
-                const focusInterval = setInterval(() => {
-                    if (win && !win.isDestroyed() && win.isVisible()) {
-                        win.setIgnoreMouseEvents(false);
-                        win.moveTop();
-                    } else {
-                        clearInterval(focusInterval);
-                    }
-                }, 1000);
+
+                // This loop forces the window to top and ensures it receives clicks.
+                // However, for VIDEO mode, we want the user to click THROUGH the window usually.
+                // So we should NOT force setIgnoreMouseEvents(false) for video.
+                if (state.lastMode !== 'video') {
+                    const focusInterval = setInterval(() => {
+                        if (win && !win.isDestroyed() && win.isVisible()) {
+                            win.setIgnoreMouseEvents(false);
+                            win.moveTop();
+                        } else {
+                            clearInterval(focusInterval);
+                        }
+                    }, 1000);
+                }
             }
         }
     });
@@ -182,22 +201,51 @@ function registerIpcHandlers() {
     ipcMain.on('record-chunk', (e, arrayBuffer) => { if (state.tempVideoPath) fs.appendFileSync(state.tempVideoPath, Buffer.from(arrayBuffer)); });
 
     ipcMain.on('record-stop', (e) => {
-        const parent = process.platform === 'darwin' ? null : state.recorderWindow;
-        const p = dialog.showSaveDialogSync(parent, { title: 'Videoyu Kaydet', defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`), filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }] });
-
-        if (p) {
-            if (fs.existsSync(state.tempVideoPath)) {
-                fs.copyFileSync(state.tempVideoPath, p);
-                showToast('Video Kaydedildi.', 'success');
-                fs.unlinkSync(state.tempVideoPath); // Only delete if saved successfully
+        try {
+            // Hide recorder window immediately to prevent obscuring the save dialog
+            if (state.recorderWindow && !state.recorderWindow.isDestroyed()) {
+                state.recorderWindow.setAlwaysOnTop(false);
+                state.recorderWindow.hide();
             }
-        } else {
-            // Cancelled
-            showToast('Kayıt iptal edildi. Geçici dosya: ' + path.basename(state.tempVideoPath), 'info');
-            // require('electron').shell.showItemInFolder(state.tempVideoPath); 
+
+            // Small delay to ensure window is hidden
+            setTimeout(() => {
+                try {
+                    const p = dialog.showSaveDialogSync(null, {
+                        title: 'Videoyu Kaydet',
+                        defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`),
+                        filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }]
+                    });
+
+                    if (p) {
+                        if (fs.existsSync(state.tempVideoPath)) {
+                            fs.copyFileSync(state.tempVideoPath, p);
+                            showToast('Video Kaydedildi.', 'success');
+                            try { fs.unlinkSync(state.tempVideoPath); } catch (err) { console.error('Temp deletion failed:', err); }
+                        }
+                    } else {
+                        // Cancelled - Add temp path to history
+                        if (state.tempVideoPath && fs.existsSync(state.tempVideoPath)) {
+                            clipboard.writeText(state.tempVideoPath); // Copy to system clipboard for Windows/Mac
+                            addHistory(state.tempVideoPath);
+                            showToast('Kayıt iptal edildi. Dosya yolu panoya kopyalandı.', 'info');
+                            // Optionally open the folder?
+                            // require('electron').shell.showItemInFolder(state.tempVideoPath);
+                        }
+                    }
+                } catch (dialogErr) {
+                    console.error('Save Dialog Error:', dialogErr);
+                    showToast('Kaydetme Penceresi Hatası', 'error');
+                } finally {
+                    state.tempVideoPath = null;
+                    if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
+                }
+            }, 100);
+
+        } catch (err) {
+            console.error('Record Stop Error:', err);
+            if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
         }
-        state.tempVideoPath = null;
-        if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
     });
 
     ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {

@@ -124,7 +124,8 @@ export function setupEventListeners() {
     // Global Keys
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') window.api.closeWindow();
-        if (e.altKey && e.key.toLowerCase() === 'u') {
+        const isMac = navigator.platform.toUpperCase().includes('MAC');
+        if (e.altKey && (isMac ? e.code === 'KeyU' : e.key.toLowerCase() === 'u')) {
             console.log('Manual update check');
             window.api.checkForUpdates();
         }

@@ -142,6 +142,14 @@ function formatBytes(bytes) {
 
 // Button event listeners
 document.getElementById('updateBtn').addEventListener('click', () => {
+    if (updateInfo && updateInfo.isMac) {
+        // For Mac without code signing, redirect to release page
+        const releaseUrl = `https://github.com/NYAYAN/CopyBoard/releases/tag/v${updateInfo.version}`;
+        ipcRenderer.send('open-url', releaseUrl);
+        window.close();
+        return;
+    }
+
     // Start download
     ipcRenderer.send('download-update');
 
@@ -154,6 +162,36 @@ document.getElementById('updateBtn').addEventListener('click', () => {
     </svg>
     İndiriliyor...
   `;
+});
+
+// Initialize dialog with update info
+ipcRenderer.on('update-info', (event, info) => {
+    updateInfo = info;
+
+    // Update version numbers
+    document.getElementById('currentVersion').textContent = `v${info.currentVersion}`;
+    document.getElementById('newVersion').textContent = `v${info.version}`;
+
+    // Update release notes
+    const notesContent = document.getElementById('notesContent');
+    if (info.releaseNotes) {
+        // Parse markdown-style release notes to HTML
+        const formattedNotes = formatReleaseNotes(info.releaseNotes);
+        notesContent.innerHTML = formattedNotes;
+    } else {
+        notesContent.textContent = 'Yeni özellikler ve iyileştirmeler.';
+    }
+
+    // If Mac, change update button text
+    if (info.isMac) {
+        const updateBtn = document.getElementById('updateBtn');
+        updateBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+        İndir (GitHub)
+        `;
+    }
 });
 
 document.getElementById('laterBtn').addEventListener('click', () => {

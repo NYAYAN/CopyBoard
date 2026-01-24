@@ -70,6 +70,13 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 2. İndirdiğiniz dosyayı çalıştırın (macOS'te uygulamayı `Applications` klasörüne sürükleyin).
 3. Kurulum tamamlandığında uygulama otomatik olarak başlayacak ve sistem tepsisine (saat yanı) yerleşecektir.
 
+> **⚠️ macOS Kullanıcıları İçin Önemli Not:**
+> Eğer uygulama "Geliştirici doğrulanamadı" veya "Hasarlı" hatası verirse, Terminal'i açıp şu komutu uygulayın:
+> ```bash
+> sudo xattr -rd com.apple.quarantine /Applications/CopyBoard.app
+> ```
+> *Komutu girdikten sonra şifrenizi girmeniz gerekebilir.*
+
 ---
 
 ## 🛠 Geliştirici Kılavuzu

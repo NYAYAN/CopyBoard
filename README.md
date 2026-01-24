@@ -3,7 +3,7 @@
 > **Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR (Resimden Yazıya Çevirme) Uygulaması**
 
 ![Version](https://img.shields.io/badge/version-2.3.0-blue)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-ISC-green)
 
 CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artırmak için tasarlanmış modern bir üretkenlik aracıdır. Pano geçmişinizi yönetin, ekran görüntüleri alın, videolar kaydedin ve resimlerdeki yazıları anında metne dönüştürün.
@@ -51,10 +51,10 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 
 | Kısayol | İşlev | Açıklama |
 |---------|-------|----------|
-| `Alt + V` | **Pano Listesi** | Pano geçmişi ve favoriler penceresini açar. |
-| `Alt + 9` | **Ekran Görüntüsü** | Ekran alıntısı aracını başlatır. |
-| `Alt + 8` | **Video Kaydı** | Video kaydı arayüzünü açar. |
-| `Alt + 2` | **OCR (Metin Oku)** | Ekrandan metin okuma aracını başlatır. |
+| `Alt / Option + V` | **Pano Listesi** | Pano geçmişi ve favoriler penceresini açar. |
+| `Alt / Option + 9` | **Ekran Görüntüsü** | Ekran alıntısı aracını başlatır. |
+| `Alt / Option + 8` | **Video Kaydı** | Video kaydı arayüzünü açar. |
+| `Alt / Option + 2` | **OCR (Metin Oku)** | Ekrandan metin okuma aracını başlatır. |
 | `Ctrl + C` | **Kopyala** | (Snipping Modunda) Seçili alanı panoya kopyalar. |
 | `ESC` | **Çıkış** | Aktif araçtan veya pencereden çıkar. |
 
@@ -64,8 +64,10 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 
 ## 🚀 Kurulum (Kullanıcılar İçin)
 
-1. **[Releases](https://github.com/NYAYAN/CopyBoard/releases)** sayfasından en son sürümü (`CopyBoard-Setup-2.3.0.exe`) indirin.
-2. İndirdiğiniz dosyayı çalıştırın.
+1. **[Releases](https://github.com/NYAYAN/CopyBoard/releases)** sayfasından işletim sisteminize uygun sürümü indirin:
+   - **Windows:** `CopyBoard-Setup-2.3.0.exe`
+   - **macOS:** `CopyBoard-2.3.0.dmg`
+2. İndirdiğiniz dosyayı çalıştırın (macOS'te uygulamayı `Applications` klasörüne sürükleyin).
 3. Kurulum tamamlandığında uygulama otomatik olarak başlayacak ve sistem tepsisine (saat yanı) yerleşecektir.
 
 ---

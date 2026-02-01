@@ -104,13 +104,26 @@ function registerIpcHandlers() {
     ipcMain.on('download-update', downloadUpdate);
     ipcMain.on('install-update', installUpdate);
     ipcMain.on('open-url', (e, url) => {
-        require('electron').shell.openExternal(url);
+        if (!url || typeof url !== 'string') return;
+
+        // Protocol validation for security (Only allow web URLs)
+        const allowedProtocols = ['http:', 'https:'];
+        try {
+            const parsedUrl = new URL(url);
+            if (!allowedProtocols.includes(parsedUrl.protocol)) {
+                console.warn(`[Security]: Blocked attempt to open non-web URL: ${url}`);
+                return;
+            }
+            require('electron').shell.openExternal(url);
+        } catch (err) {
+            console.error('[Security]: Invalid URL provided to open-url:', url);
+            return;
+        }
+
         // Close update window if it exists
         if (state.updateWindow && !state.updateWindow.isDestroyed()) {
             state.updateWindow.close();
         }
-        // Also try to close via browserwindow from sender if needed, though update-manager handles its own window variable.
-        // We will rely on the renderer closing itself or update-manager handling it.
     });
 
     // Capture / Snipper

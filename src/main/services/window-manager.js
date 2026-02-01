@@ -22,7 +22,12 @@ function createMainWindow() {
         transparent: process.platform === 'darwin',
         vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
         visualEffectState: 'active',
-        webPreferences: { preload: path.join(__dirname, '../../preload/preload.js'), nodeIntegration: false, contextIsolation: true }
+        webPreferences: {
+            preload: path.join(__dirname, '../../preload/preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+        }
     });
 
     state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -51,7 +56,12 @@ function createCapture(type = 'draw', display = null) {
         enableLargerThanScreen: true,
         hasShadow: false,
         focusable: true,
-        webPreferences: { preload: path.join(__dirname, '../../preload/preload.js'), nodeIntegration: false, contextIsolation: true }
+        webPreferences: {
+            preload: path.join(__dirname, '../../preload/preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+        }
     });
 
     let file = '../renderer/snipper/snipper.html';
@@ -119,7 +129,12 @@ function showToast(message, type = 'info') {
             width: 320, height: 100, x: width - 370, y: 50,
             frame: false, transparent: true, alwaysOnTop: true,
             skipTaskbar: true, resizable: false, show: false,
-            webPreferences: { nodeIntegration: true, contextIsolation: false }
+            webPreferences: {
+                preload: path.join(__dirname, '../../preload/preload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
+            }
         });
         state.toastWindow.setAlwaysOnTop(true, 'screen-saver');
         state.toastWindow.loadFile(path.join(__dirname, '../../renderer/toast/toast.html'));

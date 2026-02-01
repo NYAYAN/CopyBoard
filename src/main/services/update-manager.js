@@ -31,8 +31,10 @@ function createUpdateWindow(updateInfo) {
         skipTaskbar: false,
         icon: path.join(__dirname, '../../../icon.png'),
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
+            preload: path.join(__dirname, '../../preload/preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
         }
     });
 

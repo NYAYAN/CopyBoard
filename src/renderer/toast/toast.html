@@ -74,14 +74,14 @@
     </div>
 
     <script>
-        const { ipcRenderer } = require('electron');
-        const toast = document.getElementById('toast');
-        const msg = document.getElementById('message');
-        const icon = document.getElementById('icon');
-        const progress = document.getElementById('progress');
+        // contextBridge through preload.js
+        window.api.onShowToast((message, type) => {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('message');
+            const icon = document.getElementById('icon');
+            const progress = document.getElementById('progress');
 
-        ipcRenderer.on('display-toast', (e, text, type) => {
-            msg.textContent = text;
+            msg.textContent = message;
             toast.className = 'toast show ' + type;
             icon.textContent = type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️');
 
@@ -95,7 +95,10 @@
 
             setTimeout(() => {
                 toast.classList.remove('show');
-                setTimeout(() => ipcRenderer.send('toast-finished'), 500);
+                // notify main to destroy toast window
+                setTimeout(() => {
+                    window.api.toastFinished();
+                }, 500);
             }, 3000);
         });
     </script>

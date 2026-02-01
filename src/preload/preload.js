@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
     clearHistory: () => ipcRenderer.send('clear-history'),
     closeWindow: () => ipcRenderer.send('close-window'),
     minimizeWindow: () => ipcRenderer.send('minimize-window'),
+    toastFinished: () => ipcRenderer.send('toast-finished'),
+    openExternal: (url) => ipcRenderer.send('open-url', url),
     setAutoStart: (val) => ipcRenderer.send('set-autostart', val),
     setVideoQuality: (val) => ipcRenderer.send('set-video-quality', val),
     setIgnoreMouseEvents: (ignore, options) => ipcRenderer.send('set-ignore-mouse-events', ignore, options),
@@ -32,7 +34,7 @@ contextBridge.exposeInMainWorld('api', {
     recordStop: () => ipcRenderer.send('record-stop'),
     closeSnipper: () => ipcRenderer.send('snip-close'),
     notifyReady: () => ipcRenderer.send('snip-ready'),
-    onShowToast: (callback) => ipcRenderer.on('show-toast', (_, message, type) => callback(message, type)),
+    onShowToast: (callback) => ipcRenderer.on('display-toast', (_, message, type) => callback(message, type)),
     onResetView: (callback) => ipcRenderer.on('reset-view', callback),
     sendDebugLog: (msg) => ipcRenderer.send('debug-log', msg), // NEW DEBUG CHANNEL
 
@@ -42,5 +44,7 @@ contextBridge.exposeInMainWorld('api', {
     installUpdate: () => ipcRenderer.send('install-update'),
     onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),
     onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (_, info) => callback(info)),
-    onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (_, progress) => callback(progress))
+    onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (_, progress) => callback(progress)),
+    onUpdateInfo: (callback) => ipcRenderer.on('update-info', (_, info) => callback(info)),
+    onUpdateError: (callback) => ipcRenderer.on('update-error', (_, err) => callback(err))
 });

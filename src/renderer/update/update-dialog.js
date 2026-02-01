@@ -1,10 +1,8 @@
 // Update dialog renderer process
-const { ipcRenderer } = require('electron');
-
 let updateInfo = null;
 
 // Initialize dialog with update info
-ipcRenderer.on('update-info', (event, info) => {
+window.api.onUpdateInfo((info) => {
     updateInfo = info;
 
     // Update version numbers
@@ -20,10 +18,21 @@ ipcRenderer.on('update-info', (event, info) => {
     } else {
         notesContent.textContent = 'Yeni özellikler ve iyileştirmeler.';
     }
+
+    // If Mac, change update button text
+    if (info.isMac) {
+        const updateBtn = document.getElementById('updateBtn');
+        updateBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+        İndir (GitHub)
+        `;
+    }
 });
 
 // Handle update errors
-ipcRenderer.on('update-error', (event, message) => {
+window.api.onUpdateError((message) => {
     const updateBtn = document.getElementById('updateBtn');
     const laterBtn = document.getElementById('laterBtn');
     const progressLabel = document.querySelector('.progress-label');
@@ -48,12 +57,26 @@ ipcRenderer.on('update-error', (event, message) => {
     }
 });
 
-// Format release notes from markdown to HTML
+// Format release notes from markdown to HTML with basic XSS protection
 function formatReleaseNotes(notes) {
     if (!notes) return 'Yeni özellikler ve iyileştirmeler.';
 
-    // Convert markdown-style formatting to HTML
-    let formatted = notes
+    // Simple HTML escape to prevent XSS
+    const escapeHTML = (str) => {
+        return str.replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[m]));
+    };
+
+    // Escape everything first
+    let sanitized = escapeHTML(notes);
+
+    // Convert markdown-style formatting back (safely)
+    let formatted = sanitized
         .replace(/^#+ (.+)$/gm, '<strong>$1</strong>') // All headers (#, ##, ###) to strong
         .replace(/^- (.+)$/gm, '• $1') // Bullet points
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Bold
@@ -63,7 +86,7 @@ function formatReleaseNotes(notes) {
 }
 
 // Update download progress
-ipcRenderer.on('download-progress', (event, progressObj) => {
+window.api.onDownloadProgress((progressObj) => {
     const progressContainer = document.getElementById('downloadProgress');
     const progressFill = document.getElementById('progressFill');
     const progressPercent = document.getElementById('progressPercent');
@@ -93,7 +116,7 @@ ipcRenderer.on('download-progress', (event, progressObj) => {
 });
 
 // Update downloaded - ready to install
-ipcRenderer.on('update-downloaded', () => {
+window.api.onUpdateDownloaded(() => {
     const updateBtn = document.getElementById('updateBtn');
     const progressLabel = document.querySelector('.progress-label');
 
@@ -119,7 +142,7 @@ ipcRenderer.on('update-downloaded', () => {
 
         if (countdown < 0) {
             clearInterval(countdownInterval);
-            ipcRenderer.send('install-update');
+            window.api.installUpdate();
         }
     }, 1000);
 
@@ -145,13 +168,13 @@ document.getElementById('updateBtn').addEventListener('click', () => {
     if (updateInfo && updateInfo.isMac) {
         // For Mac without code signing, redirect to release page
         const releaseUrl = `https://github.com/NYAYAN/CopyBoard/releases/tag/v${updateInfo.version}`;
-        ipcRenderer.send('open-url', releaseUrl);
+        window.api.openExternal(releaseUrl);
         window.close();
         return;
     }
 
     // Start download
-    ipcRenderer.send('download-update');
+    window.api.downloadUpdate();
 
     // Update button state
     const btn = document.getElementById('updateBtn');
@@ -162,36 +185,6 @@ document.getElementById('updateBtn').addEventListener('click', () => {
     </svg>
     İndiriliyor...
   `;
-});
-
-// Initialize dialog with update info
-ipcRenderer.on('update-info', (event, info) => {
-    updateInfo = info;
-
-    // Update version numbers
-    document.getElementById('currentVersion').textContent = `v${info.currentVersion}`;
-    document.getElementById('newVersion').textContent = `v${info.version}`;
-
-    // Update release notes
-    const notesContent = document.getElementById('notesContent');
-    if (info.releaseNotes) {
-        // Parse markdown-style release notes to HTML
-        const formattedNotes = formatReleaseNotes(info.releaseNotes);
-        notesContent.innerHTML = formattedNotes;
-    } else {
-        notesContent.textContent = 'Yeni özellikler ve iyileştirmeler.';
-    }
-
-    // If Mac, change update button text
-    if (info.isMac) {
-        const updateBtn = document.getElementById('updateBtn');
-        updateBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-        İndir (GitHub)
-        `;
-    }
 });
 
 document.getElementById('laterBtn').addEventListener('click', () => {

@@ -54,7 +54,7 @@ function formatReleaseNotes(notes) {
 
     // Convert markdown-style formatting to HTML
     let formatted = notes
-        .replace(/^### (.+)$/gm, '<strong>$1</strong>') // Headers
+        .replace(/^#+ (.+)$/gm, '<strong>$1</strong>') // All headers (#, ##, ###) to strong
         .replace(/^- (.+)$/gm, '• $1') // Bullet points
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Bold
         .replace(/\n/g, '<br>'); // Line breaks

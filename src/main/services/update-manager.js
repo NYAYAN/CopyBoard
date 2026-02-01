@@ -45,6 +45,7 @@ function createUpdateWindow(updateInfo) {
                 version: updateInfo.version,
                 currentVersion: app.getVersion(),
                 releaseNotes: updateInfo.releaseNotes,
+                releaseName: updateInfo.releaseName,
                 isMac: process.platform === 'darwin'
             });
         }

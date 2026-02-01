@@ -12,6 +12,7 @@
     <canvas id="screen-canvas"></canvas>
     <div id="overlay"></div>
     <div id="selection-box" class="hidden">
+        <div id="dimensions-label" class="dimensions-label">0 x 0</div>
         <div class="resize-handle nw" data-handle="nw"></div>
         <div class="resize-handle ne" data-handle="ne"></div>
         <div class="resize-handle sw" data-handle="sw"></div>
@@ -20,9 +21,10 @@
         <div id="recorder-toolbar" class="toolbar">
             <span class="toolbar-label" id="quality-label">Kalite:</span>
             <select id="quality-select" class="toolbar-select">
-                <option value="low">Düşük</option>
-                <option value="medium">Orta</option>
-                <option value="high">Yüksek</option>
+                <option value="low">Düşük (30fps)</option>
+                <option value="medium">Orta (30fps)</option>
+                <option value="high">Yüksek (60fps)</option>
+                <option value="ultra">Ultra (120fps)</option>
             </select>
             <div class="divider"></div>
             <button class="tool-btn" id="btn-fullscreen" title="Tam Ekran Seç">

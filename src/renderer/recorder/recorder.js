@@ -17,12 +17,22 @@ const state = {
     activeHandle: null, resizeStartRect: null, selectionRect: null,
     startX: 0, startY: 0, dragOffX: 0, dragOffY: 0,
     mediaRecorder: null, recordedChunks: [], startTime: 0, timerInterval: null,
-    sourceId: null, isRecording: false, videoQuality: 'high', lastIgnoreState: null
+    sourceId: null, isRecording: false, videoQuality: 'high', lastIgnoreState: null,
+    dpr: window.devicePixelRatio || 1
 };
 
 function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    state.dpr = dpr;
+
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
@@ -31,14 +41,23 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality) => {
     state.sourceId = sourceId;
     state.videoQuality = quality || 'high';
     if (qualitySelect) qualitySelect.value = state.videoQuality;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const dpr = state.dpr;
+    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
     const img = new Image();
     img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width / dpr, canvas.height / dpr);
         setTimeout(() => window.api.notifyReady(), 50);
     };
     img.src = dataUrl;
 });
+
+const dimensionsLabel = document.getElementById('dimensions-label');
+
+function updateDimensions(w, h) {
+    if (dimensionsLabel) {
+        dimensionsLabel.textContent = `${Math.round(w)} x ${Math.round(h)}`;
+    }
+}
 
 if (qualitySelect) {
     qualitySelect.addEventListener('change', (e) => {
@@ -73,6 +92,7 @@ window.addEventListener('mousedown', (e) => {
             const b = selectionBox.getBoundingClientRect();
             state.resizeStartRect = { left: b.left, top: b.top, width: b.width, height: b.height };
             state.startX = e.clientX; state.startY = e.clientY;
+            document.body.classList.add('selecting');
             return;
         }
         if (e.target === selectionBox) {
@@ -83,12 +103,14 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     state.isSelecting = true;
+    document.body.classList.add('selecting');
     state.startX = e.clientX; state.startY = e.clientY;
     selectionBox.style.width = selectionBox.style.height = '0px';
     selectionBox.style.left = state.startX + 'px'; selectionBox.style.top = state.startY + 'px';
     selectionBox.style.display = 'block'; selectionBox.classList.remove('hidden');
     overlay.style.display = 'none';
     if (instruction) instruction.style.display = 'none';
+    updateDimensions(0, 0);
 });
 
 btnFullscreen.addEventListener('click', () => {
@@ -99,6 +121,7 @@ btnFullscreen.addEventListener('click', () => {
     selectionBox.style.display = 'block'; selectionBox.classList.remove('hidden');
     overlay.style.display = 'none';
     if (instruction) instruction.style.display = 'none';
+    updateDimensions(window.innerWidth, window.innerHeight);
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -110,16 +133,22 @@ window.addEventListener('mousemove', (e) => {
         if (state.activeHandle.includes('s')) height += dy;
         if (state.activeHandle.includes('w')) { left += dx; width -= dx; }
         if (state.activeHandle.includes('n')) { top += dy; height -= dy; }
-        selectionBox.style.width = Math.max(50, width) + 'px'; selectionBox.style.height = Math.max(50, height) + 'px';
+        width = Math.max(50, width);
+        height = Math.max(50, height);
+        selectionBox.style.width = width + 'px'; selectionBox.style.height = height + 'px';
         selectionBox.style.left = left + 'px'; selectionBox.style.top = top + 'px';
+        updateDimensions(width, height);
     } else if (state.isMoving) {
         selectionBox.style.left = Math.max(0, Math.min(e.clientX - state.dragOffX, window.innerWidth - selectionBox.offsetWidth)) + 'px';
         selectionBox.style.top = Math.max(0, Math.min(e.clientY - state.dragOffY, window.innerHeight - selectionBox.offsetHeight)) + 'px';
     } else if (state.isSelecting) {
-        selectionBox.style.width = Math.abs(e.clientX - state.startX) + 'px';
-        selectionBox.style.height = Math.abs(e.clientY - state.startY) + 'px';
+        const w = Math.abs(e.clientX - state.startX);
+        const h = Math.abs(e.clientY - state.startY);
+        selectionBox.style.width = w + 'px';
+        selectionBox.style.height = h + 'px';
         selectionBox.style.left = Math.min(e.clientX, state.startX) + 'px';
         selectionBox.style.top = Math.min(e.clientY, state.startY) + 'px';
+        updateDimensions(w, h);
     }
 });
 
@@ -130,6 +159,7 @@ window.addEventListener('mouseup', () => {
         state.selectionRect = { x: r.left, y: r.top, w: r.width, h: r.height };
     }
     state.isResizing = state.isMoving = state.isSelecting = false;
+    document.body.classList.remove('selecting');
 });
 
 btnClose.addEventListener('click', () => {
@@ -140,13 +170,21 @@ btnClose.addEventListener('click', () => {
 async function startRecording() {
     if (!state.selectionRect || !state.sourceId) return;
     try {
+        const dpr = state.dpr;
+        // High DPI: Use physical resolution for better quality
+        const videoWidth = Math.floor(window.innerWidth * dpr);
+        const videoHeight = Math.floor(window.innerHeight * dpr);
+
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
             video: {
                 mandatory: {
-                    chromeMediaSource: 'desktop', chromeMediaSourceId: state.sourceId,
-                    minWidth: window.innerWidth, minHeight: window.innerHeight,
-                    maxWidth: window.innerWidth, maxHeight: window.innerHeight
+                    chromeMediaSource: 'desktop',
+                    chromeMediaSourceId: state.sourceId,
+                    minWidth: videoWidth,
+                    minHeight: videoHeight,
+                    maxWidth: videoWidth,
+                    maxHeight: videoHeight
                 }
             }
         });
@@ -156,20 +194,32 @@ async function startRecording() {
         video.play();
 
         const cropCanvas = document.createElement('canvas');
-        cropCanvas.width = state.selectionRect.w;
-        cropCanvas.height = state.selectionRect.h;
+        // Crop dimensions also need to be physical pixels
+        cropCanvas.width = Math.floor(state.selectionRect.w * dpr);
+        cropCanvas.height = Math.floor(state.selectionRect.h * dpr);
         const cropCtx = cropCanvas.getContext('2d');
 
-        const fps = state.videoQuality === 'high' ? 60 : 30;
-        const bitrate = state.videoQuality === 'high' ? 50000000 : (state.videoQuality === 'medium' ? 8000000 : 2000000);
+        const fps = state.videoQuality === 'ultra' ? 120 : (state.videoQuality === 'high' ? 60 : 30);
+        // Optimized bitrate for High DPI. WebM/VP9 needs enough bitrate for 4K-ish resolutions
+        const bitrate = state.videoQuality === 'ultra' ? 120000000 : (state.videoQuality === 'high' ? 80000000 : (state.videoQuality === 'medium' ? 12000000 : 4000000));
 
-        state.mediaRecorder = new MediaRecorder(cropCanvas.captureStream(fps), { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: bitrate });
-        state.mediaRecorder.ondataavailable = async (e) => { if (e.data.size > 0) window.api.recordChunk(await e.data.arrayBuffer()); };
+        state.mediaRecorder = new MediaRecorder(cropCanvas.captureStream(fps), {
+            mimeType: 'video/webm; codecs=vp9',
+            videoBitsPerSecond: bitrate
+        });
+
+        state.mediaRecorder.ondataavailable = async (e) => {
+            if (e.data.size > 0) window.api.recordChunk(await e.data.arrayBuffer());
+        };
         state.mediaRecorder.onstop = () => { window.api.recordStop(); };
 
         const drawLoop = () => {
             if (state.isRecording) {
-                cropCtx.drawImage(video, state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h, 0, 0, state.selectionRect.w, state.selectionRect.h);
+                // Adjust for High DPI scale while drawing
+                cropCtx.drawImage(video,
+                    state.selectionRect.x * dpr, state.selectionRect.y * dpr,
+                    state.selectionRect.w * dpr, state.selectionRect.h * dpr,
+                    0, 0, cropCanvas.width, cropCanvas.height);
                 requestAnimationFrame(drawLoop);
             } else { stream.getTracks().forEach(t => t.stop()); }
         };
@@ -182,21 +232,18 @@ async function startRecording() {
         document.body.classList.add('is-recording');
         btnRecord.classList.add('hidden');
         btnFullscreen.classList.add('hidden');
-        if (btnResetSize) btnResetSize.classList.add('hidden'); // Hide reset button during recording
+        if (btnResetSize) btnResetSize.classList.add('hidden');
         if (qualitySelect) qualitySelect.classList.add('hidden');
         if (qualityLabel) qualityLabel.classList.add('hidden');
         btnStop.classList.remove('hidden');
         timerElement.classList.remove('hidden');
         selectionBox.classList.add('recording-border');
 
-        // KRİTİK: Tüm UI elemanlarını tıklama geçirgen yap
         canvas.style.pointerEvents = 'none';
         overlay.style.display = 'none';
         selectionBox.style.pointerEvents = 'none';
-
         document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
-
-        canvas.style.display = 'none'; // Ekranda statik görüntü kalmasın
+        canvas.style.display = 'none';
         overlay.style.display = 'none';
 
         state.startTime = Date.now();
@@ -205,7 +252,6 @@ async function startRecording() {
             timerElement.textContent = `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
         }, 1000);
 
-        // Pencereyi hemen tıklama geçirgen moduna sok
         state.lastIgnoreState = true;
         window.api.setIgnoreMouseEvents(true, { forward: true });
 
@@ -222,6 +268,7 @@ function stopRecording() {
     canvas.style.display = 'block';
     overlay.style.display = 'block';
     selectionBox.style.pointerEvents = 'auto';
+    document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'block');
 }
 
 btnRecord.addEventListener('click', startRecording);
@@ -242,6 +289,7 @@ if (btnResetSize) {
         selectionBox.classList.remove('hidden');
         overlay.style.display = 'none';
         if (instruction) instruction.style.display = 'none';
+        updateDimensions(w, h);
     });
 }
 btnStop.addEventListener('click', (e) => { e.stopPropagation(); stopRecording(); });

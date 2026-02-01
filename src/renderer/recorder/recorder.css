@@ -44,7 +44,27 @@ body:not(.is-recording) #overlay:active {
     /* Border yerine outline kullanıyoruz */
     outline-offset: 1px;
     box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
-    z-index: 10;
+    z-index: 100;
+}
+
+.dimensions-label {
+    position: absolute;
+    top: -25px;
+    left: 0;
+    background: rgba(137, 87, 229, 0.9);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Force crosshair during selection */
+body.selecting,
+body.selecting * {
+    cursor: crosshair !important;
 }
 
 .resize-handle {

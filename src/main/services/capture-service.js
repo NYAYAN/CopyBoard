@@ -38,10 +38,11 @@ async function startCapture(mode) {
         const cursorPoint = screen.getCursorScreenPoint();
         const display = screen.getDisplayNearestPoint(cursorPoint);
         const { width, height } = display.bounds;
+        const scaleFactor = display.scaleFactor || 1;
 
-        // Ensure integer dimensions for capture to avoid potential C++ binding errors
-        const thumbWidth = Math.floor(width);
-        const thumbHeight = Math.floor(height);
+        // Ensure integer dimensions and account for scale factor for high DPI
+        const thumbWidth = Math.floor(width * scaleFactor);
+        const thumbHeight = Math.floor(height * scaleFactor);
 
         let sources;
         try {
@@ -56,6 +57,8 @@ async function startCapture(mode) {
         const source = sources.find(s => s.display_id == display.id) || sources[0];
 
         if (source) {
+            // Use PNG for maximum quality transfer if possible, or skip toDataURL and handle differently?
+            // For now, increasing the source thumbnail resolution is the biggest win.
             const data = source.thumbnail.toDataURL();
             const sourceId = source.id;
             state.lastMode = mode;

@@ -13,7 +13,8 @@ const state = {
     isSelecting: false, isDrawing: false, isMoving: false, isResizing: false, isDraggingText: false,
     activeHandle: null, resizeStartRect: null, selectionRect: null, activeTool: null,
     startX: 0, startY: 0, dragOffX: 0, dragOffY: 0, savedImageData: null,
-    history: []
+    history: [],
+    dpr: window.devicePixelRatio || 1
 };
 
 function saveState() {
@@ -29,8 +30,23 @@ function undo() {
 }
 
 function resizeCanvas() {
-    canvas.width = drawCanvas.width = window.innerWidth;
-    canvas.height = drawCanvas.height = window.innerHeight;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    state.dpr = dpr;
+
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+
+    drawCanvas.width = w * dpr;
+    drawCanvas.height = h * dpr;
+    drawCanvas.style.width = w + 'px';
+    drawCanvas.style.height = h + 'px';
+
+    drawCtx.setTransform(1, 0, 0, 1, 0, 0);
+    drawCtx.scale(dpr, dpr);
     drawCtx.lineCap = 'round';
     drawCtx.lineJoin = 'round';
     drawCtx.strokeStyle = drawCtx.fillStyle = '#ff0000';
@@ -50,13 +66,14 @@ if (!window.api) {
 
 // --- Capture & Initialize Screen ---
 window.api.onCaptureScreen((dataUrl) => {
+    const dpr = state.dpr;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    drawCtx.clearRect(0, 0, drawCanvas.width / dpr, drawCanvas.height / dpr);
     resetUI();
     const img = new Image();
     img.onload = () => {
+        // Draw to fill the scaled canvas
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        // Reduced delay for faster copying
         setTimeout(() => window.api.notifyReady(), 50);
     };
     img.src = dataUrl;
@@ -67,12 +84,21 @@ function resetUI() {
         isSelecting: false, isDrawing: false, isMoving: false, isResizing: false,
         isDraggingText: false, selectionRect: null, activeTool: null, history: []
     });
-    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    const dpr = state.dpr;
+    drawCtx.clearRect(0, 0, drawCanvas.width / dpr, drawCanvas.height / dpr);
     selectionBox.style.display = toolbar.style.display = textInputContainer.style.display = 'none';
     selectionBox.classList.add('hidden');
     overlay.style.display = 'block';
-    document.body.classList.remove('drawing');
+    document.body.classList.remove('drawing', 'selecting');
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+}
+
+const dimensionsLabel = document.getElementById('dimensions-label');
+
+function updateDimensions(w, h) {
+    if (dimensionsLabel) {
+        dimensionsLabel.textContent = `${Math.round(w)} x ${Math.round(h)}`;
+    }
 }
 
 window.addEventListener('mousedown', (e) => {
@@ -92,6 +118,7 @@ window.addEventListener('mousedown', (e) => {
             state.resizeStartRect = { left: b.left, top: b.top, width: b.width, height: b.height };
             state.startX = e.clientX; state.startY = e.clientY;
             toolbar.style.display = 'none';
+            document.body.classList.add('selecting');
             return;
         }
         if (state.activeTool) {
@@ -122,11 +149,13 @@ window.addEventListener('mousedown', (e) => {
     }
     if (!state.activeTool) {
         resetUI(); state.isSelecting = true;
+        document.body.classList.add('selecting');
         overlay.style.display = 'none';
         state.startX = e.clientX; state.startY = e.clientY;
         selectionBox.style.width = selectionBox.style.height = '0px';
         selectionBox.style.left = state.startX + 'px'; selectionBox.style.top = state.startY + 'px';
         selectionBox.style.display = 'block'; selectionBox.classList.remove('hidden');
+        updateDimensions(0, 0);
     }
 });
 
@@ -155,14 +184,18 @@ window.addEventListener('mousemove', (e) => {
         if (height < 20) { if (state.activeHandle.includes('n')) top = state.resizeStartRect.top + state.resizeStartRect.height - 20; height = 20; }
         selectionBox.style.width = width + 'px'; selectionBox.style.height = height + 'px';
         selectionBox.style.left = left + 'px'; selectionBox.style.top = top + 'px';
+        updateDimensions(width, height);
     } else if (state.isMoving) {
         selectionBox.style.left = Math.max(0, Math.min(e.clientX - state.dragOffX, window.innerWidth - selectionBox.offsetWidth)) + 'px';
         selectionBox.style.top = Math.max(0, Math.min(e.clientY - state.dragOffY, window.innerHeight - selectionBox.offsetHeight)) + 'px';
     } else if (state.isSelecting) {
-        selectionBox.style.width = Math.abs(e.clientX - state.startX) + 'px';
-        selectionBox.style.height = Math.abs(e.clientY - state.startY) + 'px';
+        const w = Math.abs(e.clientX - state.startX);
+        const h = Math.abs(e.clientY - state.startY);
+        selectionBox.style.width = w + 'px';
+        selectionBox.style.height = h + 'px';
         selectionBox.style.left = Math.min(e.clientX, state.startX) + 'px';
         selectionBox.style.top = Math.min(e.clientY, state.startY) + 'px';
+        updateDimensions(w, h);
     } else if (state.isDrawing) {
         drawCtx.save();
         const cp = new Path2D(); cp.rect(state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h);
@@ -204,6 +237,7 @@ window.addEventListener('mouseup', () => {
         showToolbar(r);
     }
     state.isDraggingText = state.isResizing = state.isMoving = state.isSelecting = state.isDrawing = false;
+    document.body.classList.remove('selecting');
 });
 
 function showToolbar(r) {
@@ -240,30 +274,34 @@ function drawArrow(c, fx, fy, tx, ty) {
 }
 
 function applyBlur(x, y, w, h) {
-    // Create a temporary canvas to merge both layers
+    const dpr = state.dpr;
+    // Create a temporary canvas to merge both layers at physical resolution
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = w;
-    tempCanvas.height = h;
+    tempCanvas.width = w * dpr;
+    tempCanvas.height = h * dpr;
     const tempCtx = tempCanvas.getContext('2d');
 
     // Draw screen canvas first
-    tempCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+    tempCtx.drawImage(canvas, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, w * dpr, h * dpr);
     // Draw drawing canvas on top
-    tempCtx.drawImage(drawCanvas, x, y, w, h, 0, 0, w, h);
+    tempCtx.drawImage(drawCanvas, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, w * dpr, h * dpr);
 
     // Get merged image data
-    const imageData = tempCtx.getImageData(0, 0, w, h);
-    const pixelSize = 10; // Blur intensity (pixelation size)
+    const imageData = tempCtx.getImageData(0, 0, w * dpr, h * dpr);
+    const pixelSize = Math.max(2, Math.floor(10 * dpr)); // Blur intensity adjusted for DPI
+
+    const bw = w * dpr;
+    const bh = h * dpr;
 
     // Apply pixelation effect
-    for (let py = 0; py < h; py += pixelSize) {
-        for (let px = 0; px < w; px += pixelSize) {
+    for (let py = 0; py < bh; py += pixelSize) {
+        for (let px = 0; px < bw; px += pixelSize) {
             let r = 0, g = 0, b = 0, a = 0, count = 0;
 
             // Calculate average color in block
-            for (let dy = 0; dy < pixelSize && py + dy < h; dy++) {
-                for (let dx = 0; dx < pixelSize && px + dx < w; dx++) {
-                    const i = ((py + dy) * w + (px + dx)) * 4;
+            for (let dy = 0; dy < pixelSize && py + dy < bh; dy++) {
+                for (let dx = 0; dx < pixelSize && px + dx < bw; dx++) {
+                    const i = ((py + dy) * bw + (px + dx)) * 4;
                     r += imageData.data[i];
                     g += imageData.data[i + 1];
                     b += imageData.data[i + 2];
@@ -278,9 +316,9 @@ function applyBlur(x, y, w, h) {
             a = Math.floor(a / count);
 
             // Fill block with average color
-            for (let dy = 0; dy < pixelSize && py + dy < h; dy++) {
-                for (let dx = 0; dx < pixelSize && px + dx < w; dx++) {
-                    const i = ((py + dy) * w + (px + dx)) * 4;
+            for (let dy = 0; dy < pixelSize && py + dy < bh; dy++) {
+                for (let dx = 0; dx < pixelSize && px + dx < bw; dx++) {
+                    const i = ((py + dy) * bw + (px + dx)) * 4;
                     imageData.data[i] = r;
                     imageData.data[i + 1] = g;
                     imageData.data[i + 2] = b;
@@ -291,7 +329,14 @@ function applyBlur(x, y, w, h) {
     }
 
     // Draw blurred result to drawing canvas
-    drawCtx.putImageData(imageData, x, y);
+    // We need to disable the scale temporarily or account for it
+    drawCtx.save();
+    drawCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset to physical pixels
+    const tempImg = document.createElement('canvas'); // Reuse or create
+    tempImg.width = bw; tempImg.height = bh;
+    tempImg.getContext('2d').putImageData(imageData, 0, 0);
+    drawCtx.drawImage(tempImg, x * dpr, y * dpr);
+    drawCtx.restore();
 }
 
 document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', () => {
@@ -306,23 +351,27 @@ document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', 
 
 function getFinalImage() {
     if (!state.selectionRect) return null;
-    const tc = document.createElement('canvas'); tc.width = state.selectionRect.w; tc.height = state.selectionRect.h;
+    const dpr = state.dpr;
+    const r = state.selectionRect;
+    const tc = document.createElement('canvas');
+    tc.width = r.w * dpr;
+    tc.height = r.h * dpr;
     const tctx = tc.getContext('2d');
-    tctx.drawImage(canvas, state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h, 0, 0, state.selectionRect.w, state.selectionRect.h);
-    tctx.drawImage(drawCanvas, state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h, 0, 0, state.selectionRect.w, state.selectionRect.h);
-    // Use JPEG with high quality for faster encoding
-    return tc.toDataURL('image/jpeg', 0.95);
+
+    tctx.drawImage(canvas, r.x * dpr, r.y * dpr, r.w * dpr, r.h * dpr, 0, 0, r.w * dpr, r.h * dpr);
+    tctx.drawImage(drawCanvas, r.x * dpr, r.y * dpr, r.w * dpr, r.h * dpr, 0, 0, r.w * dpr, r.h * dpr);
+
+    // PNG for lossless quality, or JPEG 1.0
+    return tc.toDataURL('image/png');
 }
 
-// Use mousedown to ensure events are caught even if click is swallowed
-// Use mousedown to ensure events are caught even if click is swallowed
+// Interacting buttons setup...
 const buttons = {
     'btn-close': () => window.api.closeSnipper(),
     'btn-copy': () => {
         const d = safeGetImage();
         if (d) {
-            // DEBUG: Send log
-            window.api.sendDebugLog('Renderer: Sending Copy Request with Real Data... Size: ' + d.length);
+            window.api.sendDebugLog('Renderer: Sending Copy Request (PNG Quality)');
             window.api.sendCopyImage(d);
         }
     },

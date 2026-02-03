@@ -41,8 +41,9 @@ async function startCapture(mode) {
         const scaleFactor = display.scaleFactor || 1;
 
         // Ensure integer dimensions and account for scale factor for high DPI
-        const thumbWidth = Math.floor(width * scaleFactor);
-        const thumbHeight = Math.floor(height * scaleFactor);
+        // Use ceil to avoid rounding down errors that might cause scaling blur
+        const thumbWidth = Math.ceil(width * scaleFactor);
+        const thumbHeight = Math.ceil(height * scaleFactor);
 
         let sources;
         try {

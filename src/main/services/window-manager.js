@@ -30,6 +30,9 @@ function createMainWindow() {
         }
     });
 
+    // Clear cache
+    try { state.mainWindow.webContents.session.clearCache(); } catch (e) { }
+
     state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http')) require('electron').shell.openExternal(url);
         return { action: 'deny' };
@@ -90,6 +93,9 @@ function createCapture(type = 'draw', display = null) {
 
     const level = process.platform === 'darwin' ? 'pop-up-menu' : 'screen-saver';
     win.setAlwaysOnTop(true, level);
+    // Clear cache
+    try { win.webContents.session.clearCache(); } catch (e) { }
+
     win.webContents.setWindowOpenHandler(() => { return { action: 'deny' }; });
 
     win.on('closed', () => {

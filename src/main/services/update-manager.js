@@ -4,7 +4,9 @@ const { showToast } = require('./window-manager');
 const { app, BrowserWindow, screen } = require('electron');
 const path = require('path');
 
-// Configuration
+
+
+// Auto download configured
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 

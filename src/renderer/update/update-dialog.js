@@ -61,28 +61,23 @@ window.api.onUpdateError((message) => {
 function formatReleaseNotes(notes) {
     if (!notes) return 'Yeni özellikler ve iyileştirmeler.';
 
-    // Simple HTML escape to prevent XSS
-    const escapeHTML = (str) => {
-        return str.replace(/[&<>"']/g, (m) => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;'
-        }[m]));
-    };
+    // Because GitHub release notes often come pre-formatted with HTML (like <p>, <strong>),
+    // blindly escaping < and > breaks the layout.
+    // Instead of full escape, we'll just strip out dangerous tags like <script> or <iframe>.
+    let sanitized = notes.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
 
-    // Escape everything first
-    let sanitized = escapeHTML(notes);
+    // Sometimes GitHub provides raw markdown. If there are no HTML tags, we convert manually:
+    if (!sanitized.includes('<p>') && !sanitized.includes('<strong>')) {
+        sanitized = sanitized
+            .replace(/^#+ (.+)$/gm, '<strong>$1</strong>') // All headers (#, ##, ###) to strong
+            .replace(/^- (.+)$/gm, '• $1') // Bullet points
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Bold
+            .replace(/\n/g, '<br>'); // Line breaks
+    }
 
-    // Convert markdown-style formatting back (safely)
-    let formatted = sanitized
-        .replace(/^#+ (.+)$/gm, '<strong>$1</strong>') // All headers (#, ##, ###) to strong
-        .replace(/^- (.+)$/gm, '• $1') // Bullet points
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Bold
-        .replace(/\n/g, '<br>'); // Line breaks
-
-    return formatted;
+    // Wrap in a stylized container to match the UI better (smaller fonts for lists etc)
+    return `<div class="release-html-content">${sanitized}</div>`;
 }
 
 // Update download progress

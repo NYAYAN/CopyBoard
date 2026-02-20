@@ -101,6 +101,7 @@ export function setupEventListeners() {
 
     // Inputs
     elements.autostartCheck.addEventListener('change', (e) => window.api.setAutoStart(e.target.checked));
+    elements.widgetCheck.addEventListener('change', (e) => window.api.setShowWidget(e.target.checked));
     elements.maxItemsInput.addEventListener('change', (e) => {
         const value = parseInt(e.target.value);
         if (value > 0) window.api.setMaxItems(value);

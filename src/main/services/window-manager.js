@@ -1,6 +1,6 @@
 const { BrowserWindow, screen, app, dialog } = require('electron');
 const path = require('path');
-const { state } = require('./state');
+const { state, store } = require('./state');
 
 function showMain() {
     if (state.mainWindow && !state.mainWindow.isDestroyed()) {
@@ -67,6 +67,11 @@ function createCapture(type = 'draw', display = null) {
         }
     });
 
+    // Hide Widget during capture
+    if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+        state.widgetWindow.hide();
+    }
+
     let file = '../renderer/snipper/snipper.html';
     if (type === 'ocr') file = '../renderer/ocr/ocr.html';
     if (type === 'video') file = '../renderer/recorder/recorder.html';
@@ -103,6 +108,9 @@ function createCapture(type = 'draw', display = null) {
         if (type === 'ocr') state.ocrWindow = null;
         else if (type === 'video') state.recorderWindow = null;
         else state.snipperWindow = null;
+
+        // Restore Widget if enabled
+        if (state.showWidget) toggleWidget(true);
     });
 
     if (process.platform === 'darwin') {
@@ -154,9 +162,120 @@ function showToast(message, type = 'info') {
     } catch (e) { console.error('Toast Error:', e); }
 }
 
+function toggleWidget(show) {
+    if (show) {
+        if (!state.widgetWindow || state.widgetWindow.isDestroyed()) {
+            createWidgetWindow();
+        } else {
+            state.widgetWindow.showInactive();
+        }
+    } else {
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.close();
+        }
+    }
+}
+
+function createWidgetWindow() {
+    state.widgetPos = store.get('widgetPos') || { x: screen.getPrimaryDisplay().workAreaSize.width - 80, y: 100 };
+
+    state.widgetWindow = new BrowserWindow({
+        width: 68, // width for main button + padding
+        height: 68,
+        x: state.widgetPos.x,
+        y: state.widgetPos.y,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        hasShadow: false,
+        webPreferences: {
+            preload: path.join(__dirname, '../../preload/preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+        }
+    });
+
+    state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
+    state.widgetWindow.loadFile(path.join(__dirname, '../../renderer/widget/widget.html'));
+
+    // Ignore mouse events on the transparent parts, only clickable where pixels are painted
+    state.widgetWindow.setIgnoreMouseEvents(false); // Can't easily use forward on Windows with transparent without breaking drag. Wait, we usually don't need ignore for a small square
+}
+
+function handleWidgetAction(action, data) {
+    if (!state.widgetWindow || state.widgetWindow.isDestroyed()) return;
+
+    if (action === 'expand') {
+        const bounds = state.widgetWindow.getBounds();
+        state.widgetWindow.setBounds({
+            x: bounds.x,
+            y: bounds.y,
+            width: 68,
+            height: 300
+        });
+    } else if (action === 'collapse') {
+        const bounds = state.widgetWindow.getBounds();
+        state.widgetWindow.setBounds({
+            x: bounds.x,
+            y: bounds.y,
+            width: 68,
+            height: 68
+        });
+    } else if (action === 'drag') {
+        // Delta from custom JS drag
+        const bounds = state.widgetWindow.getBounds();
+        const display = screen.getDisplayMatching(bounds);
+        let newX = bounds.x + data.x;
+        let newY = bounds.y + data.y;
+
+        // Basic limits
+        if (newX < display.bounds.x) newX = display.bounds.x;
+        if (newX > display.bounds.x + display.bounds.width - bounds.width) newX = display.bounds.x + display.bounds.width - bounds.width;
+        if (newY < display.bounds.y) newY = display.bounds.y;
+        if (newY > display.bounds.y + display.bounds.height - bounds.height) newY = display.bounds.y + display.bounds.height - bounds.height;
+
+        state.widgetWindow.setBounds({ x: newX, y: newY, width: bounds.width, height: bounds.height });
+    } else if (action === 'drag-end') {
+        // Snap to nearest edge
+        const bounds = state.widgetWindow.getBounds();
+        const display = screen.getDisplayMatching(bounds);
+
+        const distLeft = bounds.x - display.bounds.x;
+        const distRight = (display.bounds.x + display.bounds.width) - (bounds.x + bounds.width);
+
+        let targetX = bounds.x;
+        if (distLeft < distRight) {
+            targetX = display.bounds.x + 10; // Snap to left with padding
+        } else {
+            targetX = display.bounds.x + display.bounds.width - bounds.width - 10; // Snap to right 
+        }
+
+        // Animate or just set
+        state.widgetWindow.setBounds({ x: targetX, y: bounds.y, width: bounds.width, height: bounds.height });
+
+        // Save to store
+        store.set('widgetPos', { x: targetX, y: bounds.y });
+        state.widgetPos = { x: targetX, y: bounds.y };
+
+    } else if (action === 'open-list') {
+        showMain();
+    } else if (action === 'capture-draw') {
+        require('./capture-service').startCapture('draw');
+    } else if (action === 'capture-ocr') {
+        require('./capture-service').startCapture('ocr');
+    } else if (action === 'capture-video') {
+        require('./capture-service').startCapture('video');
+    }
+}
+
 module.exports = {
     showMain,
     createMainWindow,
     createCapture,
-    showToast
+    showToast,
+    toggleWidget,
+    handleWidgetAction
 };

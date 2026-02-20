@@ -1,0 +1,118 @@
+:root {
+    --primary: #8957e5;
+    --primary-hover: #7b4dce;
+    --bg-dark: rgba(44, 44, 46, 0.95);
+    /* Lighter dark for better contrast */
+    --text: #ffffff;
+    --border: rgba(255, 255, 255, 0.3);
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    /* Important for frameless transparent windows */
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    /* Make the whole body transparent except our components */
+    background: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.widget-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    /* Padding allows shadow and glow to not be cut off */
+    gap: 8px;
+    height: 100vh;
+    box-sizing: border-box;
+}
+
+.widget-btn {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    /* PREVENT SQUASHING */
+    border-radius: 50%;
+    background: var(--bg-dark);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    /* Make buttons specifically draggable */
+    -webkit-app-region: no-drag;
+}
+
+/* 
+ * The main button is the one we click to expand/collapse.
+ * We want to be able to click AND drag it. We handle dragging via JS.
+ */
+.main-btn {
+    background: var(--primary);
+    border-color: rgba(255, 255, 255, 0.2);
+    z-index: 10;
+}
+
+.main-btn:hover {
+    transform: scale(1.05);
+    background: var(--primary-hover);
+    box-shadow: 0 0 15px rgba(137, 87, 229, 0.5);
+}
+
+.main-btn.active {
+    transform: rotate(45deg);
+}
+
+.main-icon {
+    width: 24px;
+    height: 24px;
+    color: white;
+    transition: transform 0.3s ease;
+}
+
+.widget-menu {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    pointer-events: none;
+    /* Prevents clicks when invisible */
+    transform: translateY(-20px) scale(0.8);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transform-origin: top center;
+}
+
+.widget-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.menu-item {
+    width: 42px;
+    height: 42px;
+    background: rgba(55, 55, 58, 0.95);
+    color: #ffffff;
+}
+
+.menu-item:hover {
+    background: rgba(70, 70, 75, 1);
+    transform: scale(1.1);
+    border-color: var(--primary);
+}
+
+.menu-item svg {
+    width: 18px;
+    height: 18px;
+    stroke: #ffffff;
+    color: #ffffff;
+}

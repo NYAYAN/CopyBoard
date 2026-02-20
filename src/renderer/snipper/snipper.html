@@ -7,9 +7,11 @@
 </head>
 
 <body>
-    <div id="overlay" class="overlay"></div> <!-- Full screen darkening -->
+    <video id="screen-video" style="display: none;"></video>
+    <div id="overlay" class="overlay" style="display: none;"></div> <!-- Hidden initially to prevent capture -->
     <canvas id="screen-canvas"></canvas>
     <canvas id="draw-canvas"></canvas> <!-- New layer for drawing -->
+
     <div id="selection-box" class="selection-box hidden">
         <div id="dimensions-label" class="dimensions-label">0 x 0</div>
         <div class="resize-handle nw" data-handle="nw"></div>

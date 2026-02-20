@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
     openExternal: (url) => ipcRenderer.send('open-url', url),
     setAutoStart: (val) => ipcRenderer.send('set-autostart', val),
     setVideoQuality: (val) => ipcRenderer.send('set-video-quality', val),
+    setShowWidget: (show) => ipcRenderer.send('set-show-widget', show),
     setIgnoreMouseEvents: (ignore, options) => ipcRenderer.send('set-ignore-mouse-events', ignore, options),
     onUpdateHistory: (callback) => ipcRenderer.on('update-history', (_, value) => callback(value)),
 
@@ -29,6 +30,10 @@ contextBridge.exposeInMainWorld('api', {
     sendOCR: (dataUrl) => ipcRenderer.send('ocr-process', dataUrl),
     sendCopyImage: (dataUrl) => ipcRenderer.send('snip-copy-v2', dataUrl), // RENAMED due to channel blocking
     sendSaveImage: (dataUrl) => ipcRenderer.send('snip-save-image', dataUrl),
+
+    // Widget
+    widgetAction: (action, data) => ipcRenderer.send('widget-action', action, data),
+
     recordStart: () => ipcRenderer.send('record-start'),
     recordChunk: (buffer) => ipcRenderer.send('record-chunk', buffer),
     recordStop: () => ipcRenderer.send('record-stop'),

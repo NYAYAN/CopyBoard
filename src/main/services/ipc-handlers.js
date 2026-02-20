@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const Tesseract = require('tesseract.js');
 const { state, store } = require('./state');
-const { showMain, showToast } = require('./window-manager');
+const { showMain, showToast, toggleWidget, handleWidgetAction } = require('./window-manager');
 const { addHistory, deleteHistoryItem, clearHistory, toggleFavorite, setItemNote, reorderHistory } = require('./history-manager');
 const { startCapture } = require('./capture-service');
 const { checkForUpdates, downloadUpdate, installUpdate } = require('./update-manager');
@@ -51,11 +51,17 @@ function registerIpcHandlers() {
         maxItems: state.maxItems, globalShortcut: state.shortcuts.list,
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
         globalShortcutOcr: state.shortcuts.ocr,
-        autoStart: state.autoStart, videoQuality: state.videoQuality
+        autoStart: state.autoStart, videoQuality: state.videoQuality,
+        showWidget: state.showWidget || false
     }));
 
     ipcMain.on('set-autostart', (e, v) => { state.autoStart = v; store.set('autoStart', v); });
     ipcMain.on('set-video-quality', (e, v) => { state.videoQuality = v; store.set('videoQuality', v); });
+    ipcMain.on('set-show-widget', (e, v) => {
+        state.showWidget = v;
+        store.set('showWidget', v);
+        toggleWidget(v);
+    });
 
     ipcMain.on('set-shortcut', (e, s) => updateShortcut('list', s, 'globalShortcut'));
     ipcMain.on('set-image-shortcut', (e, s) => updateShortcut('draw', s, 'globalShortcutImage'));
@@ -77,6 +83,7 @@ function registerIpcHandlers() {
     ipcMain.on('copy-item', (e, text) => {
         clipboard.writeText(text);
         state.lastText = text;
+        addHistory(text); // Moves the existing item to the top
         if (state.mainWindow) state.mainWindow.hide();
     });
 
@@ -136,6 +143,9 @@ function registerIpcHandlers() {
             else if (state.recorderWindow && !state.recorderWindow.isDestroyed()) win = state.recorderWindow;
         }
         if (win && !win.isDestroyed()) win.close();
+
+        // Ensure widget is visible again if it was enabled
+        if (state.showWidget) toggleWidget(true);
     });
 
     ipcMain.on('snip-ready', () => {
@@ -284,6 +294,11 @@ function registerIpcHandlers() {
                 showToast('Metin Kopyalandı.', 'success');
             }
         } catch (err) { console.error(err); }
+    });
+
+    // Widget Events
+    ipcMain.on('widget-action', (e, action, data) => {
+        handleWidgetAction(action, data);
     });
 }
 

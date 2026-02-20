@@ -215,24 +215,26 @@ input[type="checkbox"] {
 
 .about-content {
     text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.6;
-    padding: 16px 0;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.65rem;
+    line-height: 1.4;
+    padding: 8px 0;
 }
 
 .about-content h3 {
-    color: var(--accent);
-    margin-bottom: 12px;
-    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
 }
 
 .about-content strong {
-    color: var(--text-primary);
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: normal;
 }
 
 .about-content p {
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 /* History List */

@@ -41,12 +41,12 @@ async function startCapture(mode) {
         const scaleFactor = display.scaleFactor || 1;
 
         // Ensure integer dimensions and account for scale factor for high DPI
-        // Use ceil to avoid rounding down errors that might cause scaling blur
         const thumbWidth = Math.ceil(width * scaleFactor);
         const thumbHeight = Math.ceil(height * scaleFactor);
 
         let sources;
         try {
+            // Reverting to full resolution thumbnailSize to guarantee 100% pixel-perfect lossless quality.
             sources = await desktopCapturer.getSources({
                 types: ['screen'],
                 thumbnailSize: { width: thumbWidth, height: thumbHeight }
@@ -58,14 +58,16 @@ async function startCapture(mode) {
         const source = sources.find(s => s.display_id == display.id) || sources[0];
 
         if (source) {
-            // Use PNG for maximum quality transfer if possible, or skip toDataURL and handle differently?
-            // For now, increasing the source thumbnail resolution is the biggest win.
-            const data = source.thumbnail.toDataURL();
+            // Use native image toDataURL for lossless PNG
+            const dataUrl = source.thumbnail.toDataURL();
             const sourceId = source.id;
+
             state.lastMode = mode;
             const win = createCapture(mode, display);
             win.webContents.on('did-finish-load', () => {
-                if (!win.isDestroyed()) win.webContents.send('capture-screen', data, mode, sourceId, state.videoQuality);
+                if (!win.isDestroyed()) {
+                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality);
+                }
             });
         } else {
             state.isCapturing = false;

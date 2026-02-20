@@ -36,5 +36,6 @@ export const elements = {
     // Other
     tabBtns: document.querySelectorAll('.tab-btn'),
     autostartCheck: document.getElementById('autostart-check'),
+    widgetCheck: document.getElementById('widget-check'),
     toastElement: document.getElementById('toast')
 };

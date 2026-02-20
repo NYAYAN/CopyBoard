@@ -1,6 +1,6 @@
 const { app, dialog, clipboard } = require('electron');
 const { state } = require('./services/state');
-const { showMain, createMainWindow } = require('./services/window-manager');
+const { showMain, createMainWindow, toggleWidget } = require('./services/window-manager');
 const { initTray } = require('./services/tray-manager');
 const { registerIpcHandlers } = require('./services/ipc-handlers');
 const { initAutoUpdater } = require('./services/update-manager');
@@ -35,6 +35,11 @@ if (!gotTheLock) {
 
     // Start Clipboard Watcher
     const clipInterval = startClipboardWatcher(clipboard);
+
+    // Initialize Widget if enabled in settings
+    if (state.showWidget) {
+      toggleWidget(true);
+    }
 
     // Platform spec
     if (app.isPackaged) {

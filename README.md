@@ -1,8 +1,8 @@
-# CopyBoard v2.3.0
+# CopyBoard v2.5.0
 
 > **Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR (Resimden Yazıya Çevirme) Uygulaması**
 
-![Version](https://img.shields.io/badge/version-2.3.0-blue)
+![Version](https://img.shields.io/badge/version-2.5.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-ISC-green)
 
@@ -45,6 +45,11 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 - Uygulama başlangıcında otomatik güncelleme kontrolü.
 - Yeni sürümlerin arka planda indirilmesi ve tek tıkla kurulumu.
 
+### 🌟 7. Yüzen Kısayol Aracı (Floating Widget)
+- **Hızlı Erişim:** Masaüstünüzde her an elinizin altında duran, dilediğiniz köşeye yaslanabilen akıllı yüzen araç.
+- **Tek Tıkla Araçlar:** Pano, Ekran Yakalama, OCR ve Video Kaydı araçlarına klavye kısayolu kullanmadan anında ulaşın.
+- **Nasıl Açılır?:** Uygulamanın ayarlar menüsüne girip "Yüzen Araç (Widget)" seçeneğini işaretlemeniz yeterlidir. Ardından fare ile dilediğiniz yere sürükleyebilirsiniz.
+
 ---
 
 ## ⌨️ Kısayollar
@@ -65,8 +70,8 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 ## 🚀 Kurulum (Kullanıcılar İçin)
 
 1. **[Releases](https://github.com/NYAYAN/CopyBoard/releases)** sayfasından işletim sisteminize uygun sürümü indirin:
-   - **Windows:** `CopyBoard-Setup-2.3.0.exe`
-   - **macOS:** `CopyBoard-2.3.0.dmg`
+   - **Windows:** `CopyBoard-Setup-2.5.0.exe`
+   - **macOS:** `CopyBoard-2.5.0.dmg`
 2. İndirdiğiniz dosyayı çalıştırın (macOS'te uygulamayı `Applications` klasörüne sürükleyin).
 3. Kurulum tamamlandığında uygulama otomatik olarak başlayacak ve sistem tepsisine (saat yanı) yerleşecektir.
 
@@ -87,7 +92,7 @@ Proje modern bir mimariye taşınmış ve modüler hale getirilmiştir.
 - **Node.js** (v16+)
 - **npm**
 
-### Proje Yapısı (v2.3.0)
+### Proje Yapısı (v2.5.0)
 ```
 src/
 ├── main/              # Backend (Electron Main Process)

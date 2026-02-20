@@ -175,16 +175,14 @@ async function startRecording() {
         const videoWidth = Math.floor(window.innerWidth * dpr);
         const videoHeight = Math.floor(window.innerHeight * dpr);
 
+        // Remove artificial dimensions constraints. Chrome will fetch exactly what the desktop outputs.
+        // Forcing constraints can sometimes trigger a downscaler.
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
             video: {
                 mandatory: {
                     chromeMediaSource: 'desktop',
-                    chromeMediaSourceId: state.sourceId,
-                    minWidth: videoWidth,
-                    minHeight: videoHeight,
-                    maxWidth: videoWidth,
-                    maxHeight: videoHeight
+                    chromeMediaSourceId: state.sourceId
                 }
             }
         });
@@ -199,14 +197,27 @@ async function startRecording() {
         cropCanvas.height = Math.floor(state.selectionRect.h * dpr);
         const cropCtx = cropCanvas.getContext('2d');
 
-        const fps = state.videoQuality === 'ultra' ? 120 : (state.videoQuality === 'high' ? 60 : 30);
-        // Optimized bitrate for High DPI. WebM/VP9 needs enough bitrate for 4K-ish resolutions
-        const bitrate = state.videoQuality === 'ultra' ? 120000000 : (state.videoQuality === 'high' ? 80000000 : (state.videoQuality === 'medium' ? 12000000 : 4000000));
+        // Critical for crisp text on High-DPI screens
+        cropCtx.imageSmoothingEnabled = false;
 
-        state.mediaRecorder = new MediaRecorder(cropCanvas.captureStream(fps), {
-            mimeType: 'video/webm; codecs=vp9',
-            videoBitsPerSecond: bitrate
-        });
+        const fps = state.videoQuality === 'ultra' ? 60 : (state.videoQuality === 'high' ? 60 : 30);
+        // Optimized bitrate for High DPI. WebM/VP9 needs enough bitrate for 4K-ish resolutions
+        // 3440x1440 at 60fps needs a massive bitrate to not look blurry. VBR will use up to this much.
+        const bitrate = state.videoQuality === 'ultra' ? 250000000 : (state.videoQuality === 'high' ? 120000000 : (state.videoQuality === 'medium' ? 40000000 : 10000000));
+
+        // Let's use pure video/webm (which defaults to VP8/VP9 depending on Chrome version, usually the most optimized one).
+        // Specifying codecs=vp9 sometimes forces a slower software encoder.
+        let options = { mimeType: 'video/webm', videoBitsPerSecond: bitrate };
+        try {
+            if (MediaRecorder.isTypeSupported('video/webm; codecs=h264')) {
+                // Hardware H264 on Windows is often much faster and sharper for real-time screenshare
+                options = { mimeType: 'video/webm; codecs=h264', videoBitsPerSecond: bitrate };
+            } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
+                options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: bitrate };
+            }
+        } catch (e) { }
+
+        state.mediaRecorder = new MediaRecorder(cropCanvas.captureStream(fps), options);
 
         state.mediaRecorder.ondataavailable = async (e) => {
             if (e.data.size > 0) window.api.recordChunk(await e.data.arrayBuffer());

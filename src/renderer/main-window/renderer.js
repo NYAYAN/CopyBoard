@@ -14,6 +14,7 @@ import { elements } from './modules/dom.js';
     // 3. UI Setup from Settings
     elements.maxItemsInput.value = settings.maxItems;
     elements.autostartCheck.checked = settings.autoStart;
+    elements.widgetCheck.checked = settings.showWidget;
 
     // Formatting Helpers for Shortcuts
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;

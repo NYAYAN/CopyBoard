@@ -41,6 +41,7 @@ const state = {
         video: store.get('globalShortcutVideo', 'Alt+8'),
         ocr: store.get('globalShortcutOcr', 'Alt+2')
     },
+    showWidget: store.get('showWidget', false),
     lastText: '',
     lastMode: 'draw',
     tempVideoPath: null,

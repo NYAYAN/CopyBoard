@@ -18,7 +18,7 @@ canvas {
 }
 
 body:not(.is-recording) canvas {
-    cursor: crosshair;
+    cursor: url('../shared/cursor.svg') 20 20, crosshair;
 }
 
 body.is-recording canvas {
@@ -26,7 +26,7 @@ body.is-recording canvas {
 }
 
 body:not(.is-recording) #overlay:active {
-    cursor: crosshair;
+    cursor: url('../shared/cursor.svg') 20 20, crosshair;
 }
 
 #overlay {
@@ -64,7 +64,7 @@ body:not(.is-recording) #overlay:active {
 /* Force crosshair during selection */
 body.selecting,
 body.selecting * {
-    cursor: crosshair !important;
+    cursor: url('../shared/cursor.svg') 20 20, crosshair !important;
 }
 
 .resize-handle {

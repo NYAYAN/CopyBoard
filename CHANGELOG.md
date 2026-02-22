@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.5.1] - 2026-02-23
+
+### ✨ Yeni Özellikler & İyileştirmeler
+- **Widget Sürükleme**: Ekran kenarlarına yapışma mantığı geliştirildi, görsel boşluklar giderildi.
+- **Dinamik Panel**: Widget paneli artık ekran kenarına göre (sol/sağ) doğru yönde açılıyor.
+- **Kalıcı Ayarlar**: Yüzen Araç ayarının uygulama başlangıcında sıfırlanması sorunu giderildi.
+
+## [2.5.0] - 2026-02-20
+
+### ✨ Yeni Özellikler
+- **Yüzen Kısayol Aracı (Floating Widget)**: Ana araçlara hızlı erişim sağlayan yeni masaüstü aracı.
+- **Hızlı Erişim**: Pano, OCR, Snipper ve Video Kaydı araçları widget'a entegre edildi.
+
 ## [2.3.0] - 2026-01-24
 
 ### 🏗️ Mimari Değişiklikler

@@ -2,32 +2,20 @@ import { elements } from './dom.js';
 import { openNoteModal } from './notes.js';
 import { onDragStart, onDragOver, onDrop } from './drag-drop.js';
 
-// Global state reference passed or imported? 
-// Ideally passed params for purity, but we need to re-render.
-// Let's export a render function that takes history and activeTab.
-
-export function getFilteredHistory(history, activeTab) {
-    if (activeTab === 'favorites') {
-        return history.filter(i => i.isFavorite);
-    }
-    return history.filter(i => !i.hiddenFromHistory);
-}
-
-export function renderHistory(history, activeTab) {
+export function renderHistory(history, favorites, activeTab) {
     elements.listElement.innerHTML = '';
 
-    // We can store currentHistory in a module scope if needed for DragDrop 
-    // or pass it down. DragDrop needs the FULL history to swap real indices.
-    // Let's assume we pass it to the drop handler.
+    const items = activeTab === 'favorites' ? favorites : history;
 
-    const filtered = getFilteredHistory(history, activeTab);
-
-    if (filtered.length === 0) {
+    if (!items || items.length === 0) {
         elements.listElement.innerHTML = '<div class="empty-state">Liste boş.</div>';
         return;
     }
 
-    filtered.forEach((item, index) => {
+    // For Tümü tab: build a Set of favorited content strings for quick lookup
+    const favoritedContents = new Set(favorites.map(f => f.content));
+
+    items.forEach((item, index) => {
         const itemContent = item.content;
         const itemDate = item.timestamp ? new Date(item.timestamp) : new Date();
 
@@ -40,18 +28,16 @@ export function renderHistory(history, activeTab) {
         domItem.setAttribute('data-list-index', index);
         domItem.title = itemContent;
 
+        // Drag handles for favorites (reordering)
         if (activeTab === 'favorites') {
             domItem.classList.add('favorites-tab');
             domItem.dataset.tabContext = 'favorites';
             domItem.setAttribute('draggable', 'true');
             domItem.addEventListener('dragstart', onDragStart);
             domItem.addEventListener('dragover', onDragOver);
-            // We wrap onDrop to pass history context
-            domItem.addEventListener('drop', function (e) { onDrop.call(this, e, history, activeTab); });
+            domItem.addEventListener('drop', function (e) { onDrop.call(this, e, favorites, activeTab); });
             domItem.addEventListener('dragend', () => domItem.classList.remove('dragging'));
-        }
 
-        if (activeTab === 'favorites') {
             const dragHandle = document.createElement('span');
             dragHandle.className = 'drag-handle';
             dragHandle.innerHTML = '⋮⋮';
@@ -75,28 +61,42 @@ export function renderHistory(history, activeTab) {
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'history-actions';
 
+        // Note button (favorites only)
         if (activeTab === 'favorites') {
             const infoBtn = document.createElement('button');
             infoBtn.className = `action-btn info-btn ${item.note ? 'has-note' : ''}`;
             infoBtn.innerHTML = item.note ? '📝' : 'ℹ️';
             infoBtn.title = item.note ? 'Notu Düzenle' : 'Not Ekle';
             if (item.note) infoBtn.title += `\nNot: ${item.note.substring(0, 50)}${item.note.length > 50 ? '...' : ''}`;
-
-            infoBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openNoteModal(item);
-            });
+            infoBtn.addEventListener('click', (e) => { e.stopPropagation(); openNoteModal(item); });
             actionsDiv.appendChild(infoBtn);
         }
 
+        // Star button
         const starBtn = document.createElement('button');
-        starBtn.className = `action-btn star-btn ${item.isFavorite ? 'active' : ''}`;
-        starBtn.innerHTML = item.isFavorite ? '⭐' : '☆';
-        starBtn.title = item.isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle';
-        starBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            window.api.toggleFavorite(item.id);
-        });
+        if (activeTab === 'favorites') {
+            // In Favoriler: always ⭐, clicking removes from favorites
+            starBtn.className = 'action-btn star-btn active';
+            starBtn.innerHTML = '⭐';
+            starBtn.title = 'Favorilerden Çıkar';
+            starBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.api.removeFromFavorites(item.id);
+            });
+        } else {
+            // In Tümü: show ⭐ if already favorited (by content), ☆ if not
+            const isAlreadyFavorited = favoritedContents.has(itemContent);
+            starBtn.className = `action-btn star-btn ${isAlreadyFavorited ? 'active' : ''}`;
+            starBtn.innerHTML = isAlreadyFavorited ? '⭐' : '☆';
+            starBtn.title = isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : 'Favorilere Ekle';
+            starBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!isAlreadyFavorited) {
+                    window.api.addToFavorites({ content: item.content, timestamp: item.timestamp });
+                }
+            });
+        }
+        actionsDiv.appendChild(starBtn);
 
         const copyBtn = document.createElement('button');
         copyBtn.className = 'action-btn copy-btn';
@@ -112,13 +112,16 @@ export function renderHistory(history, activeTab) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn delete-btn';
         deleteBtn.innerHTML = '✕';
-        deleteBtn.title = 'Sil';
+        deleteBtn.title = activeTab === 'favorites' ? 'Favorilerden Çıkar' : 'Sil';
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.api.deleteHistoryItem(item.id, activeTab);
+            if (activeTab === 'favorites') {
+                window.api.removeFromFavorites(item.id);
+            } else {
+                window.api.deleteHistoryItem(item.id);
+            }
         });
 
-        actionsDiv.appendChild(starBtn);
         actionsDiv.appendChild(copyBtn);
         actionsDiv.appendChild(deleteBtn);
 

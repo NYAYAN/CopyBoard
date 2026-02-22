@@ -12,16 +12,24 @@ import {
 // State references
 let state = {
     history: [],
+    favorites: [],
     activeTab: 'all'
 };
 
-export function initState(initialHistory) {
-    state.history = initialHistory;
+export function initState(data) {
+    state.history = data.history || [];
+    state.favorites = data.favorites || [];
 }
 
-export function updateHistoryState(newHistory) {
-    state.history = newHistory;
-    renderHistory(state.history, state.activeTab);
+export function updateHistoryState(data) {
+    if (data && typeof data === 'object' && 'history' in data) {
+        state.history = data.history || [];
+        state.favorites = data.favorites || [];
+    } else {
+        // Fallback if old format received
+        state.history = Array.isArray(data) ? data : [];
+    }
+    renderHistory(state.history, state.favorites, state.activeTab);
 }
 
 export function setupEventListeners() {
@@ -36,7 +44,7 @@ export function setupEventListeners() {
                 elements.tabBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 state.activeTab = btn.dataset.tab;
-                renderHistory(state.history, state.activeTab);
+                renderHistory(state.history, state.favorites, state.activeTab);
 
                 setTimeout(() => {
                     elements.listElement.classList.remove('tab-switching');
@@ -97,6 +105,12 @@ export function setupEventListeners() {
         elements.settingsBtn.classList.remove('active');
         elements.aboutPanel.classList.toggle('hidden');
         elements.aboutBtn.classList.toggle('active');
+    });
+
+    elements.updateBtn.addEventListener('click', () => {
+        elements.updateBtn.classList.add('spinning');
+        window.api.checkForUpdates();
+        setTimeout(() => elements.updateBtn.classList.remove('spinning'), 3000);
     });
 
     // Inputs

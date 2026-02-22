@@ -177,12 +177,16 @@ function toggleWidget(show) {
 }
 
 function createWidgetWindow() {
+    // widgetPos stores the BUTTON position. widgetSide tracks left/right.
     state.widgetPos = store.get('widgetPos') || { x: screen.getPrimaryDisplay().workAreaSize.width - 80, y: 100 };
+    state.widgetSide = store.get('widgetSide') || 'right';
+
+    const TOTAL_WIDTH = 418; // 350 panel + 68 buttons
 
     state.widgetWindow = new BrowserWindow({
-        width: 68, // width for main button + padding
+        width: TOTAL_WIDTH,
         height: 68,
-        x: state.widgetPos.x,
+        x: state.widgetSide === 'left' ? state.widgetPos.x : state.widgetPos.x - 350,
         y: state.widgetPos.y,
         frame: false,
         transparent: true,
@@ -190,6 +194,7 @@ function createWidgetWindow() {
         skipTaskbar: true,
         resizable: false,
         hasShadow: false,
+        backgroundColor: '#00000000',
         webPreferences: {
             preload: path.join(__dirname, '../../preload/preload.js'),
             nodeIntegration: false,
@@ -201,64 +206,93 @@ function createWidgetWindow() {
     state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
     state.widgetWindow.loadFile(path.join(__dirname, '../../renderer/widget/widget.html'));
 
-    // Ignore mouse events on the transparent parts, only clickable where pixels are painted
-    state.widgetWindow.setIgnoreMouseEvents(false); // Can't easily use forward on Windows with transparent without breaking drag. Wait, we usually don't need ignore for a small square
+    // Notify renderer of the saved side once it has loaded
+    state.widgetWindow.webContents.on('did-finish-load', () => {
+        notifySide();
+    });
+}
+
+function getWindowX() {
+    // Right side: buttons at right edge → window.x = buttonX - 350
+    // Left side:  buttons at left edge → window.x = buttonX
+    return state.widgetSide === 'left'
+        ? state.widgetPos.x
+        : state.widgetPos.x - 350;
+}
+
+function notifySide() {
+    if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+        state.widgetWindow.webContents.send('widget-side', state.widgetSide || 'right');
+    }
 }
 
 function handleWidgetAction(action, data) {
     if (!state.widgetWindow || state.widgetWindow.isDestroyed()) return;
 
+    const winX = getWindowX();
+
     if (action === 'expand') {
-        const bounds = state.widgetWindow.getBounds();
-        state.widgetWindow.setBounds({
-            x: bounds.x,
-            y: bounds.y,
-            width: 68,
-            height: 300
-        });
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 300 });
+    } else if (action === 'expand-history') {
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 400 });
+    } else if (action === 'collapse-history') {
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 300 });
     } else if (action === 'collapse') {
-        const bounds = state.widgetWindow.getBounds();
-        state.widgetWindow.setBounds({
-            x: bounds.x,
-            y: bounds.y,
-            width: 68,
-            height: 68
-        });
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 68 });
     } else if (action === 'drag') {
-        // Delta from custom JS drag
         const bounds = state.widgetWindow.getBounds();
         const display = screen.getDisplayMatching(bounds);
-        let newX = bounds.x + data.x;
+        // Track BUTTON position directly, keep current side stable during drag.
+        // (Flipping side mid-drag causes 350px window jump at the center = freeze)
+        const currentSide = state.widgetSide || 'right';
+        const currentBtnX = (currentSide === 'left') ? bounds.x : bounds.x + 350;
+
+        let newBtnX = currentBtnX + data.x;
         let newY = bounds.y + data.y;
 
-        // Basic limits
-        if (newX < display.bounds.x) newX = display.bounds.x;
-        if (newX > display.bounds.x + display.bounds.width - bounds.width) newX = display.bounds.x + display.bounds.width - bounds.width;
-        if (newY < display.bounds.y) newY = display.bounds.y;
-        if (newY > display.bounds.y + display.bounds.height - bounds.height) newY = display.bounds.y + display.bounds.height - bounds.height;
+        // Clamp BUTTON to display bounds
+        const db = display.bounds;
+        if (newBtnX < db.x + 5) newBtnX = db.x + 5;
+        if (newBtnX > db.x + db.width - 68 - 5) newBtnX = db.x + db.width - 68 - 5;
+        if (newY < db.y) newY = db.y;
+        if (newY > db.y + db.height - bounds.height) newY = db.y + db.height - bounds.height;
 
-        state.widgetWindow.setBounds({ x: newX, y: newY, width: bounds.width, height: bounds.height });
+        // Window position follows button (may go slightly off-screen at far edges — that's fine)
+        const newWinX = (currentSide === 'left') ? newBtnX : newBtnX - 350;
+
+        state.widgetPos = { x: newBtnX, y: newY };
+        state.widgetWindow.setBounds({ x: newWinX, y: newY, width: 418, height: bounds.height });
+
     } else if (action === 'drag-end') {
-        // Snap to nearest edge
         const bounds = state.widgetWindow.getBounds();
         const display = screen.getDisplayMatching(bounds);
 
-        const distLeft = bounds.x - display.bounds.x;
-        const distRight = (display.bounds.x + display.bounds.width) - (bounds.x + bounds.width);
+        // Determine which edge the button is closer to
+        const side = state.widgetSide || 'right';
+        const btnScreenX = (side === 'left') ? bounds.x : bounds.x + 350;
+        const distLeft = btnScreenX - display.bounds.x;
+        const distRight = (display.bounds.x + display.bounds.width) - (btnScreenX + 68);
 
-        let targetX = bounds.x;
+        let newSide, targetWindowX, targetBtnX;
         if (distLeft < distRight) {
-            targetX = display.bounds.x + 10; // Snap to left with padding
+            // Snap to left — buttons go to left edge, panel to the right
+            newSide = 'left';
+            targetBtnX = display.bounds.x + 10;
+            targetWindowX = targetBtnX; // window.x = buttonX (panel is to the right)
         } else {
-            targetX = display.bounds.x + display.bounds.width - bounds.width - 10; // Snap to right 
+            // Snap to right — buttons go to right edge, panel to the left
+            newSide = 'right';
+            targetBtnX = display.bounds.x + display.bounds.width - 68 - 10;
+            targetWindowX = targetBtnX - 350; // window.x = buttonX - 350 (panel is to the left)
         }
 
-        // Animate or just set
-        state.widgetWindow.setBounds({ x: targetX, y: bounds.y, width: bounds.width, height: bounds.height });
+        state.widgetSide = newSide;
+        state.widgetPos = { x: targetBtnX, y: bounds.y };
+        store.set('widgetPos', state.widgetPos);
+        store.set('widgetSide', newSide);
 
-        // Save to store
-        store.set('widgetPos', { x: targetX, y: bounds.y });
-        state.widgetPos = { x: targetX, y: bounds.y };
+        state.widgetWindow.setBounds({ x: targetWindowX, y: bounds.y, width: 418, height: bounds.height });
+        notifySide();
 
     } else if (action === 'open-list') {
         showMain();

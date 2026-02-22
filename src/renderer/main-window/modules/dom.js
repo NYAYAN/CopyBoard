@@ -2,6 +2,7 @@ export const elements = {
     listElement: document.getElementById('history-list'),
     settingsBtn: document.getElementById('settings-btn'),
     aboutBtn: document.getElementById('about-btn'),
+    updateBtn: document.getElementById('update-btn'),
     addManualBtn: document.getElementById('add-manual-btn'),
     settingsPanel: document.getElementById('settings-panel'),
     aboutPanel: document.getElementById('about-panel'),

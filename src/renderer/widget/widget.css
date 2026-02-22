@@ -11,24 +11,218 @@ body {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    /* Important for frameless transparent windows */
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     color: var(--text);
-    /* Make the whole body transparent except our components */
     background: transparent;
     user-select: none;
     -webkit-user-select: none;
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.history-panel {
+    position: absolute;
+    right: 68px;
+    top: 10px;
+    width: 350px;
+    height: 400px;
+    background: var(--bg-dark);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(20px) scale(0.95);
+    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 5;
+}
+
+.history-panel.show {
+    opacity: 0;
+    /* Keeps it in DOM but hidden */
+}
+
+.history-panel.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0) scale(1);
+}
+
+.panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 10px 8px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    font-family: inherit;
+}
+
+.tab-btn:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.tab-btn.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+
+.history-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.history-items::-webkit-scrollbar {
+    width: 6px;
+}
+
+.history-items::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.history-item {
+    padding: 10px 12px;
+    padding-right: 32px;
+    /* space for delete button */
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.item-star {
+    position: absolute;
+    top: 6px;
+    right: 30px;
+    font-size: 10px;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+
+.history-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary);
+}
+
+.history-item:hover .delete-btn {
+    opacity: 1;
+}
+
+.delete-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 80, 80, 0.15);
+    border: 1px solid rgba(255, 80, 80, 0.4);
+    color: rgba(255, 120, 120, 0.9);
+    font-size: 12px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s ease, background 0.15s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.delete-btn:hover {
+    background: rgba(255, 60, 60, 0.4);
+    color: #fff;
+}
+
+.history-item-text {
+    font-size: 13px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-all;
+}
+
+/* Tooltip */
+.history-tooltip {
+    position: fixed;
+    max-width: 300px;
+    background: rgba(30, 30, 32, 0.97);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    z-index: 1000;
+    word-break: break-word;
+    white-space: pre-wrap;
+    max-height: 180px;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.history-tooltip.visible {
+    opacity: 1;
+}
+
+/* ── Left-side layout overrides ─────────────────────────────────────────── */
+/* When body has .left-side, buttons are at left edge, panel opens to the right */
+.left-side .history-panel {
+    right: auto;
+    left: 68px;
+    transform: translateX(-20px) scale(0.95);
+}
+
+.left-side .history-panel.open {
+    transform: translateX(0) scale(1);
+}
+
+.left-side .widget-container {
+    right: auto;
+    left: 0;
 }
 
 .widget-container {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 68px;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 10px;
-    /* Padding allows shadow and glow to not be cut off */
     gap: 8px;
-    height: 100vh;
     box-sizing: border-box;
+    z-index: 10;
 }
 
 .widget-btn {

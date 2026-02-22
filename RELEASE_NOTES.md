@@ -1,43 +1,37 @@
-# CopyBoard v2.3.0 - Modular Architecture & Security Update 🏗️🔒
+# CopyBoard v2.5.1 - Widget & Performans İyileştirmeleri 🚀
 
-## 🏗️ Mimari Değişiklikler (Modular Refactoring)
-
-CopyBoard altyapısı, daha sürdürülebilir, güvenli ve genişletilebilir olması için tamamen yenilendi:
-- **Backend (Main Process):** Monolitik yapıdan servis tabanlı (Service-Oriented) mimariye geçildi.
-  - `state.js`, `window-manager.js`, `tray-manager.js`, `ipc-handlers.js`, `history-manager.js` vb.
-- **Frontend (Renderer Process):** Modern **ES Modules** yapısına geçildi, kod okunabilirliği ve performansı artırıldı.
-- **Güvenlik:** Hassas dosyalar repodan temizlendi, `.gitignore` güncellendi.
-- **Build Optimizasyonu:** `electron-builder` ayarları optimize edildi, gereksiz dosyalar paketten çıkarıldı.
+v2.5.0 ile duyurduğumuz Yüzen Araç (Floating Widget) özelliğimizi sizden gelen geri bildirimlerle daha stabil hale getirdik!
 
 ## ✨ Yeni Özellikler & İyileştirmeler
 
-### ⭐ Favori Sıralama (Drag & Drop)
-- Favoriler listesindeki öğeleri artık **sürükle-bırak** yöntemiyle dilediğiniz gibi sıralayabilirsiniz.
+### 🎯 Gelişmiş Sürükle ve Bırak
+- Widget'ın ekran kenarlarına yapışma mantığı tamamen yenilendi.
+- Daha hassas ve sorunsuz bir şekilde ekranın sağına veya soluna yapıştırma.
+- Sürükleme sırasında widget ve kenar arasında oluşan görsel boşluklar giderildi.
 
-### 📝 Detaylı Kurulum Bilgileri
-- Kurulum sihirbazına (Installer) uygulamanın tüm özelliklerini ve kısayollarını anlatan detaylı bir bilgilendirme ekranı eklendi.
+### 📐 Akıllı Panel Yönü
+- Widget'ın ekranın hangi tarafında olduğuna bağlı olarak açılan panelin yönü artık dinamik olarak ayarlanıyor.
+- Panel her zaman ekranın merkezine doğru açılır, böylece içerikleriniz asla ekran dışına taşmaz.
 
-### 🐛 Hata Düzeltmeleri
-- **Video Kalite Ayarı:** Ayarlar ekranındaki video kalitesi (Yüksek/Orta/Düşük) seçeneklerinin görünmemesi (beyaz yazı) sorunu giderildi.
-- **Başlangıç Hatası:** Nadiren görülen `startClipboardWatcher` hatası giderildi.
-- **Video Kayıt:** Kayıt sürecindeki kararlılık artırıldı.
+### 💾 Kalıcı Ayarlar
+- "Yüzen Araç" ayarının uygulama yeniden başlatıldığında sıfırlanması sorunu giderildi.
+- Artık tercihleriniz oturumlar arasında korunur.
 
 ## 📦 Kurulum
 
-1. `CopyBoard-Setup-2.3.0.exe` dosyasını indirin.
+1. `CopyBoard-Setup-2.5.1.exe` dosyasını indirin.
 2. Kurulum sihirbazını takip edin.
 3. Uygulamayı başlatın.
 
 ### Otomatik Güncelleme
 Eski bir sürümü kullanıyorsanız, uygulamayı açtığınızda otomatik olarak yeni sürümü algılayacak ve güncelleme isteyecektir.
 
-## ⌨️ Kısayollar (Hatırlatma)
+## ⌨️ Kısayollar
 
 - **Alt+V**: Pano listesini göster
 - **Alt+9**: Ekran görüntüsü al (Çizim & Blur)
 - **Alt+8**: Video kaydet
 - **Alt+2**: OCR (Resimden yazı okuma)
-- **Ctrl+C**: (Snipping modunda) Görüntüyü kopyala
 
 ---
 

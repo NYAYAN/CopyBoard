@@ -9,11 +9,13 @@ contextBridge.exposeInMainWorld('api', {
     setVideoShortcut: (shortcut) => ipcRenderer.send('set-video-shortcut', shortcut),
     setOcrShortcut: (shortcut) => ipcRenderer.send('set-ocr-shortcut', shortcut),
     copyItem: (text) => ipcRenderer.send('copy-item', text),
-    deleteHistoryItem: (content, source) => ipcRenderer.send('delete-history-item', content, source),
-    toggleFavorite: (id) => ipcRenderer.send('toggle-favorite', id),
+    deleteHistoryItem: (id) => ipcRenderer.send('delete-history-item', id),
+    addToFavorites: (item) => ipcRenderer.send('add-to-favorites', item),
+    removeFromFavorites: (id) => ipcRenderer.send('remove-from-favorites', id),
     addManualItem: (content) => ipcRenderer.send('add-manual-item', content),
     setItemNote: (id, note) => ipcRenderer.send('set-item-note', id, note),
     reorderHistory: (history) => ipcRenderer.send('reorder-history', history),
+    reorderFavorites: (favorites) => ipcRenderer.send('reorder-favorites', favorites),
     clearHistory: () => ipcRenderer.send('clear-history'),
     closeWindow: () => ipcRenderer.send('close-window'),
     minimizeWindow: () => ipcRenderer.send('minimize-window'),
@@ -33,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // Widget
     widgetAction: (action, data) => ipcRenderer.send('widget-action', action, data),
+    onWidgetSide: (callback) => ipcRenderer.on('widget-side', (_, side) => callback(side)),
 
     recordStart: () => ipcRenderer.send('record-start'),
     recordChunk: (buffer) => ipcRenderer.send('record-chunk', buffer),

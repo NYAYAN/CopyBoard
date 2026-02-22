@@ -34,7 +34,7 @@ import { elements } from './modules/dom.js';
     if (settings.videoQuality) elements.videoQualitySelect.value = settings.videoQuality;
 
     // 4. Render Initial History
-    renderHistory(history, 'all');
+    renderHistory(history.history || [], history.favorites || [], 'all');
 
     // 5. Setup Listeners
     setupEventListeners();

@@ -4,7 +4,7 @@ const path = require('path');
 const Tesseract = require('tesseract.js');
 const { state, store } = require('./state');
 const { showMain, showToast, toggleWidget, handleWidgetAction } = require('./window-manager');
-const { addHistory, deleteHistoryItem, clearHistory, toggleFavorite, setItemNote, reorderHistory } = require('./history-manager');
+const { addHistory, deleteHistoryItem, clearHistory, addToFavorites, removeFromFavorites, setItemNote, reorderHistory, reorderFavorites } = require('./history-manager');
 const { startCapture } = require('./capture-service');
 const { checkForUpdates, downloadUpdate, installUpdate } = require('./update-manager');
 
@@ -46,7 +46,7 @@ function registerIpcHandlers() {
     }
 
     // --- IPC Listeners ---
-    ipcMain.handle('get-history', () => state.history);
+    ipcMain.handle('get-history', () => ({ history: state.history, favorites: state.favorites }));
     ipcMain.handle('get-settings', () => ({
         maxItems: state.maxItems, globalShortcut: state.shortcuts.list,
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
@@ -83,7 +83,7 @@ function registerIpcHandlers() {
     ipcMain.on('copy-item', (e, text) => {
         clipboard.writeText(text);
         state.lastText = text;
-        addHistory(text); // Moves the existing item to the top
+        addHistory(text);
         if (state.mainWindow) state.mainWindow.hide();
     });
 
@@ -92,10 +92,12 @@ function registerIpcHandlers() {
         showToast('Öğe Eklendi', 'success');
     });
 
-    ipcMain.on('toggle-favorite', (e, id) => toggleFavorite(id));
+    ipcMain.on('add-to-favorites', (e, item) => addToFavorites(item));
+    ipcMain.on('remove-from-favorites', (e, id) => removeFromFavorites(id));
     ipcMain.on('set-item-note', (e, id, note) => setItemNote(id, note));
     ipcMain.on('reorder-history', (e, newHistory) => reorderHistory(newHistory));
-    ipcMain.on('delete-history-item', (e, id, source) => deleteHistoryItem(id, source));
+    ipcMain.on('reorder-favorites', (e, newFavorites) => reorderFavorites(newFavorites));
+    ipcMain.on('delete-history-item', (e, id) => deleteHistoryItem(id));
     ipcMain.on('clear-history', () => clearHistory());
 
     ipcMain.on('close-window', () => { if (state.mainWindow) state.mainWindow.hide(); });

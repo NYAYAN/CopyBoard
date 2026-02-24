@@ -5,8 +5,12 @@ body {
     height: 100vh;
     overflow: hidden;
     background: transparent;
-    /* Shared high-visibility crosshair — edit /renderer/shared/cursor.svg to change for all modes */
-    cursor: url('../shared/cursor.svg') 20 20, crosshair;
+    /* Initially hide cursor to prevent it from being baked into the screen capture */
+    cursor: none;
+}
+
+body.ready {
+    cursor: url('../shared/cursor.svg') 15 15, crosshair;
 }
 
 .overlay {
@@ -45,7 +49,7 @@ body {
 /* When drawing is active, canvas needs events */
 body.drawing #draw-canvas {
     pointer-events: auto;
-    cursor: url('../shared/cursor.svg') 20 20, crosshair;
+    cursor: url('../shared/cursor.svg') 15 15, crosshair;
 }
 
 body.drawing #selection-box {
@@ -83,7 +87,7 @@ body.drawing #selection-box {
 /* Force crosshair during selection */
 body.selecting,
 body.selecting * {
-    cursor: url('../shared/cursor.svg') 20 20, crosshair !important;
+    cursor: url('../shared/cursor.svg') 15 15, crosshair !important;
 }
 
 .resize-handle {

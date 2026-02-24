@@ -12,6 +12,7 @@ const tabFavorites = document.getElementById('tab-favorites');
 let isOpen = false;
 let isHistoryOpen = false;
 let isDragging = false;
+let isPointerDown = false;
 let dragStartX, dragStartY;
 let collapseTimeout = null;
 let historyTimeout = null;
@@ -19,10 +20,22 @@ let lastHistoryRequestId = 0;
 let activeTab = 'history'; // 'history' | 'favorites'
 let allHistoryItems = [];
 let allFavoriteItems = [];
+let currentOpacity = 1;
+
+// Opacity event listeners for main button
+mainBtn.addEventListener('mouseenter', () => {
+    mainBtn.style.opacity = '1';
+});
+
+mainBtn.addEventListener('mouseleave', () => {
+    if (!isOpen && !isHistoryOpen && !isDragging) {
+        mainBtn.style.opacity = currentOpacity.toString();
+    }
+});
 
 // --- setIgnoreMouseEvents ---
 function updateMouseEvents() {
-    if (isOpen || isHistoryOpen) {
+    if (isOpen || isHistoryOpen || isDragging || isPointerDown) {
         window.api.setIgnoreMouseEvents(false);
     } else {
         window.api.setIgnoreMouseEvents(true, { forward: true });
@@ -34,7 +47,7 @@ updateMouseEvents();
 // forwarded events still trigger detection even when mouse was already over button.
 const widgetContainer = document.querySelector('.widget-container');
 document.addEventListener('mousemove', (e) => {
-    if (isOpen || isHistoryOpen) {
+    if (isOpen || isHistoryOpen || isDragging || isPointerDown) {
         window.api.setIgnoreMouseEvents(false);
         return;
     }
@@ -243,6 +256,7 @@ mainBtn.addEventListener('click', () => {
     if (isOpen) {
         menu.classList.add('open');
         mainBtn.classList.add('active');
+        mainBtn.style.opacity = '1';
         window.api.widgetAction('expand');
         updateMouseEvents();
     } else {
@@ -261,6 +275,10 @@ function closeAll() {
     historyPanel.classList.remove('open');
     hideTooltip();
 
+    if (!mainBtn.matches(':hover')) {
+        mainBtn.style.opacity = currentOpacity.toString();
+    }
+
     collapseTimeout = setTimeout(() => {
         window.api.widgetAction('collapse');
         collapseTimeout = null;
@@ -269,30 +287,67 @@ function closeAll() {
 }
 
 // --- Drag ---
-mainBtn.addEventListener('mousedown', (e) => {
+mainBtn.addEventListener('pointerdown', (e) => {
+    isPointerDown = true;
     isDragging = false;
     dragStartX = e.screenX;
     dragStartY = e.screenY;
 
-    const onMouseMove = (moveEvent) => {
+    let dragAnimFrame = null;
+    let accumulatedDeltaX = 0;
+    let accumulatedDeltaY = 0;
+
+    // Capture pointer so we don't lose drag if mouse moves out of window
+    mainBtn.setPointerCapture(e.pointerId);
+
+    const onPointerMove = (moveEvent) => {
         const deltaX = moveEvent.screenX - dragStartX;
         const deltaY = moveEvent.screenY - dragStartY;
         if (!isDragging && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) isDragging = true;
+
         if (isDragging) {
-            window.api.widgetAction('drag', { x: deltaX, y: deltaY });
+            accumulatedDeltaX += deltaX;
+            accumulatedDeltaY += deltaY;
             dragStartX = moveEvent.screenX;
             dragStartY = moveEvent.screenY;
+
+            if (!dragAnimFrame) {
+                dragAnimFrame = requestAnimationFrame(() => {
+                    if (accumulatedDeltaX !== 0 || accumulatedDeltaY !== 0) {
+                        window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY });
+                        accumulatedDeltaX = 0;
+                        accumulatedDeltaY = 0;
+                    }
+                    dragAnimFrame = null;
+                });
+            }
         }
     };
 
-    const onMouseUp = () => {
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-        if (isDragging) window.api.widgetAction('drag-end');
+    const onPointerUp = (upEvent) => {
+        isPointerDown = false;
+        mainBtn.releasePointerCapture(upEvent.pointerId);
+        mainBtn.removeEventListener('pointermove', onPointerMove);
+        mainBtn.removeEventListener('pointerup', onPointerUp);
+
+        if (dragAnimFrame) {
+            cancelAnimationFrame(dragAnimFrame);
+            dragAnimFrame = null;
+        }
+
+        if (isDragging) {
+            // Apply any remaining delta before ending drag
+            if (accumulatedDeltaX !== 0 || accumulatedDeltaY !== 0) {
+                window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY });
+            }
+            window.api.widgetAction('drag-end');
+            isDragging = false;
+        }
+        updateMouseEvents();
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    mainBtn.addEventListener('pointermove', onPointerMove);
+    mainBtn.addEventListener('pointerup', onPointerUp);
 });
 
 // --- Panel Toggle ---
@@ -301,6 +356,7 @@ btnSnippet.addEventListener('click', async () => {
 
     isHistoryOpen = !isHistoryOpen;
     if (isHistoryOpen) {
+        mainBtn.style.opacity = '1';
         window.api.setIgnoreMouseEvents(false);
         window.api.widgetAction('expand-history');
         await loadHistory();
@@ -324,6 +380,14 @@ btnVideo.addEventListener('click', () => window.api.widgetAction('capture-video'
 
 window.addEventListener('blur', () => { if (isOpen) closeAll(); });
 
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (isOpen || isHistoryOpen) {
+            closeAll();
+        }
+    }
+});
+
 window.api.onUpdateHistory((data) => {
     if (isHistoryOpen) {
         renderHistory(data.history || [], data.favorites || []);
@@ -336,5 +400,46 @@ window.api.onWidgetSide((side) => {
         document.body.classList.add('left-side');
     } else {
         document.body.classList.remove('left-side');
+    }
+});
+
+// Update widget appearance
+window.api.onWidgetConfig((config) => {
+    if (config.color) {
+        document.documentElement.style.setProperty('--primary', config.color);
+    }
+
+    const mainBtn = document.getElementById('widget-main');
+    const mainIcon = mainBtn.querySelector('svg');
+
+    // Opacity formatting
+    const opacityValue = config.opacity !== undefined ? config.opacity : 100;
+    currentOpacity = opacityValue / 100;
+
+    // Remove buggy container-wide opacity
+    document.getElementById('widget-container').style.opacity = '';
+
+    // Set immediate opacity on the main button if it's inactive
+    if (!isOpen && !isHistoryOpen && !mainBtn.matches(':hover')) {
+        mainBtn.style.opacity = currentOpacity.toString();
+    } else {
+        mainBtn.style.opacity = '1';
+    }
+
+    if (config.transparent) {
+        mainBtn.style.background = 'transparent';
+        mainBtn.style.boxShadow = 'none';
+        mainBtn.style.backdropFilter = 'none';
+        mainBtn.style.webkitBackdropFilter = 'none';
+        mainIcon.style.color = config.color || 'var(--primary)';
+        // Set the border color to match the selected icon color
+        mainBtn.style.borderColor = config.color || 'var(--primary)';
+    } else {
+        mainBtn.style.background = '';
+        mainBtn.style.boxShadow = '';
+        mainBtn.style.backdropFilter = '';
+        mainBtn.style.webkitBackdropFilter = '';
+        mainIcon.style.color = '';
+        mainBtn.style.borderColor = '';
     }
 });

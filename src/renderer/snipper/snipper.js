@@ -46,7 +46,7 @@ function resizeCanvas() {
     drawCanvas.style.height = h + 'px';
 
     drawCtx.setTransform(1, 0, 0, 1, 0, 0);
-    drawCtx.scale(dpr, dpr);
+    // REMOVED drawCtx.scale(dpr, dpr); to prevent coordinate misalignment with getImageData/putImageData
     drawCtx.lineCap = 'round';
     drawCtx.lineJoin = 'round';
     drawCtx.strokeStyle = drawCtx.fillStyle = '#ff0000';
@@ -64,19 +64,75 @@ if (!window.api) {
     console.log('window.api is available:', Object.keys(window.api));
 }
 
+// Ensure sharp pixel rendering
+ctx.imageSmoothingEnabled = false;
+drawCtx.imageSmoothingEnabled = false;
+
 // --- Capture & Initialize Screen ---
-window.api.onCaptureScreen((dataUrl) => {
+window.api.onCaptureScreen((dataUrl, mode, sourceId) => {
     const dpr = state.dpr;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width / dpr, drawCanvas.height / dpr);
     resetUI();
-    const img = new Image();
-    img.onload = () => {
-        // Draw to fill the scaled canvas
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        setTimeout(() => window.api.notifyReady(), 50);
-    };
-    img.src = dataUrl;
+
+    // Prevent the overlay from inadvertently dimming the captured frame
+    overlay.style.display = 'none';
+
+    // Wait one frame to ensure DOM is updated and overlay is invisible before capturing
+    requestAnimationFrame(async () => {
+        try {
+            // High Quality Lossless capture using exact screen constraints
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    mandatory: {
+                        chromeMediaSource: 'desktop',
+                        chromeMediaSourceId: sourceId,
+                        minWidth: canvas.width,
+                        maxWidth: canvas.width,
+                        minHeight: canvas.height,
+                        maxHeight: canvas.height
+                    }
+                }
+            });
+
+            const video = document.createElement('video');
+            video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
+            video.srcObject = stream;
+
+            video.onloadeddata = () => {
+                video.play();
+
+                const drawAndShow = () => {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    stream.getTracks().forEach(track => track.stop());
+
+                    // Restore overlay now that we have the pristine desktop frame
+                    overlay.style.display = 'block';
+                    document.body.classList.add('ready');
+                    window.api.notifyReady();
+                };
+
+                if ('requestVideoFrameCallback' in video) {
+                    video.requestVideoFrameCallback(drawAndShow);
+                } else {
+                    // Fallback for older Chromium versions
+                    requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
+                }
+            };
+        } catch (err) {
+            console.error('High-quality capture failed, falling back:', err);
+            // Fallback or handle error
+            const img = new Image();
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+                overlay.style.display = 'block';
+                document.body.classList.add('ready');
+                setTimeout(() => window.api.notifyReady(), 50);
+            };
+            img.src = dataUrl;
+        }
+    });
 });
 
 function resetUI() {
@@ -197,12 +253,20 @@ window.addEventListener('mousemove', (e) => {
         selectionBox.style.top = Math.min(e.clientY, state.startY) + 'px';
         updateDimensions(w, h);
     } else if (state.isDrawing) {
+        const dpr = state.dpr;
         drawCtx.save();
-        const cp = new Path2D(); cp.rect(state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h);
+
+        // Scale line width and font size by DPR manually
+        drawCtx.lineWidth = 3 * dpr;
+        drawCtx.font = (20 * dpr) + "px Arial";
+
+        const cp = new Path2D();
+        cp.rect(state.selectionRect.x * dpr, state.selectionRect.y * dpr, state.selectionRect.w * dpr, state.selectionRect.h * dpr);
         drawCtx.clip(cp);
+
         if (state.activeTool === 'pen') {
-            drawCtx.beginPath(); drawCtx.moveTo(state.startX, state.startY);
-            drawCtx.lineTo(e.clientX, e.clientY); drawCtx.stroke();
+            drawCtx.beginPath(); drawCtx.moveTo(state.startX * dpr, state.startY * dpr);
+            drawCtx.lineTo(e.clientX * dpr, e.clientY * dpr); drawCtx.stroke();
             state.startX = e.clientX; state.startY = e.clientY;
         } else if (state.activeTool === 'blur') {
             drawCtx.putImageData(state.savedImageData, 0, 0);
@@ -219,11 +283,11 @@ window.addEventListener('mousemove', (e) => {
                 const s = Math.max(Math.abs(w), Math.abs(h));
                 w = w < 0 ? -s : s; h = h < 0 ? -s : s;
             }
-            if (state.activeTool === 'rect') drawCtx.strokeRect(state.startX, state.startY, w, h);
+            if (state.activeTool === 'rect') drawCtx.strokeRect(state.startX * dpr, state.startY * dpr, w * dpr, h * dpr);
             else if (state.activeTool === 'circle') {
-                drawCtx.beginPath(); drawCtx.ellipse(state.startX + w / 2, state.startY + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, 2 * Math.PI);
+                drawCtx.beginPath(); drawCtx.ellipse((state.startX + w / 2) * dpr, (state.startY + h / 2) * dpr, Math.abs(w / 2) * dpr, Math.abs(h / 2) * dpr, 0, 0, 2 * Math.PI);
                 drawCtx.stroke();
-            } else if (state.activeTool === 'arrow') drawArrow(drawCtx, state.startX, state.startY, e.clientX, e.clientY);
+            } else if (state.activeTool === 'arrow') drawArrow(drawCtx, state.startX * dpr, state.startY * dpr, e.clientX * dpr, e.clientY * dpr, dpr);
         }
         drawCtx.restore();
     }
@@ -265,8 +329,8 @@ function showToolbar(r) {
     toolbar.style.right = rightPos + 'px';
 }
 
-function drawArrow(c, fx, fy, tx, ty) {
-    const hl = 10, a = Math.atan2(ty - fy, tx - fx);
+function drawArrow(c, fx, fy, tx, ty, dpr) {
+    const hl = 10 * dpr, a = Math.atan2(ty - fy, tx - fx);
     c.beginPath(); c.moveTo(fx, fy); c.lineTo(tx, ty);
     c.lineTo(tx - hl * Math.cos(a - Math.PI / 6), ty - hl * Math.sin(a - Math.PI / 6));
     c.moveTo(tx, ty); c.lineTo(tx - hl * Math.cos(a + Math.PI / 6), ty - hl * Math.sin(a + Math.PI / 6));
@@ -411,11 +475,13 @@ textInput.addEventListener('keydown', (e) => {
         e.preventDefault(); const v = textInput.value.trim();
         if (v) {
             saveState();
+            const dpr = state.dpr;
             drawCtx.save();
-            const cp = new Path2D(); cp.rect(state.selectionRect.x, state.selectionRect.y, state.selectionRect.w, state.selectionRect.h);
+            drawCtx.font = (20 * dpr) + "px Arial";
+            const cp = new Path2D(); cp.rect(state.selectionRect.x * dpr, state.selectionRect.y * dpr, state.selectionRect.w * dpr, state.selectionRect.h * dpr);
             drawCtx.clip(cp);
             const ir = textInput.getBoundingClientRect(); let x = ir.left + 10, y = ir.top + 22;
-            v.split('\n').forEach(l => { drawCtx.fillText(l, x, y); y += 24; });
+            v.split('\n').forEach(l => { drawCtx.fillText(l, x * dpr, y * dpr); y += 24; });
             drawCtx.restore();
         }
         textInputContainer.style.display = 'none'; textInput.value = '';

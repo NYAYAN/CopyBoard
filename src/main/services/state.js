@@ -51,6 +51,10 @@ const state = {
         ocr: store.get('globalShortcutOcr', 'Alt+2')
     },
     showWidget: store.get('showWidget', false),
+    widgetTransparent: store.get('widgetTransparent', false),
+    widgetColor: store.get('widgetColor', '#8957e5'),
+    widgetOpacity: store.get('widgetOpacity', 100),
+    widgetScale: store.get('widgetScale', 100),
     lastText: '',
     lastMode: 'draw',
     tempVideoPath: null,

@@ -52,7 +52,11 @@ function registerIpcHandlers() {
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
         globalShortcutOcr: state.shortcuts.ocr,
         autoStart: state.autoStart, videoQuality: state.videoQuality,
-        showWidget: state.showWidget || false
+        showWidget: state.showWidget || false,
+        widgetTransparent: state.widgetTransparent || false,
+        widgetColor: state.widgetColor || '#8957e5',
+        widgetOpacity: state.widgetOpacity !== undefined ? state.widgetOpacity : 100,
+        widgetScale: state.widgetScale !== undefined ? state.widgetScale : 100
     }));
 
     ipcMain.on('set-autostart', (e, v) => { state.autoStart = v; store.set('autoStart', v); });
@@ -61,6 +65,48 @@ function registerIpcHandlers() {
         state.showWidget = v;
         store.set('showWidget', v);
         toggleWidget(v);
+    });
+
+    ipcMain.on('set-widget-transparent', (e, v) => {
+        state.widgetTransparent = v;
+        store.set('widgetTransparent', v);
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.webContents.send('widget-config', {
+                transparent: v, color: state.widgetColor, opacity: state.widgetOpacity
+            });
+        }
+    });
+
+    ipcMain.on('set-widget-color', (e, v) => {
+        state.widgetColor = v;
+        store.set('widgetColor', v);
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.webContents.send('widget-config', {
+                transparent: state.widgetTransparent, color: v, opacity: state.widgetOpacity
+            });
+        }
+    });
+
+    ipcMain.on('set-widget-opacity', (e, v) => {
+        state.widgetOpacity = v;
+        store.set('widgetOpacity', v);
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.webContents.send('widget-config', {
+                transparent: state.widgetTransparent, color: state.widgetColor, opacity: v, scale: state.widgetScale
+            });
+        }
+    });
+
+    ipcMain.on('set-widget-scale', (e, v) => {
+        state.widgetScale = v;
+        store.set('widgetScale', v);
+        const { updateWidgetScale } = require('./window-manager');
+        updateWidgetScale(v);
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.webContents.send('widget-config', {
+                transparent: state.widgetTransparent, color: state.widgetColor, opacity: state.widgetOpacity, scale: v
+            });
+        }
     });
 
     ipcMain.on('set-shortcut', (e, s) => updateShortcut('list', s, 'globalShortcut'));
@@ -195,7 +241,7 @@ function registerIpcHandlers() {
             } catch (err) {
                 showToast('Kopyalama Hatası: ' + err.message, 'error');
             }
-            setTimeout(() => win.close(), 100);
+            setTimeout(() => { if (win && !win.isDestroyed()) win.close(); }, 100);
         }
     });
 

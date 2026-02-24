@@ -38,5 +38,10 @@ export const elements = {
     tabBtns: document.querySelectorAll('.tab-btn'),
     autostartCheck: document.getElementById('autostart-check'),
     widgetCheck: document.getElementById('widget-check'),
+    widgetExtraSettings: document.getElementById('widget-extra-settings'),
+    widgetTransparentCheck: document.getElementById('widget-transparent-check'),
+    widgetColorInput: document.getElementById('widget-color-input'),
+    widgetOpacityInput: document.getElementById('widget-opacity-input'),
+    widgetScaleInput: document.getElementById('widget-scale-input'),
     toastElement: document.getElementById('toast')
 };

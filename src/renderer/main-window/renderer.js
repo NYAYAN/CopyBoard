@@ -15,6 +15,17 @@ import { elements } from './modules/dom.js';
     elements.maxItemsInput.value = settings.maxItems;
     elements.autostartCheck.checked = settings.autoStart;
     elements.widgetCheck.checked = settings.showWidget;
+    elements.widgetTransparentCheck.checked = settings.widgetTransparent;
+    elements.widgetColorInput.value = settings.widgetColor || '#8957e5';
+    elements.widgetOpacityInput.value = settings.widgetOpacity !== undefined ? settings.widgetOpacity : 100;
+    elements.widgetScaleInput.value = settings.widgetScale !== undefined ? settings.widgetScale : 100;
+
+    // Toggle extra settings visibility on load
+    if (settings.showWidget) {
+        elements.widgetExtraSettings.style.display = 'flex';
+    } else {
+        elements.widgetExtraSettings.style.display = 'none';
+    }
 
     // Formatting Helpers for Shortcuts
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;

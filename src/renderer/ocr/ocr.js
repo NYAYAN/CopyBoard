@@ -15,15 +15,62 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // --- Capture & Initialize ---
-window.api.onCaptureScreen((imageDataUrl) => {
+window.api.onCaptureScreen((dataUrl, mode, sourceId) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const img = new Image();
-    img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        setTimeout(() => window.api.notifyReady(), 50);
-    };
-    img.src = imageDataUrl;
     reset();
+
+    overlay.style.display = 'none';
+
+    requestAnimationFrame(async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    mandatory: {
+                        chromeMediaSource: 'desktop',
+                        chromeMediaSourceId: sourceId,
+                        minWidth: canvas.width,
+                        maxWidth: canvas.width,
+                        minHeight: canvas.height,
+                        maxHeight: canvas.height
+                    }
+                }
+            });
+
+            const video = document.createElement('video');
+            video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
+            video.srcObject = stream;
+
+            video.onloadeddata = () => {
+                video.play();
+
+                const drawAndShow = () => {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    stream.getTracks().forEach(track => track.stop());
+
+                    overlay.style.display = 'block';
+                    document.body.classList.add('ready');
+                    window.api.notifyReady();
+                };
+
+                if ('requestVideoFrameCallback' in video) {
+                    video.requestVideoFrameCallback(drawAndShow);
+                } else {
+                    requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
+                }
+            };
+        } catch (err) {
+            console.error('OCR High-quality capture failed:', err);
+            const img = new Image();
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+                overlay.style.display = 'block';
+                document.body.classList.add('ready');
+                setTimeout(() => window.api.notifyReady(), 50);
+            };
+            img.src = dataUrl;
+        }
+    });
 });
 
 function reset() {

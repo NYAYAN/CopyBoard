@@ -177,16 +177,19 @@ function toggleWidget(show) {
 }
 
 function createWidgetWindow() {
-    // widgetPos stores the BUTTON position. widgetSide tracks left/right.
+    // widgetPos stores the unscaled BUTTON logical position. widgetSide tracks left/right.
     state.widgetPos = store.get('widgetPos') || { x: screen.getPrimaryDisplay().workAreaSize.width - 80, y: 100 };
     state.widgetSide = store.get('widgetSide') || 'right';
 
-    const TOTAL_WIDTH = 418; // 350 panel + 68 buttons
+    const s = (state.widgetScale || 100) / 100;
+    const TOTAL_WIDTH = Math.round(418 * s); // 350 panel + 68 buttons scaled
+    const COLLAPSED_HEIGHT = Math.round(68 * s);
+    const panelScaled = Math.round(350 * s);
 
     state.widgetWindow = new BrowserWindow({
         width: TOTAL_WIDTH,
-        height: 68,
-        x: state.widgetSide === 'left' ? state.widgetPos.x : state.widgetPos.x - 350,
+        height: COLLAPSED_HEIGHT,
+        x: state.widgetSide === 'left' ? state.widgetPos.x : state.widgetPos.x - panelScaled,
         y: state.widgetPos.y,
         frame: false,
         transparent: true,
@@ -195,6 +198,7 @@ function createWidgetWindow() {
         resizable: false,
         hasShadow: false,
         backgroundColor: '#00000000',
+        show: false,
         webPreferences: {
             preload: path.join(__dirname, '../../preload/preload.js'),
             nodeIntegration: false,
@@ -206,18 +210,29 @@ function createWidgetWindow() {
     state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
     state.widgetWindow.loadFile(path.join(__dirname, '../../renderer/widget/widget.html'));
 
-    // Notify renderer of the saved side once it has loaded
+    // Notify renderer of the saved side and config once it has loaded
     state.widgetWindow.webContents.on('did-finish-load', () => {
+        state.widgetWindow.webContents.setZoomFactor(s);
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.showInactive();
+        }
         notifySide();
+        state.widgetWindow.webContents.send('widget-config', {
+            transparent: state.widgetTransparent,
+            color: state.widgetColor,
+            opacity: state.widgetOpacity !== undefined ? state.widgetOpacity : 100
+        });
     });
 }
 
 function getWindowX() {
-    // Right side: buttons at right edge → window.x = buttonX - 350
+    const s = (state.widgetScale || 100) / 100;
+    const panelScaled = Math.round(350 * s);
+    // Right side: buttons at right edge → window.x = buttonX - panelScaled
     // Left side:  buttons at left edge → window.x = buttonX
     return state.widgetSide === 'left'
         ? state.widgetPos.x
-        : state.widgetPos.x - 350;
+        : state.widgetPos.x - panelScaled;
 }
 
 function notifySide() {
@@ -229,23 +244,31 @@ function notifySide() {
 function handleWidgetAction(action, data) {
     if (!state.widgetWindow || state.widgetWindow.isDestroyed()) return;
 
+    const s = (state.widgetScale || 100) / 100;
     const winX = getWindowX();
 
+    // Scaled dimensions
+    const FULL_W = Math.round(418 * s);
+    const COL_H = Math.round(68 * s);
+    const EXP_H = Math.round(300 * s);
+    const HIS_H = Math.round(400 * s);
+    const PANEL_W = Math.round(350 * s);
+    const BTN_W = Math.round(68 * s);
+
     if (action === 'expand') {
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 300 });
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: EXP_H });
     } else if (action === 'expand-history') {
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 400 });
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: HIS_H });
     } else if (action === 'collapse-history') {
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 300 });
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: EXP_H });
     } else if (action === 'collapse') {
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: 418, height: 68 });
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: COL_H });
     } else if (action === 'drag') {
         const bounds = state.widgetWindow.getBounds();
         const display = screen.getDisplayMatching(bounds);
-        // Track BUTTON position directly, keep current side stable during drag.
-        // (Flipping side mid-drag causes 350px window jump at the center = freeze)
+        // Track unscaled/logical BUTTON position directly, keep current side stable during drag.
         const currentSide = state.widgetSide || 'right';
-        const currentBtnX = (currentSide === 'left') ? bounds.x : bounds.x + 350;
+        const currentBtnX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
 
         let newBtnX = currentBtnX + data.x;
         let newY = bounds.y + data.y;
@@ -253,45 +276,38 @@ function handleWidgetAction(action, data) {
         // Clamp BUTTON to display bounds
         const db = display.bounds;
         if (newBtnX < db.x + 5) newBtnX = db.x + 5;
-        if (newBtnX > db.x + db.width - 68 - 5) newBtnX = db.x + db.width - 68 - 5;
+        if (newBtnX > db.x + db.width - BTN_W - 5) newBtnX = db.x + db.width - BTN_W - 5;
         if (newY < db.y) newY = db.y;
         if (newY > db.y + db.height - bounds.height) newY = db.y + db.height - bounds.height;
 
         // Window position follows button (may go slightly off-screen at far edges — that's fine)
-        const newWinX = (currentSide === 'left') ? newBtnX : newBtnX - 350;
+        const newWinX = (currentSide === 'left') ? newBtnX : newBtnX - PANEL_W;
 
         state.widgetPos = { x: newBtnX, y: newY };
-        state.widgetWindow.setBounds({ x: newWinX, y: newY, width: 418, height: bounds.height });
+        state.widgetWindow.setBounds({ x: newWinX, y: newY, width: FULL_W, height: bounds.height });
 
     } else if (action === 'drag-end') {
         const bounds = state.widgetWindow.getBounds();
         const display = screen.getDisplayMatching(bounds);
 
-        // Determine which edge the button is closer to
-        const side = state.widgetSide || 'right';
-        const btnScreenX = (side === 'left') ? bounds.x : bounds.x + 350;
-        const distLeft = btnScreenX - display.bounds.x;
-        const distRight = (display.bounds.x + display.bounds.width) - (btnScreenX + 68);
+        // Determine which half of the screen the button is on
+        const currentSide = state.widgetSide || 'right';
+        const btnScreenX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
 
-        let newSide, targetWindowX, targetBtnX;
-        if (distLeft < distRight) {
-            // Snap to left — buttons go to left edge, panel to the right
+        let newSide;
+        if (btnScreenX < display.bounds.x + display.bounds.width / 2) {
             newSide = 'left';
-            targetBtnX = display.bounds.x + 10;
-            targetWindowX = targetBtnX; // window.x = buttonX (panel is to the right)
         } else {
-            // Snap to right — buttons go to right edge, panel to the left
             newSide = 'right';
-            targetBtnX = display.bounds.x + display.bounds.width - 68 - 10;
-            targetWindowX = targetBtnX - 350; // window.x = buttonX - 350 (panel is to the left)
         }
 
         state.widgetSide = newSide;
-        state.widgetPos = { x: targetBtnX, y: bounds.y };
+        state.widgetPos = { x: btnScreenX, y: bounds.y };
         store.set('widgetPos', state.widgetPos);
         store.set('widgetSide', newSide);
 
-        state.widgetWindow.setBounds({ x: targetWindowX, y: bounds.y, width: 418, height: bounds.height });
+        const targetWindowX = (newSide === 'left') ? btnScreenX : btnScreenX - PANEL_W;
+        state.widgetWindow.setBounds({ x: targetWindowX, y: bounds.y, width: FULL_W, height: bounds.height });
         notifySide();
 
     } else if (action === 'open-list') {
@@ -305,11 +321,28 @@ function handleWidgetAction(action, data) {
     }
 }
 
+function updateWidgetScale(scaleValue) {
+    if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+        const s = scaleValue / 100;
+        state.widgetWindow.webContents.setZoomFactor(s);
+
+        // Refresh bounds with new scale by simulating a collapse (or current mode)
+        // Assume collapsed for simplest resizing mapping, wait, better yet,
+        // we can just re-apply current height logic. But since scale can change quickly, collapsing it is safe.
+        const FULL_W = Math.round(418 * s);
+        const COL_H = Math.round(68 * s);
+        const winX = getWindowX();
+
+        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: COL_H });
+    }
+}
+
 module.exports = {
     showMain,
     createMainWindow,
     createCapture,
     showToast,
     toggleWidget,
-    handleWidgetAction
+    handleWidgetAction,
+    updateWidgetScale
 };

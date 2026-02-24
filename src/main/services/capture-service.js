@@ -46,10 +46,12 @@ async function startCapture(mode) {
 
         let sources;
         try {
-            // Reverting to full resolution thumbnailSize to guarantee 100% pixel-perfect lossless quality.
+            // Setting thumbnailSize to 0,0 for max performance.
+            // Renderer will use source.id to grab the lossless 1:1 stream via getUserMedia.
             sources = await desktopCapturer.getSources({
                 types: ['screen'],
-                thumbnailSize: { width: thumbWidth, height: thumbHeight }
+                thumbnailSize: { width: 0, height: 0 },
+                fetchWindowIcons: false
             });
         } catch (sourceErr) {
             throw new Error(`Ekran kaynakları alınamadı: ${sourceErr.message || sourceErr}`);
@@ -58,15 +60,14 @@ async function startCapture(mode) {
         const source = sources.find(s => s.display_id == display.id) || sources[0];
 
         if (source) {
-            // Use native image toDataURL for lossless PNG
-            const dataUrl = source.thumbnail.toDataURL();
             const sourceId = source.id;
 
             state.lastMode = mode;
             const win = createCapture(mode, display);
             win.webContents.on('did-finish-load', () => {
                 if (!win.isDestroyed()) {
-                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality);
+                    // Send an empty dataUrl since we are relying on a stream now
+                    win.webContents.send('capture-screen', '', mode, sourceId, state.videoQuality);
                 }
             });
         } else {

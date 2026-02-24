@@ -115,7 +115,14 @@ export function setupEventListeners() {
 
     // Inputs
     elements.autostartCheck.addEventListener('change', (e) => window.api.setAutoStart(e.target.checked));
-    elements.widgetCheck.addEventListener('change', (e) => window.api.setShowWidget(e.target.checked));
+    elements.widgetCheck.addEventListener('change', (e) => {
+        window.api.setShowWidget(e.target.checked);
+        elements.widgetExtraSettings.style.display = e.target.checked ? 'flex' : 'none';
+    });
+    elements.widgetTransparentCheck.addEventListener('change', (e) => window.api.setWidgetTransparent(e.target.checked));
+    elements.widgetColorInput.addEventListener('input', (e) => window.api.setWidgetColor(e.target.value));
+    elements.widgetOpacityInput.addEventListener('input', (e) => window.api.setWidgetOpacity(e.target.value));
+    elements.widgetScaleInput.addEventListener('input', (e) => window.api.setWidgetScale(e.target.value));
     elements.maxItemsInput.addEventListener('change', (e) => {
         const value = parseInt(e.target.value);
         if (value > 0) window.api.setMaxItems(value);

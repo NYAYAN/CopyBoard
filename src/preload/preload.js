@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld('api', {
     setAutoStart: (val) => ipcRenderer.send('set-autostart', val),
     setVideoQuality: (val) => ipcRenderer.send('set-video-quality', val),
     setShowWidget: (show) => ipcRenderer.send('set-show-widget', show),
+    setWidgetTransparent: (val) => ipcRenderer.send('set-widget-transparent', val),
+    setWidgetColor: (val) => ipcRenderer.send('set-widget-color', val),
+    setWidgetOpacity: (val) => ipcRenderer.send('set-widget-opacity', parseInt(val)),
+    setWidgetScale: (val) => ipcRenderer.send('set-widget-scale', parseInt(val)),
     setIgnoreMouseEvents: (ignore, options) => ipcRenderer.send('set-ignore-mouse-events', ignore, options),
     onUpdateHistory: (callback) => ipcRenderer.on('update-history', (_, value) => callback(value)),
 
@@ -36,6 +40,7 @@ contextBridge.exposeInMainWorld('api', {
     // Widget
     widgetAction: (action, data) => ipcRenderer.send('widget-action', action, data),
     onWidgetSide: (callback) => ipcRenderer.on('widget-side', (_, side) => callback(side)),
+    onWidgetConfig: (callback) => ipcRenderer.on('widget-config', (_, config) => callback(config)),
 
     recordStart: () => ipcRenderer.send('record-start'),
     recordChunk: (buffer) => ipcRenderer.send('record-chunk', buffer),

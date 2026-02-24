@@ -33,6 +33,15 @@ if (!gotTheLock) {
     registerIpcHandlers();
     initAutoUpdater();
 
+    // Check if launched as a hidden auto-start process
+    const isAutoStart = process.argv.includes('--hidden');
+
+    if (!isAutoStart) {
+      setTimeout(() => {
+        showMain();
+      }, 300);
+    }
+
     // Start Clipboard Watcher
     const clipInterval = startClipboardWatcher(clipboard);
 

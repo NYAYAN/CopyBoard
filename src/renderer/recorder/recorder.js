@@ -73,48 +73,8 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
         };
         img.src = dataUrl;
     } else {
-        (async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: false,
-                    video: {
-                        mandatory: {
-                            chromeMediaSource: 'desktop',
-                            chromeMediaSourceId: sourceId
-                        }
-                    }
-                });
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.onloadeddata = () => {
-                    video.play();
-                    const vw = video.videoWidth;
-                    const vh = video.videoHeight;
-                    canvas.width = vw;
-                    canvas.height = vh;
-                    canvas.style.width = logicalW + 'px';
-                    canvas.style.height = logicalH + 'px';
-                    ctx.setTransform(1, 0, 0, 1, 0, 0);
-                    state.scaleX = vw / logicalW;
-                    state.scaleY = vh / logicalH;
-                    state.captureWidth = vw;
-                    state.captureHeight = vh;
-
-                    const drawOnce = () => {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        stream.getTracks().forEach(t => t.stop());
-                        window.api.notifyReady();
-                    };
-                    if ('requestVideoFrameCallback' in video) {
-                        video.requestVideoFrameCallback(drawOnce);
-                    } else {
-                        requestAnimationFrame(() => requestAnimationFrame(drawOnce));
-                    }
-                };
-            } catch (e) {
-                setTimeout(() => window.api.notifyReady(), 50);
-            }
-        })();
+        // Fallback for initial frame if thumbnail fails
+        setTimeout(() => window.api.notifyReady(), 50);
     }
 });
 

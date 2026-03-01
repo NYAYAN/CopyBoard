@@ -43,52 +43,9 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
         };
         img.src = dataUrl;
     } else {
-        requestAnimationFrame(async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: false,
-                    video: {
-                        mandatory: {
-                            chromeMediaSource: 'desktop',
-                            chromeMediaSourceId: sourceId
-                        }
-                    }
-                });
-
-                const video = document.createElement('video');
-                video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
-                video.srcObject = stream;
-
-                video.onloadeddata = () => {
-                    video.play();
-                    const vw = video.videoWidth;
-                    const vh = video.videoHeight;
-                    canvas.width = vw;
-                    canvas.height = vh;
-                    scaleX = vw / logicalW;
-                    scaleY = vh / logicalH;
-
-                    const drawAndShow = () => {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        stream.getTracks().forEach(track => track.stop());
-                        overlay.style.display = 'block';
-                        document.body.classList.add('ready');
-                        window.api.notifyReady();
-                    };
-
-                    if ('requestVideoFrameCallback' in video) {
-                        video.requestVideoFrameCallback(drawAndShow);
-                    } else {
-                        requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
-                    }
-                };
-            } catch (err) {
-                console.error('OCR capture failed:', err);
-                overlay.style.display = 'block';
-                document.body.classList.add('ready');
-                setTimeout(() => window.api.notifyReady(), 50);
-            }
-        });
+        overlay.style.display = 'block';
+        document.body.classList.add('ready');
+        setTimeout(() => window.api.notifyReady(), 50);
     }
 });
 

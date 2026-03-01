@@ -44,8 +44,6 @@ async function startCapture(mode) {
         const captureWidth = Math.round(width * scaleFactor);
         const captureHeight = Math.round(height * scaleFactor);
 
-        console.log(`[Capture] logical=${width}x${height} scaleFactor=${scaleFactor} physical=${captureWidth}x${captureHeight}`);
-
         let sources;
         try {
             // Capture at PHYSICAL pixel resolution — this gives us native quality like Snipping Tool
@@ -63,8 +61,6 @@ async function startCapture(mode) {
         if (source) {
             // Get the pixel-perfect screenshot as PNG data URL
             const thumbnail = source.thumbnail;
-            const thumbSize = thumbnail.getSize();
-            console.log(`[Capture] thumbnail size: ${thumbSize.width}x${thumbSize.height}`);
             const dataUrl = thumbnail.toDataURL();
 
             const sourceId = source.id;

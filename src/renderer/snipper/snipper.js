@@ -135,67 +135,16 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            window.api.sendDebugLog(`[DPI] Used thumbnail: img=${img.width}x${img.height} canvas=${canvas.width}x${canvas.height} scaleX=${state.scaleX}`);
-
             drawOverlay(0, 0, logicalW, logicalH);
             document.body.classList.add('ready');
             window.api.notifyReady();
         };
         img.src = dataUrl;
     } else {
-        // Fallback: getUserMedia stream (for video mode or when no thumbnail available)
-        requestAnimationFrame(async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: false,
-                    video: {
-                        mandatory: {
-                            chromeMediaSource: 'desktop',
-                            chromeMediaSourceId: sourceId
-                        }
-                    }
-                });
-
-                const video = document.createElement('video');
-                video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
-                video.srcObject = stream;
-
-                video.onloadeddata = () => {
-                    video.play();
-
-                    const vw = video.videoWidth;
-                    const vh = video.videoHeight;
-
-                    canvas.width = vw;
-                    canvas.height = vh;
-                    [drawCanvas, overlayCanvas].forEach(c => { c.width = vw; c.height = vh; });
-                    state.scaleX = vw / logicalW;
-                    state.scaleY = vh / logicalH;
-
-                    window.api.sendDebugLog(`[DPI] Used getUserMedia fallback: video=${vw}x${vh} scaleX=${state.scaleX}`);
-
-                    const drawAndShow = () => {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        stream.getTracks().forEach(track => track.stop());
-
-                        drawOverlay(0, 0, logicalW, logicalH);
-                        document.body.classList.add('ready');
-                        window.api.notifyReady();
-                    };
-
-                    if ('requestVideoFrameCallback' in video) {
-                        video.requestVideoFrameCallback(drawAndShow);
-                    } else {
-                        requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
-                    }
-                };
-            } catch (err) {
-                console.error('Capture failed:', err);
-                drawOverlay(0, 0, logicalW, logicalH);
-                document.body.classList.add('ready');
-                setTimeout(() => window.api.notifyReady(), 50);
-            }
-        });
+        // Thumbnail failed and no stream available. This shouldn't happen with our new capture-service.
+        drawOverlay(0, 0, logicalW, logicalH);
+        document.body.classList.add('ready');
+        setTimeout(() => window.api.notifyReady(), 50);
     }
 });
 
@@ -493,8 +442,6 @@ function getFinalImage() {
     const r = state.selectionRect;
     const cw = Math.round(r.w * sx);
     const ch = Math.round(r.h * sy);
-
-    window.api.sendDebugLog(`[Output] CSS selection: ${Math.round(r.w)}x${Math.round(r.h)} → Physical output: ${cw}x${ch} (scaleX=${sx})`);
 
     const tc = document.createElement('canvas');
     tc.width = cw;

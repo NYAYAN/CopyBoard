@@ -238,25 +238,26 @@ function registerIpcHandlers() {
                 const base64 = d.split(',')[1];
                 const buffer = Buffer.from(base64, 'base64');
 
-                // Save PNG to temp file for native clipboard write
-                const tmpPath = path.join(app.getPath('temp'), 'copyboard_snip.png');
-                fs.writeFileSync(tmpPath, buffer);
-
-                // Use .NET to write to clipboard — bypasses Electron's DPI scaling entirely
-                // Electron's clipboard.writeImage always scales by display DPI (e.g., 1093→874 at 125%)
-                const { execSync } = require('child_process');
-                const psCmd = `Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; $bmp = [System.Drawing.Image]::FromFile('${tmpPath.replace(/\\/g, '\\\\')}'); [System.Windows.Forms.Clipboard]::SetImage($bmp); $bmp.Dispose()`;
-                try {
-                    execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 10000, windowsHide: true });
-                    console.log(`[Clipboard] Native clipboard write OK`);
-                } catch (psErr) {
-                    console.log('[Clipboard] PowerShell failed, using Electron fallback:', psErr.message);
-                    const nativeImg = require('electron').nativeImage.createFromDataURL(d);
+                if (process.platform === 'win32') {
+                    // Windows: Use PowerShell + .NET to bypass Electron's DPI scaling entirely
+                    const tmpPath = path.join(app.getPath('temp'), 'copyboard_snip.png');
+                    fs.writeFileSync(tmpPath, buffer);
+                    const { execSync } = require('child_process');
+                    const psCmd = `Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; $bmp = [System.Drawing.Image]::FromFile('${tmpPath.replace(/\\/g, '\\\\')}'); [System.Windows.Forms.Clipboard]::SetImage($bmp); $bmp.Dispose()`;
+                    try {
+                        execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 10000, windowsHide: true });
+                    } catch (psErr) {
+                        console.log('[Clipboard] PowerShell failed, using Electron fallback:', psErr.message);
+                        const nativeImg = require('electron').nativeImage.createFromDataURL(d);
+                        clipboard.writeImage(nativeImg);
+                    }
+                    setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch (e) { } }, 2000);
+                } else {
+                    // macOS / Linux: Use NativeImage with scaleFactor: 1.0
+                    // On macOS, this ensures 1:1 pixel mapping for Retina displays
+                    const nativeImg = require('electron').nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
                     clipboard.writeImage(nativeImg);
                 }
-
-                // Clean up temp file after a delay
-                setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch (e) { } }, 2000);
 
                 showToast('Resim Kopyalandı.', 'success');
             } catch (err) {

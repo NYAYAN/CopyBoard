@@ -210,11 +210,30 @@ body {
     left: 0;
 }
 
+/* Upward Layout (isUp: true gelince) */
+.up-side .widget-container {
+    /* flex-direction: column-reverse;
+    justify-content: flex-end; */
+}
+
+.up-side .widget-menu {
+    /* top: auto;
+    bottom: 70px;
+    transform-origin: bottom center; */
+}
+
+.up-side .history-panel {
+    /* top: auto;
+    bottom: 10px; */
+}
+
+/* ── Base Widget Styles ─────────────────────────────────────────────────── */
 .widget-container {
     position: absolute;
     right: 0;
     top: 0;
     width: 68px;
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -272,6 +291,11 @@ body {
 }
 
 .widget-menu {
+    position: absolute;
+    top: 70px;
+    left: 0;
+    right: 0;
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;

@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('api', {
     // Widget
     widgetAction: (action, data) => ipcRenderer.send('widget-action', action, data),
     onWidgetSide: (callback) => ipcRenderer.on('widget-side', (_, side) => callback(side)),
+    onWidgetDirection: (callback) => ipcRenderer.on('widget-direction', (_, isUp) => callback(isUp)),
     onWidgetConfig: (callback) => ipcRenderer.on('widget-config', (_, config) => callback(config)),
 
     recordStart: () => ipcRenderer.send('record-start'),

@@ -403,6 +403,15 @@ window.api.onWidgetSide((side) => {
     }
 });
 
+// isUp (true/false) değerine göre sınıf ekle
+window.api.onWidgetDirection((isUp) => {
+    if (isUp) {
+        document.body.classList.add('up-side');
+    } else {
+        document.body.classList.remove('up-side');
+    }
+});
+
 // Update widget appearance
 window.api.onWidgetConfig((config) => {
     if (config.color) {

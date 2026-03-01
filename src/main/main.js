@@ -6,6 +6,13 @@ const { registerIpcHandlers } = require('./services/ipc-handlers');
 const { initAutoUpdater } = require('./services/update-manager');
 const { startClipboardWatcher } = require('./services/history-manager');
 
+// Hot Reload (Sadece geliştirme modunda çalışır)
+if (!app.isPackaged) {
+  try {
+    require('electron-reloader')(module);
+  } catch (_) { }
+}
+
 // --- Single Instance Lock ---
 const gotTheLock = app.requestSingleInstanceLock();
 

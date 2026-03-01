@@ -255,6 +255,16 @@ function handleWidgetAction(action, data) {
     const PANEL_W = Math.round(350 * s);
     const BTN_W = Math.round(68 * s);
 
+    // Yön Hesaplama (Sadece Log için)
+    const display = screen.getDisplayNearestPoint(state.widgetPos);
+    const db = display.workArea;
+    const spaceBelow = (db.y + db.height) - state.widgetPos.y;
+    const isUp = spaceBelow < HIS_H; // HIS_H: Geçmiş panelinin (en büyük panel) yüksekliği
+
+    // if (isUp) console.log('>>> [LOG] WIDGET ALTA YAKLAŞTI (YER DAR!) <<<');
+    // console.log(`[Widget Debug] Action: ${action}, Y: ${state.widgetPos.y}, Kalan Boşluk: ${spaceBelow}px, Gereken: ${HIS_H}px, Yukarı mı?: ${isUp}`);
+    state.widgetWindow.webContents.send('widget-direction', isUp);
+
     if (action === 'expand') {
         state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: EXP_H });
     } else if (action === 'expand-history') {

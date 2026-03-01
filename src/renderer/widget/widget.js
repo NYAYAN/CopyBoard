@@ -21,6 +21,7 @@ let activeTab = 'history'; // 'history' | 'favorites'
 let allHistoryItems = [];
 let allFavoriteItems = [];
 let currentOpacity = 1;
+let lastDragEndTime = 0;
 
 // Opacity event listeners for main button
 mainBtn.addEventListener('mouseenter', () => {
@@ -45,15 +46,18 @@ updateMouseEvents();
 
 // Use mousemove (not mouseenter/leave) so setIgnoreMouseEvents(true,{forward})
 // forwarded events still trigger detection even when mouse was already over button.
-const widgetContainer = document.querySelector('.widget-container');
 document.addEventListener('mousemove', (e) => {
     if (isOpen || isHistoryOpen || isDragging || isPointerDown) {
         window.api.setIgnoreMouseEvents(false);
         return;
     }
-    const rect = widgetContainer.getBoundingClientRect();
-    const over = e.clientX >= rect.left && e.clientX <= rect.right
-        && e.clientY >= rect.top && e.clientY <= rect.bottom;
+
+    // Butonun konumunu al ve hit-detection için tolerans (margin) ekle
+    const rect = mainBtn.getBoundingClientRect();
+    const margin = 10;
+    const over = e.clientX >= rect.left - margin && e.clientX <= rect.right + margin
+        && e.clientY >= rect.top - margin && e.clientY <= rect.bottom + margin;
+
     if (over) {
         window.api.setIgnoreMouseEvents(false);
     } else {
@@ -249,7 +253,7 @@ tabFavorites.addEventListener('click', () => {
 
 // --- Menu Toggle ---
 mainBtn.addEventListener('click', () => {
-    if (isDragging) return;
+    if (isDragging || (Date.now() - lastDragEndTime < 200)) return;
     if (collapseTimeout) { clearTimeout(collapseTimeout); collapseTimeout = null; }
 
     isOpen = !isOpen;
@@ -341,6 +345,7 @@ mainBtn.addEventListener('pointerdown', (e) => {
                 window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY });
             }
             window.api.widgetAction('drag-end');
+            lastDragEndTime = Date.now();
             isDragging = false;
         }
         updateMouseEvents();

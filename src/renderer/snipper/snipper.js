@@ -1,20 +1,24 @@
 const canvas = document.getElementById('screen-canvas');
 const ctx = canvas.getContext('2d');
+const overlayCanvas = document.getElementById('overlay-canvas');
+const overlayCtx = overlayCanvas.getContext('2d');
 const drawCanvas = document.getElementById('draw-canvas');
 const drawCtx = drawCanvas.getContext('2d');
 const selectionBox = document.getElementById('selection-box');
 const toolbar = document.getElementById('toolbar');
-const overlay = document.getElementById('overlay');
 const textInputContainer = document.getElementById('text-input-container');
 const textInput = document.getElementById('text-input');
 const textDragHandle = document.getElementById('text-drag-handle');
+
 
 const state = {
     isSelecting: false, isDrawing: false, isMoving: false, isResizing: false, isDraggingText: false,
     activeHandle: null, resizeStartRect: null, selectionRect: null, activeTool: null,
     startX: 0, startY: 0, dragOffX: 0, dragOffY: 0, savedImageData: null,
     history: [],
-    dpr: window.devicePixelRatio || 1
+    dpr: window.devicePixelRatio || 1,
+    scaleX: null,
+    scaleY: null
 };
 
 function saveState() {
@@ -34,25 +38,50 @@ function resizeCanvas() {
     const h = window.innerHeight;
     const dpr = window.devicePixelRatio || 1;
     state.dpr = dpr;
+    if (state.scaleX == null) state.scaleX = dpr;
+    if (state.scaleY == null) state.scaleY = dpr;
 
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-
-    drawCanvas.width = w * dpr;
-    drawCanvas.height = h * dpr;
-    drawCanvas.style.width = w + 'px';
-    drawCanvas.style.height = h + 'px';
+    [canvas, drawCanvas, overlayCanvas].forEach(c => {
+        c.width = w * dpr;
+        c.height = h * dpr;
+        c.style.width = w + 'px';
+        c.style.height = h + 'px';
+    });
 
     drawCtx.setTransform(1, 0, 0, 1, 0, 0);
-    // REMOVED drawCtx.scale(dpr, dpr); to prevent coordinate misalignment with getImageData/putImageData
     drawCtx.lineCap = 'round';
     drawCtx.lineJoin = 'round';
     drawCtx.strokeStyle = drawCtx.fillStyle = '#ff0000';
     drawCtx.lineWidth = 3;
     drawCtx.font = "20px Arial";
 }
+
+// Draw the dimming overlay with a clear "hole" for the selection area
+function drawOverlay(selX, selY, selW, selH) {
+    const sx = state.scaleX != null ? state.scaleX : state.dpr;
+    const sy = state.scaleY != null ? state.scaleY : state.dpr;
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    overlayCtx.save();
+    // Fill entire canvas with semi-transparent black
+    overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    // Cut out the selection area using destination-out composite
+    overlayCtx.globalCompositeOperation = 'destination-out';
+    overlayCtx.fillStyle = 'rgba(0,0,0,1)';
+    overlayCtx.fillRect(selX * sx, selY * sy, selW * sx, selH * sy);
+    overlayCtx.restore();
+    // Draw white border around selection
+    overlayCtx.save();
+    overlayCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+    overlayCtx.lineWidth = Math.max(1, 2 * sx);
+    overlayCtx.strokeRect(selX * sx, selY * sy, selW * sx, selH * sy);
+    overlayCtx.restore();
+}
+
+function clearOverlay() {
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+}
+
 
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
@@ -69,70 +98,105 @@ ctx.imageSmoothingEnabled = false;
 drawCtx.imageSmoothingEnabled = false;
 
 // --- Capture & Initialize Screen ---
-window.api.onCaptureScreen((dataUrl, mode, sourceId) => {
-    const dpr = state.dpr;
+window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
+    const logicalW = window.innerWidth;
+    const logicalH = window.innerHeight;
+
+    // captureWidth/Height are physical pixel dimensions from main process
+    const physW = captureWidth || logicalW;
+    const physH = captureHeight || logicalH;
+
+    // Set all canvases to physical pixel resolution
+    canvas.width = physW;
+    canvas.height = physH;
+    canvas.style.width = logicalW + 'px';
+    canvas.style.height = logicalH + 'px';
+    [drawCanvas, overlayCanvas].forEach(c => {
+        c.width = physW;
+        c.height = physH;
+        c.style.width = logicalW + 'px';
+        c.style.height = logicalH + 'px';
+    });
+
+    state.scaleX = physW / logicalW;
+    state.scaleY = physH / logicalH;
+    state.dpr = window.devicePixelRatio || 1;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawCtx.clearRect(0, 0, drawCanvas.width / dpr, drawCanvas.height / dpr);
+    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    clearOverlay();
     resetUI();
 
-    // Prevent the overlay from inadvertently dimming the captured frame
-    overlay.style.display = 'none';
+    // Use the high-res PNG screenshot from main process (desktopCapturer thumbnail)
+    if (dataUrl && dataUrl.length > 100) {
+        const img = new Image();
+        img.onload = () => {
+            // Draw at native resolution — pixel-perfect like Snipping Tool
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    // Wait one frame to ensure DOM is updated and overlay is invisible before capturing
-    requestAnimationFrame(async () => {
-        try {
-            // High Quality Lossless capture using exact screen constraints
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: false,
-                video: {
-                    mandatory: {
-                        chromeMediaSource: 'desktop',
-                        chromeMediaSourceId: sourceId,
-                        minWidth: canvas.width,
-                        maxWidth: canvas.width,
-                        minHeight: canvas.height,
-                        maxHeight: canvas.height
+            window.api.sendDebugLog(`[DPI] Used thumbnail: img=${img.width}x${img.height} canvas=${canvas.width}x${canvas.height} scaleX=${state.scaleX}`);
+
+            drawOverlay(0, 0, logicalW, logicalH);
+            document.body.classList.add('ready');
+            window.api.notifyReady();
+        };
+        img.src = dataUrl;
+    } else {
+        // Fallback: getUserMedia stream (for video mode or when no thumbnail available)
+        requestAnimationFrame(async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        mandatory: {
+                            chromeMediaSource: 'desktop',
+                            chromeMediaSourceId: sourceId
+                        }
                     }
-                }
-            });
+                });
 
-            const video = document.createElement('video');
-            video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
-            video.srcObject = stream;
+                const video = document.createElement('video');
+                video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
+                video.srcObject = stream;
 
-            video.onloadeddata = () => {
-                video.play();
+                video.onloadeddata = () => {
+                    video.play();
 
-                const drawAndShow = () => {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    stream.getTracks().forEach(track => track.stop());
+                    const vw = video.videoWidth;
+                    const vh = video.videoHeight;
 
-                    // Restore overlay now that we have the pristine desktop frame
-                    overlay.style.display = 'block';
-                    document.body.classList.add('ready');
-                    window.api.notifyReady();
+                    canvas.width = vw;
+                    canvas.height = vh;
+                    [drawCanvas, overlayCanvas].forEach(c => { c.width = vw; c.height = vh; });
+                    state.scaleX = vw / logicalW;
+                    state.scaleY = vh / logicalH;
+
+                    window.api.sendDebugLog(`[DPI] Used getUserMedia fallback: video=${vw}x${vh} scaleX=${state.scaleX}`);
+
+                    const drawAndShow = () => {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        stream.getTracks().forEach(track => track.stop());
+
+                        drawOverlay(0, 0, logicalW, logicalH);
+                        document.body.classList.add('ready');
+                        window.api.notifyReady();
+                    };
+
+                    if ('requestVideoFrameCallback' in video) {
+                        video.requestVideoFrameCallback(drawAndShow);
+                    } else {
+                        requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
+                    }
                 };
-
-                if ('requestVideoFrameCallback' in video) {
-                    video.requestVideoFrameCallback(drawAndShow);
-                } else {
-                    // Fallback for older Chromium versions
-                    requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
-                }
-            };
-        } catch (err) {
-            console.error('High-quality capture failed, falling back:', err);
-            // Fallback or handle error
-            const img = new Image();
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
-                overlay.style.display = 'block';
+            } catch (err) {
+                console.error('Capture failed:', err);
+                drawOverlay(0, 0, logicalW, logicalH);
                 document.body.classList.add('ready');
                 setTimeout(() => window.api.notifyReady(), 50);
-            };
-            img.src = dataUrl;
-        }
-    });
+            }
+        });
+    }
 });
 
 function resetUI() {
@@ -140,14 +204,15 @@ function resetUI() {
         isSelecting: false, isDrawing: false, isMoving: false, isResizing: false,
         isDraggingText: false, selectionRect: null, activeTool: null, history: []
     });
-    const dpr = state.dpr;
-    drawCtx.clearRect(0, 0, drawCanvas.width / dpr, drawCanvas.height / dpr);
+    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
     selectionBox.style.display = toolbar.style.display = textInputContainer.style.display = 'none';
     selectionBox.classList.add('hidden');
-    overlay.style.display = 'block';
+    // Show full-screen dim when no selection is active
+    drawOverlay(0, 0, window.innerWidth, window.innerHeight);
     document.body.classList.remove('drawing', 'selecting');
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
 }
+
 
 const dimensionsLabel = document.getElementById('dimensions-label');
 
@@ -191,7 +256,9 @@ window.addEventListener('mousedown', (e) => {
 
             saveState();
             state.isDrawing = true; state.startX = e.clientX; state.startY = e.clientY;
-            if (state.activeTool === 'pen') { drawCtx.beginPath(); drawCtx.moveTo(state.startX, state.startY); }
+            const sx = state.scaleX != null ? state.scaleX : state.dpr;
+            const sy = state.scaleY != null ? state.scaleY : state.dpr;
+            if (state.activeTool === 'pen') { drawCtx.beginPath(); drawCtx.moveTo(state.startX * sx, state.startY * sy); }
             else state.savedImageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
             return;
         }
@@ -206,7 +273,7 @@ window.addEventListener('mousedown', (e) => {
     if (!state.activeTool) {
         resetUI(); state.isSelecting = true;
         document.body.classList.add('selecting');
-        overlay.style.display = 'none';
+        // overlay-canvas will update in real-time via drawOverlay() in mousemove
         state.startX = e.clientX; state.startY = e.clientY;
         selectionBox.style.width = selectionBox.style.height = '0px';
         selectionBox.style.left = state.startX + 'px'; selectionBox.style.top = state.startY + 'px';
@@ -241,32 +308,40 @@ window.addEventListener('mousemove', (e) => {
         selectionBox.style.width = width + 'px'; selectionBox.style.height = height + 'px';
         selectionBox.style.left = left + 'px'; selectionBox.style.top = top + 'px';
         updateDimensions(width, height);
+        drawOverlay(left, top, width, height);
     } else if (state.isMoving) {
-        selectionBox.style.left = Math.max(0, Math.min(e.clientX - state.dragOffX, window.innerWidth - selectionBox.offsetWidth)) + 'px';
-        selectionBox.style.top = Math.max(0, Math.min(e.clientY - state.dragOffY, window.innerHeight - selectionBox.offsetHeight)) + 'px';
+        const nx = Math.max(0, Math.min(e.clientX - state.dragOffX, window.innerWidth - selectionBox.offsetWidth));
+        const ny = Math.max(0, Math.min(e.clientY - state.dragOffY, window.innerHeight - selectionBox.offsetHeight));
+        selectionBox.style.left = nx + 'px';
+        selectionBox.style.top = ny + 'px';
+        drawOverlay(nx, ny, selectionBox.offsetWidth, selectionBox.offsetHeight);
     } else if (state.isSelecting) {
         const w = Math.abs(e.clientX - state.startX);
         const h = Math.abs(e.clientY - state.startY);
+        const x = Math.min(e.clientX, state.startX);
+        const y = Math.min(e.clientY, state.startY);
         selectionBox.style.width = w + 'px';
         selectionBox.style.height = h + 'px';
-        selectionBox.style.left = Math.min(e.clientX, state.startX) + 'px';
-        selectionBox.style.top = Math.min(e.clientY, state.startY) + 'px';
+        selectionBox.style.left = x + 'px';
+        selectionBox.style.top = y + 'px';
         updateDimensions(w, h);
+        drawOverlay(x, y, w, h);
     } else if (state.isDrawing) {
-        const dpr = state.dpr;
+        const sx = state.scaleX != null ? state.scaleX : state.dpr;
+        const sy = state.scaleY != null ? state.scaleY : state.dpr;
+        const scale = (sx + sy) / 2;
         drawCtx.save();
 
-        // Scale line width and font size by DPR manually
-        drawCtx.lineWidth = 3 * dpr;
-        drawCtx.font = (20 * dpr) + "px Arial";
+        drawCtx.lineWidth = 3 * scale;
+        drawCtx.font = (20 * scale) + "px Arial";
 
         const cp = new Path2D();
-        cp.rect(state.selectionRect.x * dpr, state.selectionRect.y * dpr, state.selectionRect.w * dpr, state.selectionRect.h * dpr);
+        cp.rect(state.selectionRect.x * sx, state.selectionRect.y * sy, state.selectionRect.w * sx, state.selectionRect.h * sy);
         drawCtx.clip(cp);
 
         if (state.activeTool === 'pen') {
-            drawCtx.beginPath(); drawCtx.moveTo(state.startX * dpr, state.startY * dpr);
-            drawCtx.lineTo(e.clientX * dpr, e.clientY * dpr); drawCtx.stroke();
+            drawCtx.beginPath(); drawCtx.moveTo(state.startX * sx, state.startY * sy);
+            drawCtx.lineTo(e.clientX * sx, e.clientY * sy); drawCtx.stroke();
             state.startX = e.clientX; state.startY = e.clientY;
         } else if (state.activeTool === 'blur') {
             drawCtx.putImageData(state.savedImageData, 0, 0);
@@ -283,11 +358,11 @@ window.addEventListener('mousemove', (e) => {
                 const s = Math.max(Math.abs(w), Math.abs(h));
                 w = w < 0 ? -s : s; h = h < 0 ? -s : s;
             }
-            if (state.activeTool === 'rect') drawCtx.strokeRect(state.startX * dpr, state.startY * dpr, w * dpr, h * dpr);
+            if (state.activeTool === 'rect') drawCtx.strokeRect(state.startX * sx, state.startY * sy, w * sx, h * sy);
             else if (state.activeTool === 'circle') {
-                drawCtx.beginPath(); drawCtx.ellipse((state.startX + w / 2) * dpr, (state.startY + h / 2) * dpr, Math.abs(w / 2) * dpr, Math.abs(h / 2) * dpr, 0, 0, 2 * Math.PI);
+                drawCtx.beginPath(); drawCtx.ellipse((state.startX + w / 2) * sx, (state.startY + h / 2) * sy, Math.abs(w / 2) * sx, Math.abs(h / 2) * sy, 0, 0, 2 * Math.PI);
                 drawCtx.stroke();
-            } else if (state.activeTool === 'arrow') drawArrow(drawCtx, state.startX * dpr, state.startY * dpr, e.clientX * dpr, e.clientY * dpr, dpr);
+            } else if (state.activeTool === 'arrow') drawArrow(drawCtx, state.startX * sx, state.startY * sy, e.clientX * sx, e.clientY * sy, scale);
         }
         drawCtx.restore();
     }
@@ -329,8 +404,8 @@ function showToolbar(r) {
     toolbar.style.right = rightPos + 'px';
 }
 
-function drawArrow(c, fx, fy, tx, ty, dpr) {
-    const hl = 10 * dpr, a = Math.atan2(ty - fy, tx - fx);
+function drawArrow(c, fx, fy, tx, ty, scale) {
+    const hl = 10 * scale, a = Math.atan2(ty - fy, tx - fx);
     c.beginPath(); c.moveTo(fx, fy); c.lineTo(tx, ty);
     c.lineTo(tx - hl * Math.cos(a - Math.PI / 6), ty - hl * Math.sin(a - Math.PI / 6));
     c.moveTo(tx, ty); c.lineTo(tx - hl * Math.cos(a + Math.PI / 6), ty - hl * Math.sin(a + Math.PI / 6));
@@ -338,24 +413,24 @@ function drawArrow(c, fx, fy, tx, ty, dpr) {
 }
 
 function applyBlur(x, y, w, h) {
-    const dpr = state.dpr;
-    // Create a temporary canvas to merge both layers at physical resolution
+    const sx = state.scaleX != null ? state.scaleX : state.dpr;
+    const sy = state.scaleY != null ? state.scaleY : state.dpr;
+    const cw = Math.round(w * sx);
+    const ch = Math.round(h * sy);
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = w * dpr;
-    tempCanvas.height = h * dpr;
+    tempCanvas.width = cw;
+    tempCanvas.height = ch;
     const tempCtx = tempCanvas.getContext('2d');
 
-    // Draw screen canvas first
-    tempCtx.drawImage(canvas, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, w * dpr, h * dpr);
-    // Draw drawing canvas on top
-    tempCtx.drawImage(drawCanvas, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, w * dpr, h * dpr);
+    tempCtx.drawImage(canvas, x * sx, y * sy, w * sx, h * sy, 0, 0, cw, ch);
+    tempCtx.drawImage(drawCanvas, x * sx, y * sy, w * sx, h * sy, 0, 0, cw, ch);
 
-    // Get merged image data
-    const imageData = tempCtx.getImageData(0, 0, w * dpr, h * dpr);
-    const pixelSize = Math.max(2, Math.floor(10 * dpr)); // Blur intensity adjusted for DPI
+    const imageData = tempCtx.getImageData(0, 0, cw, ch);
+    const scale = (sx + sy) / 2;
+    const pixelSize = Math.max(2, Math.floor(10 * scale));
 
-    const bw = w * dpr;
-    const bh = h * dpr;
+    const bw = cw;
+    const bh = ch;
 
     // Apply pixelation effect
     for (let py = 0; py < bh; py += pixelSize) {
@@ -392,14 +467,12 @@ function applyBlur(x, y, w, h) {
         }
     }
 
-    // Draw blurred result to drawing canvas
-    // We need to disable the scale temporarily or account for it
     drawCtx.save();
-    drawCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset to physical pixels
-    const tempImg = document.createElement('canvas'); // Reuse or create
+    drawCtx.setTransform(1, 0, 0, 1, 0, 0);
+    const tempImg = document.createElement('canvas');
     tempImg.width = bw; tempImg.height = bh;
     tempImg.getContext('2d').putImageData(imageData, 0, 0);
-    drawCtx.drawImage(tempImg, x * dpr, y * dpr);
+    drawCtx.drawImage(tempImg, x * sx, y * sy);
     drawCtx.restore();
 }
 
@@ -415,17 +488,22 @@ document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', 
 
 function getFinalImage() {
     if (!state.selectionRect) return null;
-    const dpr = state.dpr;
+    const sx = state.scaleX != null ? state.scaleX : state.dpr;
+    const sy = state.scaleY != null ? state.scaleY : state.dpr;
     const r = state.selectionRect;
+    const cw = Math.round(r.w * sx);
+    const ch = Math.round(r.h * sy);
+
+    window.api.sendDebugLog(`[Output] CSS selection: ${Math.round(r.w)}x${Math.round(r.h)} → Physical output: ${cw}x${ch} (scaleX=${sx})`);
+
     const tc = document.createElement('canvas');
-    tc.width = r.w * dpr;
-    tc.height = r.h * dpr;
+    tc.width = cw;
+    tc.height = ch;
     const tctx = tc.getContext('2d');
 
-    tctx.drawImage(canvas, r.x * dpr, r.y * dpr, r.w * dpr, r.h * dpr, 0, 0, r.w * dpr, r.h * dpr);
-    tctx.drawImage(drawCanvas, r.x * dpr, r.y * dpr, r.w * dpr, r.h * dpr, 0, 0, r.w * dpr, r.h * dpr);
+    tctx.drawImage(canvas, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, cw, ch);
+    tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, cw, ch);
 
-    // PNG for lossless quality, or JPEG 1.0
     return tc.toDataURL('image/png');
 }
 
@@ -475,13 +553,15 @@ textInput.addEventListener('keydown', (e) => {
         e.preventDefault(); const v = textInput.value.trim();
         if (v) {
             saveState();
-            const dpr = state.dpr;
+            const sx = state.scaleX != null ? state.scaleX : state.dpr;
+            const sy = state.scaleY != null ? state.scaleY : state.dpr;
+            const scale = (sx + sy) / 2;
             drawCtx.save();
-            drawCtx.font = (20 * dpr) + "px Arial";
-            const cp = new Path2D(); cp.rect(state.selectionRect.x * dpr, state.selectionRect.y * dpr, state.selectionRect.w * dpr, state.selectionRect.h * dpr);
+            drawCtx.font = (20 * scale) + "px Arial";
+            const cp = new Path2D(); cp.rect(state.selectionRect.x * sx, state.selectionRect.y * sy, state.selectionRect.w * sx, state.selectionRect.h * sy);
             drawCtx.clip(cp);
             const ir = textInput.getBoundingClientRect(); let x = ir.left + 10, y = ir.top + 22;
-            v.split('\n').forEach(l => { drawCtx.fillText(l, x * dpr, y * dpr); y += 24; });
+            v.split('\n').forEach(l => { drawCtx.fillText(l, x * sx, y * sy); y += 24; });
             drawCtx.restore();
         }
         textInputContainer.style.display = 'none'; textInput.value = '';

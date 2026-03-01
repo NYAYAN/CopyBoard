@@ -30,7 +30,13 @@
       "target": "nsis",
       "icon": "icon.png",
       "verifyUpdateCodeSignature": false,
-      "forceCodeSigning": false
+      "forceCodeSigning": false,
+      "extraFiles": [
+        {
+          "from": "win-manifest/CopyBoard.exe.manifest",
+          "to": "."
+        }
+      ]
     },
     "mac": {
       "target": [

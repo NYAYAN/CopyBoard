@@ -40,17 +40,18 @@ async function startCapture(mode) {
         const { width, height } = display.bounds;
         const scaleFactor = display.scaleFactor || 1;
 
-        // Ensure integer dimensions and account for scale factor for high DPI
-        const thumbWidth = Math.ceil(width * scaleFactor);
-        const thumbHeight = Math.ceil(height * scaleFactor);
+        // Physical pixel dimensions — this is what Snipping Tool uses
+        const captureWidth = Math.round(width * scaleFactor);
+        const captureHeight = Math.round(height * scaleFactor);
+
+        console.log(`[Capture] logical=${width}x${height} scaleFactor=${scaleFactor} physical=${captureWidth}x${captureHeight}`);
 
         let sources;
         try {
-            // Setting thumbnailSize to 0,0 for max performance.
-            // Renderer will use source.id to grab the lossless 1:1 stream via getUserMedia.
+            // Capture at PHYSICAL pixel resolution — this gives us native quality like Snipping Tool
             sources = await desktopCapturer.getSources({
                 types: ['screen'],
-                thumbnailSize: { width: 0, height: 0 },
+                thumbnailSize: { width: captureWidth, height: captureHeight },
                 fetchWindowIcons: false
             });
         } catch (sourceErr) {
@@ -60,14 +61,20 @@ async function startCapture(mode) {
         const source = sources.find(s => s.display_id == display.id) || sources[0];
 
         if (source) {
+            // Get the pixel-perfect screenshot as PNG data URL
+            const thumbnail = source.thumbnail;
+            const thumbSize = thumbnail.getSize();
+            console.log(`[Capture] thumbnail size: ${thumbSize.width}x${thumbSize.height}`);
+            const dataUrl = thumbnail.toDataURL();
+
             const sourceId = source.id;
 
             state.lastMode = mode;
             const win = createCapture(mode, display);
             win.webContents.on('did-finish-load', () => {
                 if (!win.isDestroyed()) {
-                    // Send an empty dataUrl since we are relying on a stream now
-                    win.webContents.send('capture-screen', '', mode, sourceId, state.videoQuality);
+                    // Send the high-res screenshot data URL + sourceId (for video mode getUserMedia)
+                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality, captureWidth, captureHeight);
                 }
             });
         } else {

@@ -18,7 +18,11 @@ const state = {
     startX: 0, startY: 0, dragOffX: 0, dragOffY: 0,
     mediaRecorder: null, recordedChunks: [], startTime: 0, timerInterval: null,
     sourceId: null, isRecording: false, videoQuality: 'high', lastIgnoreState: null,
-    dpr: window.devicePixelRatio || 1
+    dpr: window.devicePixelRatio || 1,
+    captureWidth: null,
+    captureHeight: null,
+    scaleX: null,
+    scaleY: null
 };
 
 function resizeCanvas() {
@@ -37,18 +41,81 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-window.api.onCaptureScreen((dataUrl, mode, sourceId, quality) => {
+window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
     state.sourceId = sourceId;
     state.videoQuality = quality || 'high';
     if (qualitySelect) qualitySelect.value = state.videoQuality;
-    const dpr = state.dpr;
-    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-    const img = new Image();
-    img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width / dpr, canvas.height / dpr);
-        setTimeout(() => window.api.notifyReady(), 50);
-    };
-    img.src = dataUrl;
+
+    const logicalW = window.innerWidth;
+    const logicalH = window.innerHeight;
+    const physW = captureWidth || logicalW;
+    const physH = captureHeight || logicalH;
+
+    state.captureWidth = physW;
+    state.captureHeight = physH;
+    state.scaleX = physW / logicalW;
+    state.scaleY = physH / logicalH;
+
+    canvas.width = physW;
+    canvas.height = physH;
+    canvas.style.width = logicalW + 'px';
+    canvas.style.height = logicalH + 'px';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Use thumbnail for initial preview frame
+    if (dataUrl && dataUrl.length > 100) {
+        const img = new Image();
+        img.onload = () => {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            window.api.notifyReady();
+        };
+        img.src = dataUrl;
+    } else {
+        (async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        mandatory: {
+                            chromeMediaSource: 'desktop',
+                            chromeMediaSourceId: sourceId
+                        }
+                    }
+                });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.onloadeddata = () => {
+                    video.play();
+                    const vw = video.videoWidth;
+                    const vh = video.videoHeight;
+                    canvas.width = vw;
+                    canvas.height = vh;
+                    canvas.style.width = logicalW + 'px';
+                    canvas.style.height = logicalH + 'px';
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    state.scaleX = vw / logicalW;
+                    state.scaleY = vh / logicalH;
+                    state.captureWidth = vw;
+                    state.captureHeight = vh;
+
+                    const drawOnce = () => {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        stream.getTracks().forEach(t => t.stop());
+                        window.api.notifyReady();
+                    };
+                    if ('requestVideoFrameCallback' in video) {
+                        video.requestVideoFrameCallback(drawOnce);
+                    } else {
+                        requestAnimationFrame(() => requestAnimationFrame(drawOnce));
+                    }
+                };
+            } catch (e) {
+                setTimeout(() => window.api.notifyReady(), 50);
+            }
+        })();
+    }
 });
 
 const dimensionsLabel = document.getElementById('dimensions-label');
@@ -170,19 +237,21 @@ btnClose.addEventListener('click', () => {
 async function startRecording() {
     if (!state.selectionRect || !state.sourceId) return;
     try {
-        const dpr = state.dpr;
-        // High DPI: Use physical resolution for better quality
-        const videoWidth = Math.floor(window.innerWidth * dpr);
-        const videoHeight = Math.floor(window.innerHeight * dpr);
+        const sx = state.scaleX != null ? state.scaleX : state.dpr;
+        const sy = state.scaleY != null ? state.scaleY : state.dpr;
+        const videoWidth = state.captureWidth != null ? state.captureWidth : Math.floor(window.innerWidth * state.dpr);
+        const videoHeight = state.captureHeight != null ? state.captureHeight : Math.floor(window.innerHeight * state.dpr);
 
-        // Remove artificial dimensions constraints. Chrome will fetch exactly what the desktop outputs.
-        // Forcing constraints can sometimes trigger a downscaler.
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
             video: {
                 mandatory: {
                     chromeMediaSource: 'desktop',
-                    chromeMediaSourceId: state.sourceId
+                    chromeMediaSourceId: state.sourceId,
+                    minWidth: videoWidth,
+                    maxWidth: videoWidth,
+                    minHeight: videoHeight,
+                    maxHeight: videoHeight
                 }
             }
         });
@@ -191,26 +260,21 @@ async function startRecording() {
         video.srcObject = stream;
         video.play();
 
+        const cropW = Math.floor(state.selectionRect.w * sx);
+        const cropH = Math.floor(state.selectionRect.h * sy);
         const cropCanvas = document.createElement('canvas');
-        // Crop dimensions also need to be physical pixels
-        cropCanvas.width = Math.floor(state.selectionRect.w * dpr);
-        cropCanvas.height = Math.floor(state.selectionRect.h * dpr);
+        cropCanvas.width = cropW;
+        cropCanvas.height = cropH;
         const cropCtx = cropCanvas.getContext('2d');
 
-        // Critical for crisp text on High-DPI screens
         cropCtx.imageSmoothingEnabled = false;
 
         const fps = state.videoQuality === 'ultra' ? 60 : (state.videoQuality === 'high' ? 60 : 30);
-        // Optimized bitrate for High DPI. WebM/VP9 needs enough bitrate for 4K-ish resolutions
-        // 3440x1440 at 60fps needs a massive bitrate to not look blurry. VBR will use up to this much.
         const bitrate = state.videoQuality === 'ultra' ? 250000000 : (state.videoQuality === 'high' ? 120000000 : (state.videoQuality === 'medium' ? 40000000 : 10000000));
 
-        // Let's use pure video/webm (which defaults to VP8/VP9 depending on Chrome version, usually the most optimized one).
-        // Specifying codecs=vp9 sometimes forces a slower software encoder.
         let options = { mimeType: 'video/webm', videoBitsPerSecond: bitrate };
         try {
             if (MediaRecorder.isTypeSupported('video/webm; codecs=h264')) {
-                // Hardware H264 on Windows is often much faster and sharper for real-time screenshare
                 options = { mimeType: 'video/webm; codecs=h264', videoBitsPerSecond: bitrate };
             } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
                 options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: bitrate };
@@ -226,10 +290,9 @@ async function startRecording() {
 
         const drawLoop = () => {
             if (state.isRecording) {
-                // Adjust for High DPI scale while drawing
+                const r = state.selectionRect;
                 cropCtx.drawImage(video,
-                    state.selectionRect.x * dpr, state.selectionRect.y * dpr,
-                    state.selectionRect.w * dpr, state.selectionRect.h * dpr,
+                    r.x * sx, r.y * sy, r.w * sx, r.h * sy,
                     0, 0, cropCanvas.width, cropCanvas.height);
                 requestAnimationFrame(drawLoop);
             } else { stream.getTracks().forEach(t => t.stop()); }

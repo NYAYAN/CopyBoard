@@ -13,17 +13,9 @@ body.ready {
     cursor: url('../shared/cursor.svg') 15 15, crosshair;
 }
 
-.overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 10;
-    /* Above canvases */
-    pointer-events: none;
-}
+/* overlay is now rendered on draw-canvas via JS — no separate DOM element needed */
+
+
 
 #screen-canvas {
     position: absolute;
@@ -34,6 +26,16 @@ body.ready {
     z-index: 1;
 }
 
+#overlay-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+}
+
 #draw-canvas {
     position: absolute;
     top: 0;
@@ -41,10 +43,9 @@ body.ready {
     width: 100%;
     height: 100%;
     z-index: 3;
-    /* Above selection box border if possible, or handle pointer events */
     pointer-events: none;
-    /* Let clicks pass through unless drawing */
 }
+
 
 /* When drawing is active, canvas needs events */
 body.drawing #draw-canvas {
@@ -58,15 +59,13 @@ body.drawing #selection-box {
 
 .selection-box {
     position: absolute;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
-    /* Dim the rest */
+    border: none;
+    /* border drawn by overlay-canvas */
     z-index: 20;
-    /* Above overlay */
     pointer-events: auto;
-    /* Allow clicking to drag */
     cursor: move;
     box-sizing: border-box;
+    background: transparent;
 }
 
 .dimensions-label {

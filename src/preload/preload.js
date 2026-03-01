@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateHistory: (callback) => ipcRenderer.on('update-history', (_, value) => callback(value)),
 
     // Snipper & OCR & Recorder
-    onCaptureScreen: (callback) => ipcRenderer.on('capture-screen', (_, data, mode, sourceId, quality) => callback(data, mode, sourceId, quality)),
+    onCaptureScreen: (callback) => ipcRenderer.on('capture-screen', (_, data, mode, sourceId, quality, captureWidth, captureHeight) => callback(data, mode, sourceId, quality, captureWidth, captureHeight)),
     sendOCR: (dataUrl) => ipcRenderer.send('ocr-process', dataUrl),
     sendCopyImage: (dataUrl) => ipcRenderer.send('snip-copy-v2', dataUrl), // RENAMED due to channel blocking
     sendSaveImage: (dataUrl) => ipcRenderer.send('snip-save-image', dataUrl),

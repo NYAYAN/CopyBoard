@@ -5,6 +5,7 @@ const overlay = document.getElementById('overlay');
 
 let isSelecting = false;
 let startX = 0, startY = 0;
+let scaleX = 1, scaleY = 1;
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -15,62 +16,80 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // --- Capture & Initialize ---
-window.api.onCaptureScreen((dataUrl, mode, sourceId) => {
+window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
+    const logicalW = window.innerWidth;
+    const logicalH = window.innerHeight;
+    const physW = captureWidth || logicalW;
+    const physH = captureHeight || logicalH;
+
+    canvas.width = physW;
+    canvas.height = physH;
+    canvas.style.width = logicalW + 'px';
+    canvas.style.height = logicalH + 'px';
+    scaleX = physW / logicalW;
+    scaleY = physH / logicalH;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     reset();
 
-    overlay.style.display = 'none';
-
-    requestAnimationFrame(async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: false,
-                video: {
-                    mandatory: {
-                        chromeMediaSource: 'desktop',
-                        chromeMediaSourceId: sourceId,
-                        minWidth: canvas.width,
-                        maxWidth: canvas.width,
-                        minHeight: canvas.height,
-                        maxHeight: canvas.height
+    if (dataUrl && dataUrl.length > 100) {
+        const img = new Image();
+        img.onload = () => {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            overlay.style.display = 'block';
+            document.body.classList.add('ready');
+            window.api.notifyReady();
+        };
+        img.src = dataUrl;
+    } else {
+        requestAnimationFrame(async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        mandatory: {
+                            chromeMediaSource: 'desktop',
+                            chromeMediaSourceId: sourceId
+                        }
                     }
-                }
-            });
+                });
 
-            const video = document.createElement('video');
-            video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
-            video.srcObject = stream;
+                const video = document.createElement('video');
+                video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
+                video.srcObject = stream;
 
-            video.onloadeddata = () => {
-                video.play();
+                video.onloadeddata = () => {
+                    video.play();
+                    const vw = video.videoWidth;
+                    const vh = video.videoHeight;
+                    canvas.width = vw;
+                    canvas.height = vh;
+                    scaleX = vw / logicalW;
+                    scaleY = vh / logicalH;
 
-                const drawAndShow = () => {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    stream.getTracks().forEach(track => track.stop());
+                    const drawAndShow = () => {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        stream.getTracks().forEach(track => track.stop());
+                        overlay.style.display = 'block';
+                        document.body.classList.add('ready');
+                        window.api.notifyReady();
+                    };
 
-                    overlay.style.display = 'block';
-                    document.body.classList.add('ready');
-                    window.api.notifyReady();
+                    if ('requestVideoFrameCallback' in video) {
+                        video.requestVideoFrameCallback(drawAndShow);
+                    } else {
+                        requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
+                    }
                 };
-
-                if ('requestVideoFrameCallback' in video) {
-                    video.requestVideoFrameCallback(drawAndShow);
-                } else {
-                    requestAnimationFrame(() => requestAnimationFrame(drawAndShow));
-                }
-            };
-        } catch (err) {
-            console.error('OCR High-quality capture failed:', err);
-            const img = new Image();
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+            } catch (err) {
+                console.error('OCR capture failed:', err);
                 overlay.style.display = 'block';
                 document.body.classList.add('ready');
                 setTimeout(() => window.api.notifyReady(), 50);
-            };
-            img.src = dataUrl;
-        }
-    });
+            }
+        });
+    }
 });
 
 function reset() {
@@ -108,13 +127,20 @@ window.addEventListener('mouseup', () => {
     const rect = selectionBox.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) { reset(); return; }
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = rect.width;
-    tempCanvas.height = rect.height;
-    const tCtx = tempCanvas.getContext('2d');
-    tCtx.drawImage(canvas, rect.left, rect.top, rect.width, rect.height, 0, 0, rect.width, rect.height);
+    const srcX = rect.left * scaleX;
+    const srcY = rect.top * scaleY;
+    const srcW = rect.width * scaleX;
+    const srcH = rect.height * scaleY;
+    const cropW = Math.round(srcW);
+    const cropH = Math.round(srcH);
+    if (cropW < 1 || cropH < 1) return;
 
-    // OCR işlemi için gönder
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = cropW;
+    tempCanvas.height = cropH;
+    const tCtx = tempCanvas.getContext('2d');
+    tCtx.drawImage(canvas, srcX, srcY, srcW, srcH, 0, 0, cropW, cropH);
+
     window.api.sendOCR(tempCanvas.toDataURL('image/png'));
 });
 

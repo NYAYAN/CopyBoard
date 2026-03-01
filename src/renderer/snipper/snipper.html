@@ -8,9 +8,10 @@
 
 <body>
     <video id="screen-video" style="display: none;"></video>
-    <div id="overlay" class="overlay" style="display: none;"></div> <!-- Hidden initially to prevent capture -->
     <canvas id="screen-canvas"></canvas>
-    <canvas id="draw-canvas"></canvas> <!-- New layer for drawing -->
+    <canvas id="overlay-canvas"></canvas> <!-- dimming layer with selection hole -->
+    <canvas id="draw-canvas"></canvas> <!-- annotation layer -->
+
 
     <div id="selection-box" class="selection-box hidden">
         <div id="dimensions-label" class="dimensions-label">0 x 0</div>

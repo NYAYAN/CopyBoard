@@ -1,4 +1,4 @@
-const { ipcMain, globalShortcut, clipboard, dialog, BrowserWindow, app } = require('electron');
+const { ipcMain, globalShortcut, clipboard, dialog, BrowserWindow, app, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
 // Tesseract will be lazy-loaded in the OCR handler to speed up startup
@@ -240,30 +240,59 @@ function registerIpcHandlers() {
 
                 if (process.platform === 'win32') {
                     // Windows: Use PowerShell + .NET to bypass Electron's DPI scaling entirely
+                    // Write PNG to temp file synchronously (fast, just disk write)
                     const tmpPath = path.join(app.getPath('temp'), 'copyboard_snip.png');
                     fs.writeFileSync(tmpPath, buffer);
-                    const { execSync } = require('child_process');
-                    const psCmd = `Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; $bmp = [System.Drawing.Image]::FromFile('${tmpPath.replace(/\\/g, '\\\\')}'); [System.Windows.Forms.Clipboard]::SetImage($bmp); $bmp.Dispose()`;
-                    try {
-                        execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 10000, windowsHide: true });
-                    } catch (psErr) {
-                        console.log('[Clipboard] PowerShell failed, using Electron fallback:', psErr.message);
-                        const nativeImg = require('electron').nativeImage.createFromDataURL(d);
-                        clipboard.writeImage(nativeImg);
-                    }
-                    setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch (e) { } }, 2000);
+
+                    // Get actual screen DPI to match Snipping Tool behaviour — prevents blurry paste
+                    const cursorPoint = screen.getCursorScreenPoint();
+                    const display = screen.getDisplayNearestPoint(cursorPoint);
+                    const screenDpi = Math.round(96 * (display.scaleFactor || 1));
+
+                    // Close the snipper window immediately — user sees instant response
+                    if (win && !win.isDestroyed()) win.close();
+
+                    // Run PowerShell asynchronously so the main thread is never blocked
+                    const { exec } = require('child_process');
+                    const escapedPath = tmpPath.replace(/\\/g, '\\\\');
+                    const psCmd = [
+                        `Add-Type -AssemblyName System.Drawing`,
+                        `Add-Type -AssemblyName System.Windows.Forms`,
+                        // Load PNG bytes for raw PNG clipboard format (what apps like Chrome/Word prefer)
+                        `$pngBytes = [System.IO.File]::ReadAllBytes('${escapedPath}')`,
+                        `$ms = New-Object System.IO.MemoryStream($pngBytes, 0, $pngBytes.Length)`,
+                        // Load bitmap and set correct DPI (prevents Windows resizing it on paste)
+                        `$bmp = [System.Drawing.Bitmap]::new('${escapedPath}')`,
+                        `$bmp.SetResolution(${screenDpi}, ${screenDpi})`,
+                        // Build DataObject with BOTH formats — same as Snipping Tool
+                        `$obj = New-Object System.Windows.Forms.DataObject`,
+                        `$obj.SetData('PNG', $ms)`,
+                        `$obj.SetImage($bmp)`,
+                        `[System.Windows.Forms.Clipboard]::SetDataObject($obj, $true)`,
+                        `$bmp.Dispose()`,
+                        `$ms.Dispose()`
+                    ].join('; ');
+                    exec(`powershell -NoProfile -NonInteractive -Command "${psCmd}"`, { timeout: 10000, windowsHide: true }, (psErr) => {
+                        if (psErr) {
+                            console.log('[Clipboard] PowerShell failed, using Electron fallback:', psErr.message);
+                            const nativeImg = require('electron').nativeImage.createFromDataURL(d);
+                            clipboard.writeImage(nativeImg);
+                        }
+                        showToast('Resim Kopyalandı.', 'success');
+                        try { fs.unlinkSync(tmpPath); } catch (cleanErr) { /* ignore */ }
+                    });
                 } else {
                     // macOS / Linux: Use NativeImage with scaleFactor: 1.0
                     // On macOS, this ensures 1:1 pixel mapping for Retina displays
                     const nativeImg = require('electron').nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
                     clipboard.writeImage(nativeImg);
+                    showToast('Resim Kopyalandı.', 'success');
+                    if (win && !win.isDestroyed()) win.close();
                 }
-
-                showToast('Resim Kopyalandı.', 'success');
             } catch (err) {
                 showToast('Kopyalama Hatası: ' + err.message, 'error');
+                if (win && !win.isDestroyed()) win.close();
             }
-            setTimeout(() => { if (win && !win.isDestroyed()) win.close(); }, 100);
         }
     });
 

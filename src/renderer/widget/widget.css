@@ -1,6 +1,5 @@
 :root {
     --primary: #8957e5;
-    --primary-hover: #7b4dce;
     --bg-dark: rgba(44, 44, 46, 0.95);
     /* Lighter dark for better contrast */
     --text: #ffffff;
@@ -257,8 +256,8 @@ body {
 
 .main-btn:hover {
     transform: scale(1.05);
-    background: var(--primary-hover);
-    box-shadow: 0 0 15px rgba(137, 87, 229, 0.5);
+    filter: brightness(1.15);
+    box-shadow: 0 0 15px var(--primary);
 }
 
 .main-btn.active {

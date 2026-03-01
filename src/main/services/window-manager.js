@@ -265,49 +265,49 @@ function handleWidgetAction(action, data) {
         state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: COL_H });
     } else if (action === 'drag') {
         const bounds = state.widgetWindow.getBounds();
-        const display = screen.getDisplayMatching(bounds);
-        // Track unscaled/logical BUTTON position directly, keep current side stable during drag.
         const currentSide = state.widgetSide || 'right';
         const currentBtnX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
 
-        let newBtnX = currentBtnX + data.x;
-        let newY = bounds.y + data.y;
+        let newBtnX = currentBtnX + (data.x || 0);
+        let newY = bounds.y + (data.y || 0);
 
-        // Clamp BUTTON to display bounds
-        const db = display.bounds;
-        if (newBtnX < db.x + 5) newBtnX = db.x + 5;
-        if (newBtnX > db.x + db.width - BTN_W - 5) newBtnX = db.x + db.width - BTN_W - 5;
-        if (newY < db.y) newY = db.y;
-        if (newY > db.y + db.height - bounds.height) newY = db.y + db.height - bounds.height;
-
-        // Window position follows button (may go slightly off-screen at far edges — that's fine)
+        // Allow free dragging between monitors (window will follow)
         const newWinX = (currentSide === 'left') ? newBtnX : newBtnX - PANEL_W;
-
         state.widgetPos = { x: newBtnX, y: newY };
         state.widgetWindow.setBounds({ x: newWinX, y: newY, width: FULL_W, height: bounds.height });
 
     } else if (action === 'drag-end') {
+        // Find nearest display to snap the widget safely within bounds
         const bounds = state.widgetWindow.getBounds();
-        const display = screen.getDisplayMatching(bounds);
-
-        // Determine which half of the screen the button is on
         const currentSide = state.widgetSide || 'right';
-        const btnScreenX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
+        const btnX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
 
-        let newSide;
-        if (btnScreenX < display.bounds.x + display.bounds.width / 2) {
-            newSide = 'left';
-        } else {
-            newSide = 'right';
-        }
+        // Get display nearest to the button center
+        const display = screen.getDisplayNearestPoint({
+            x: Math.round(btnX + BTN_W / 2),
+            y: Math.round(bounds.y + COL_H / 2)
+        });
+        const db = display.workArea;
+
+        // Final Clamping to ensure it doesn't stay off-screen
+        let finalBtnX = btnX;
+        let finalY = bounds.y;
+
+        if (finalBtnX < db.x) finalBtnX = db.x;
+        if (finalBtnX > db.x + db.width - BTN_W) finalBtnX = db.x + db.width - BTN_W;
+        if (finalY < db.y) finalY = db.y;
+        if (finalY > db.y + db.height - COL_H) finalY = db.y + db.height - COL_H;
+
+        // Determine new side based on which half of the display it's on
+        const newSide = (finalBtnX < db.x + db.width / 2) ? 'left' : 'right';
 
         state.widgetSide = newSide;
-        state.widgetPos = { x: btnScreenX, y: bounds.y };
+        state.widgetPos = { x: finalBtnX, y: finalY };
         store.set('widgetPos', state.widgetPos);
         store.set('widgetSide', newSide);
 
-        const targetWindowX = (newSide === 'left') ? btnScreenX : btnScreenX - PANEL_W;
-        state.widgetWindow.setBounds({ x: targetWindowX, y: bounds.y, width: FULL_W, height: bounds.height });
+        const targetWindowX = (newSide === 'left') ? finalBtnX : finalBtnX - PANEL_W;
+        state.widgetWindow.setBounds({ x: Math.round(targetWindowX), y: Math.round(finalY), width: FULL_W, height: COL_H });
         notifySide();
 
     } else if (action === 'open-list') {

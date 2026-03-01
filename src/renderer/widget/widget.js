@@ -347,6 +347,8 @@ mainBtn.addEventListener('pointerdown', (e) => {
             window.api.widgetAction('drag-end');
             lastDragEndTime = Date.now();
             isDragging = false;
+            // IMPORTANT: Reset renderer state so the panel doesn't think it's still open
+            closeAll();
         }
         updateMouseEvents();
     };

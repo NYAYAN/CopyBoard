@@ -6,12 +6,7 @@ const { registerIpcHandlers } = require('./services/ipc-handlers');
 const { initAutoUpdater } = require('./services/update-manager');
 const { startClipboardWatcher } = require('./services/history-manager');
 
-// Hot Reload (Sadece geliştirme modunda çalışır)
-if (!app.isPackaged) {
-  try {
-    require('electron-reloader')(module);
-  } catch (_) { }
-}
+// Hot Reload handled externally or disabled
 
 // --- Single Instance Lock ---
 const gotTheLock = app.requestSingleInstanceLock();
@@ -34,18 +29,26 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     console.log('App Starting...');
 
-    // Initialize Services
-    initTray();
-    createMainWindow();
-    registerIpcHandlers();
-    initAutoUpdater();
+    // Initialize Services with Error Handling
+    try {
+      initTray();
+      createMainWindow();
+      registerIpcHandlers();
+      initAutoUpdater();
+    } catch (svcErr) {
+      console.error('Service Initialization Failed:', svcErr);
+      dialog.showErrorBox('Servis Hatası', 'Uygulama servisleri başlatılamadı: ' + svcErr.message);
+      app.quit();
+    }
 
     // Check if launched as a hidden auto-start process
     const isAutoStart = process.argv.includes('--hidden');
 
     if (!isAutoStart) {
       setTimeout(() => {
-        showMain();
+        try {
+          showMain();
+        } catch (e) { console.error('ShowMain failed:', e); }
       }, 300);
     }
 
@@ -54,12 +57,16 @@ if (!gotTheLock) {
 
     // Initialize Widget if enabled in settings
     if (state.showWidget) {
-      toggleWidget(true);
+      try {
+        toggleWidget(true);
+      } catch (e) { console.error('Widget init failed:', e); }
     }
 
     // Platform spec
     if (app.isPackaged) {
-      app.setLoginItemSettings({ openAtLogin: state.autoStart, path: app.getPath('exe'), args: ['--hidden'] });
+      try {
+        app.setLoginItemSettings({ openAtLogin: state.autoStart, path: app.getPath('exe'), args: ['--hidden'] });
+      } catch (e) { }
     }
 
     app.on('before-quit', () => {

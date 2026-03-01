@@ -1,7 +1,7 @@
 const { ipcMain, globalShortcut, clipboard, dialog, BrowserWindow, app } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const Tesseract = require('tesseract.js');
+// Tesseract will be lazy-loaded in the OCR handler to speed up startup
 const { state, store } = require('./state');
 const { showMain, showToast, toggleWidget, handleWidgetAction } = require('./window-manager');
 const { addHistory, deleteHistoryItem, clearHistory, addToFavorites, removeFromFavorites, setItemNote, reorderHistory, reorderFavorites } = require('./history-manager');
@@ -353,6 +353,8 @@ function registerIpcHandlers() {
 
         showToast('Metin Taranıyor...', 'info');
         try {
+            // Lazy load Tesseract
+            const Tesseract = require('tesseract.js');
             const worker = await Tesseract.createWorker('eng+tur', 1, { load_system_dawg: '0', load_freq_dawg: '0' });
             const { data: { text } } = await worker.recognize(Buffer.from(d.split(',')[1], 'base64'));
             await worker.terminate();

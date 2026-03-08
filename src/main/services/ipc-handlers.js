@@ -1,12 +1,26 @@
 const { ipcMain, globalShortcut, clipboard, dialog, BrowserWindow, app, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
-// Tesseract will be lazy-loaded in the OCR handler to speed up startup
+const crypto = require('crypto');
+const { Worker } = require('worker_threads');
 const { state, store } = require('./state');
 const { showMain, showToast, toggleWidget, handleWidgetAction } = require('./window-manager');
 const { addHistory, deleteHistoryItem, clearHistory, addToFavorites, removeFromFavorites, setItemNote, reorderHistory, reorderFavorites } = require('./history-manager');
-const { startCapture } = require('./capture-service');
-const { checkForUpdates, downloadUpdate, installUpdate } = require('./update-manager');
+
+// Initialize OCR Worker
+const ocrWorkerPath = path.join(__dirname, 'ocr-worker.js');
+const ocrWorker = new Worker(ocrWorkerPath);
+const pendingOcrRequests = new Map();
+
+ocrWorker.on('message', (msg) => {
+    const { id, success, result, error } = msg;
+    if (pendingOcrRequests.has(id)) {
+        const { resolve, reject } = pendingOcrRequests.get(id);
+        pendingOcrRequests.delete(id);
+        if (success) resolve(result);
+        else reject(new Error(error));
+    }
+});
 
 function registerIpcHandlers() {
     // --- Shortcuts ---
@@ -29,24 +43,29 @@ function registerIpcHandlers() {
 
         if (key === 'list') register(shortcut, showMain);
         // Use helper to invoke services
-        if (key === 'draw') register(shortcut, () => startCapture('draw'));
-        if (key === 'video') register(shortcut, () => startCapture('video'));
-        if (key === 'ocr') register(shortcut, () => startCapture('ocr'));
+        if (key === 'draw') register(shortcut, () => require('./capture-service').startCapture('draw'));
+        if (key === 'video') register(shortcut, () => require('./capture-service').startCapture('video'));
+        if (key === 'ocr') register(shortcut, () => require('./capture-service').startCapture('ocr'));
     }
 
     // Initial Registration
     try {
         const { list, draw, video, ocr } = state.shortcuts;
         if (list) globalShortcut.register(list, showMain);
-        if (draw) globalShortcut.register(draw, () => startCapture('draw'));
-        if (video) globalShortcut.register(video, () => startCapture('video'));
-        if (ocr) globalShortcut.register(ocr, () => startCapture('ocr'));
+        if (draw) globalShortcut.register(draw, () => require('./capture-service').startCapture('draw'));
+        if (video) globalShortcut.register(video, () => require('./capture-service').startCapture('video'));
+        if (ocr) globalShortcut.register(ocr, () => require('./capture-service').startCapture('ocr'));
     } catch (err) {
         console.error('Shortcut registration failed:', err);
     }
 
     // --- IPC Listeners ---
-    ipcMain.handle('get-history', () => ({ history: state.history, favorites: state.favorites }));
+    ipcMain.handle('get-history', async () => {
+        const { getDecompressedHistory, getDecompressedFavorites } = require('./history-manager');
+        const history = await getDecompressedHistory();
+        const favorites = await getDecompressedFavorites();
+        return { history, favorites };
+    });
     ipcMain.handle('get-settings', () => ({
         maxItems: state.maxItems, globalShortcut: state.shortcuts.list,
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
@@ -155,9 +174,9 @@ function registerIpcHandlers() {
     ipcMain.on('debug-log', (e, msg) => console.log('[Renderer Debug]:', msg));
 
     // Updates
-    ipcMain.on('check-for-updates', checkForUpdates);
-    ipcMain.on('download-update', downloadUpdate);
-    ipcMain.on('install-update', installUpdate);
+    ipcMain.on('check-for-updates', (...args) => require('./update-manager').checkForUpdates(...args));
+    ipcMain.on('download-update', (...args) => require('./update-manager').downloadUpdate(...args));
+    ipcMain.on('install-update', (...args) => require('./update-manager').installUpdate(...args));
     ipcMain.on('open-url', (e, url) => {
         if (!url || typeof url !== 'string') return;
 
@@ -231,26 +250,21 @@ function registerIpcHandlers() {
         }
     });
 
-    ipcMain.on('snip-copy-v2', (e, d) => {
-        let win = state.snipperWindow;
-        if (win && !win.isDestroyed()) {
-            try {
-                const base64 = d.split(',')[1];
-                const buffer = Buffer.from(base64, 'base64');
+    ipcMain.on('snip-copy-v2', (e, arrayBuffer) => {
+        try {
+            const buffer = Buffer.from(arrayBuffer);
 
-                if (process.platform === 'win32') {
-                    // Windows: Use PowerShell + .NET to bypass Electron's DPI scaling entirely
-                    // Write PNG to temp file synchronously (fast, just disk write)
-                    const tmpPath = path.join(app.getPath('temp'), 'copyboard_snip.png');
-                    fs.writeFileSync(tmpPath, buffer);
+            if (process.platform === 'win32') {
+                // Windows: Use PowerShell + .NET to bypass Electron's DPI scaling entirely
+                // Write PNG to temp file asynchronously (non-blocking)
+                const tmpPath = path.join(app.getPath('temp'), `copyboard_snip_${Date.now()}.png`);
+                fs.writeFile(tmpPath, buffer, (err) => {
+                    if (err) throw err;
 
                     // Get actual screen DPI to match Snipping Tool behaviour — prevents blurry paste
                     const cursorPoint = screen.getCursorScreenPoint();
                     const display = screen.getDisplayNearestPoint(cursorPoint);
                     const screenDpi = Math.round(96 * (display.scaleFactor || 1));
-
-                    // Close the snipper window immediately — user sees instant response
-                    if (win && !win.isDestroyed()) win.close();
 
                     // Run PowerShell asynchronously so the main thread is never blocked
                     const { exec } = require('child_process');
@@ -272,57 +286,66 @@ function registerIpcHandlers() {
                         `$bmp.Dispose()`,
                         `$ms.Dispose()`
                     ].join('; ');
+                    
                     exec(`powershell -NoProfile -NonInteractive -Command "${psCmd}"`, { timeout: 10000, windowsHide: true }, (psErr) => {
                         if (psErr) {
                             console.log('[Clipboard] PowerShell failed, using Electron fallback:', psErr.message);
-                            const nativeImg = require('electron').nativeImage.createFromDataURL(d);
+                            const nativeImg = require('electron').nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
                             clipboard.writeImage(nativeImg);
                         }
                         showToast('Resim Kopyalandı.', 'success');
                         try { fs.unlinkSync(tmpPath); } catch (cleanErr) { /* ignore */ }
                     });
-                } else {
-                    // macOS / Linux: Use NativeImage with scaleFactor: 1.0
-                    // On macOS, this ensures 1:1 pixel mapping for Retina displays
-                    const nativeImg = require('electron').nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
-                    clipboard.writeImage(nativeImg);
-                    showToast('Resim Kopyalandı.', 'success');
-                    if (win && !win.isDestroyed()) win.close();
-                }
-            } catch (err) {
-                showToast('Kopyalama Hatası: ' + err.message, 'error');
-                if (win && !win.isDestroyed()) win.close();
+                });
+            } else {
+                // macOS / Linux: Use NativeImage with scaleFactor: 1.0
+                const nativeImg = require('electron').nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
+                clipboard.writeImage(nativeImg);
+                showToast('Resim Kopyalandı.', 'success');
             }
+        } catch (err) {
+            showToast('Kopyalama Hatası: ' + err.message, 'error');
         }
     });
 
-    ipcMain.on('snip-save-image', (e, d) => {
-        let win = BrowserWindow.fromWebContents(e.sender);
-        if (!win && state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;
+    ipcMain.on('snip-save-image', (e, arrayBuffer) => {
+        const buffer = Buffer.from(arrayBuffer);
 
-        const parent = process.platform === 'darwin' ? null : win;
-        if (process.platform === 'darwin' && win && !win.isDestroyed()) win.setAlwaysOnTop(false);
-
-        const p = dialog.showSaveDialogSync(parent, {
+        dialog.showSaveDialog(null, {
             title: 'Kaydet',
             defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`),
             filters: [{ name: 'Images', extensions: ['png'] }]
+        }).then(result => {
+            if (!result.canceled && result.filePath) {
+                fs.writeFile(result.filePath, buffer, (err) => {
+                    if (!err) showToast('Resim Kaydedildi.', 'success');
+                    else showToast('Hata: ' + err.message, 'error');
+                });
+            } else {
+                showToast('Kaydetme iptal edildi.', 'info');
+            }
+        }).catch(err => {
+            console.error(err);
         });
-
-        if (p) {
-            fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64'));
-            showToast('Resim Kaydedildi.', 'success');
-            if (win && !win.isDestroyed()) win.close();
-        } else {
-            if (process.platform === 'darwin' && win && !win.isDestroyed()) win.setAlwaysOnTop(true, 'pop-up-menu');
-            showToast('Kaydetme iptal edildi.', 'info');
-        }
     });
 
-    ipcMain.on('record-start', () => { state.tempVideoPath = path.join(app.getPath('temp'), `temp_video_${Date.now()}.webm`); });
-    ipcMain.on('record-chunk', (e, arrayBuffer) => { if (state.tempVideoPath) fs.appendFileSync(state.tempVideoPath, Buffer.from(arrayBuffer)); });
+    let videoStream = null;
+
+    ipcMain.on('record-start', () => { 
+        state.tempVideoPath = path.join(app.getPath('temp'), `temp_video_${Date.now()}.webm`); 
+        videoStream = fs.createWriteStream(state.tempVideoPath, { flags: 'a' });
+    });
+    
+    ipcMain.on('record-chunk', (e, arrayBuffer) => { 
+        if (videoStream) videoStream.write(Buffer.from(arrayBuffer)); 
+    });
 
     ipcMain.on('record-stop', (e) => {
+        if (videoStream) {
+            videoStream.end();
+            videoStream = null;
+        }
+
         try {
             // Hide recorder window immediately to prevent obscuring the save dialog
             if (state.recorderWindow && !state.recorderWindow.isDestroyed()) {
@@ -330,39 +353,49 @@ function registerIpcHandlers() {
                 state.recorderWindow.hide();
             }
 
-            // Small delay to ensure window is hidden
+            // Small delay to ensure window is hidden and stream is flushed
             setTimeout(() => {
                 try {
-                    const p = dialog.showSaveDialogSync(null, {
+                    dialog.showSaveDialog(null, {
                         title: 'Videoyu Kaydet',
                         defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`),
                         filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }]
+                    }).then(result => {
+                        const p = result.filePath;
+                        if (!result.canceled && p) {
+                            if (fs.existsSync(state.tempVideoPath)) {
+                                fs.copyFile(state.tempVideoPath, p, err => {
+                                    if (err) {
+                                        showToast('Kayıt Hatası', 'error');
+                                        console.error('Copy Error:', err);
+                                    } else {
+                                        showToast('Video Kaydedildi.', 'success');
+                                        try { fs.unlinkSync(state.tempVideoPath); } catch (e) { /* ignore */ }
+                                    }
+                                });
+                            }
+                        } else {
+                            // Cancelled - Add temp path to history
+                            if (state.tempVideoPath && fs.existsSync(state.tempVideoPath)) {
+                                clipboard.writeText(state.tempVideoPath);
+                                addHistory(state.tempVideoPath);
+                                showToast('Kayıt iptal edildi. Dosya yolu panoya kopyalandı.', 'info');
+                            }
+                        }
+                    }).catch(dialogErr => {
+                        console.error('Save Dialog Promise Error:', dialogErr);
+                        showToast('Kaydetme Penceresi Hatası', 'error');
+                    }).finally(() => {
+                        state.tempVideoPath = null;
+                        if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
                     });
-
-                    if (p) {
-                        if (fs.existsSync(state.tempVideoPath)) {
-                            fs.copyFileSync(state.tempVideoPath, p);
-                            showToast('Video Kaydedildi.', 'success');
-                            try { fs.unlinkSync(state.tempVideoPath); } catch (err) { console.error('Temp deletion failed:', err); }
-                        }
-                    } else {
-                        // Cancelled - Add temp path to history
-                        if (state.tempVideoPath && fs.existsSync(state.tempVideoPath)) {
-                            clipboard.writeText(state.tempVideoPath); // Copy to system clipboard for Windows/Mac
-                            addHistory(state.tempVideoPath);
-                            showToast('Kayıt iptal edildi. Dosya yolu panoya kopyalandı.', 'info');
-                            // Optionally open the folder?
-                            // require('electron').shell.showItemInFolder(state.tempVideoPath);
-                        }
-                    }
                 } catch (dialogErr) {
                     console.error('Save Dialog Error:', dialogErr);
                     showToast('Kaydetme Penceresi Hatası', 'error');
-                } finally {
                     state.tempVideoPath = null;
                     if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
                 }
-            }, 100);
+            }, 300);
 
         } catch (err) {
             console.error('Record Stop Error:', err);
@@ -382,19 +415,25 @@ function registerIpcHandlers() {
 
         showToast('Metin Taranıyor...', 'info');
         try {
-            // Lazy load Tesseract
-            const Tesseract = require('tesseract.js');
-            const worker = await Tesseract.createWorker('eng+tur', 1, { load_system_dawg: '0', load_freq_dawg: '0' });
-            const { data: { text } } = await worker.recognize(Buffer.from(d.split(',')[1], 'base64'));
-            await worker.terminate();
-            const c = text.trim();
+            const id = crypto.randomUUID();
+            const text = await new Promise((resolve, reject) => {
+                pendingOcrRequests.set(id, { resolve, reject });
+                ocrWorker.postMessage({ id, action: 'recognize', data: d });
+            });
+            
+            const c = text;
             if (c) {
                 state.lastText = c;
                 clipboard.writeText(c);
                 addHistory(c);
                 showToast('Metin Kopyalandı.', 'success');
+            } else {
+                showToast('Metin Bulunamadı.', 'warning');
             }
-        } catch (err) { console.error(err); }
+        } catch (err) { 
+            console.error(err); 
+            showToast('Tarama Hatası', 'error');
+        }
     });
 
     // Widget Events

@@ -435,7 +435,7 @@ document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', 
     if (!isActive) b.classList.add('active');
 }));
 
-function getFinalImage() {
+function getFinalImageCanvas() {
     if (!state.selectionRect) return null;
     const sx = state.scaleX != null ? state.scaleX : state.dpr;
     const sy = state.scaleY != null ? state.scaleY : state.dpr;
@@ -450,45 +450,67 @@ function getFinalImage() {
 
     tctx.drawImage(canvas, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, cw, ch);
     tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, cw, ch);
+    return tc;
+}
 
-    return tc.toDataURL('image/png');
+function getFinalImage() {
+    const tc = getFinalImageCanvas();
+    return tc ? tc.toDataURL('image/png') : null;
+}
+
+async function getFinalImageBuffer() {
+    const tc = getFinalImageCanvas();
+    if (!tc) return null;
+    return new Promise(resolve => {
+        tc.toBlob(blob => {
+            if (!blob) return resolve(null);
+            blob.arrayBuffer().then(resolve).catch(() => resolve(null));
+        }, 'image/png');
+    });
 }
 
 // Interacting buttons setup...
 const buttons = {
     'btn-close': () => window.api.closeSnipper(),
-    'btn-copy': () => {
-        const d = safeGetImage();
-        if (d) {
-            window.api.sendDebugLog('Renderer: Sending Copy Request (PNG Quality)');
-            window.api.sendCopyImage(d);
+    'btn-copy': async () => {
+        const buffer = await safeGetImageBuffer();
+        if (buffer) {
+            window.api.sendDebugLog('Renderer: Sending Copy Request (PNG ArrayBuffer)');
+            window.api.sendCopyImage(buffer);
+            window.api.closeSnipper(); // Fire-and-forget mechanism, closes UI immediately
         }
     },
-    'btn-save': () => { const d = safeGetImage(); if (d) window.api.sendSaveImage(d); },
+    'btn-save': async () => { 
+        const buffer = await safeGetImageBuffer(); 
+        if (buffer) {
+            window.api.sendSaveImage(buffer); 
+            window.api.closeSnipper();
+        } 
+    },
     'btn-undo': () => undo()
 };
 
 Object.entries(buttons).forEach(([id, action]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
-    btn.addEventListener('mousedown', (e) => {
+    btn.addEventListener('mousedown', async (e) => {
         e.stopPropagation();
         try {
-            action();
+            await action();
         } catch (err) {
             alert('Error: ' + err.message);
         }
     });
 });
 
-function safeGetImage() {
+async function safeGetImageBuffer() {
     try {
-        const img = getFinalImage();
-        if (!img) {
+        const buffer = await getFinalImageBuffer();
+        if (!buffer) {
             alert('Selection empty! Please draw a box first.');
             return null;
         }
-        return img;
+        return buffer;
     } catch (e) {
         alert('Image generation failed: ' + e.message);
         return null;

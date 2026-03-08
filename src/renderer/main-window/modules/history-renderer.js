@@ -2,20 +2,38 @@ import { elements } from './dom.js';
 import { openNoteModal } from './notes.js';
 import { onDragStart, onDragOver, onDrop } from './drag-drop.js';
 
+let scrollListener = null;
+
 export function renderHistory(history, favorites, activeTab) {
-    elements.listElement.innerHTML = '';
+    const container = elements.listElement;
+
+    if (scrollListener) {
+        container.removeEventListener('scroll', scrollListener);
+        scrollListener = null;
+    }
+
+    container.innerHTML = '';
 
     const items = activeTab === 'favorites' ? favorites : history;
 
     if (!items || items.length === 0) {
-        elements.listElement.innerHTML = '<div class="empty-state">Liste boş.</div>';
+        container.innerHTML = '<div class="empty-state">Liste boş.</div>';
         return;
     }
 
     // For Tümü tab: build a Set of favorited content strings for quick lookup
     const favoritedContents = new Set(favorites.map(f => f.content));
 
-    items.forEach((item, index) => {
+    // Virtualization setup
+    const ITEM_HEIGHT = 56;
+    const TOTAL_HEIGHT = items.length * ITEM_HEIGHT;
+
+    container.innerHTML = `<div class="virtual-spacer" style="height: ${TOTAL_HEIGHT}px; position: relative; width: 100%;"></div>`;
+    const spacer = container.querySelector('.virtual-spacer');
+
+    const renderedNodes = new Map();
+
+    function createDOMItem(item, index) {
         const itemContent = item.content;
         const itemDate = item.timestamp ? new Date(item.timestamp) : new Date();
 
@@ -139,6 +157,41 @@ export function renderHistory(history, favorites, activeTab) {
             window.api.copyItem(itemContent);
         });
 
-        elements.listElement.appendChild(domItem);
-    });
+        return domItem;
+    }
+
+    function renderChunk() {
+        if (!container) return;
+        const scrollTop = container.scrollTop;
+        const containerHeight = container.clientHeight || window.innerHeight;
+
+        const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - 5);
+        const endIndex = Math.min(items.length - 1, Math.floor((scrollTop + containerHeight) / ITEM_HEIGHT) + 5);
+
+        for (const [index, node] of renderedNodes.entries()) {
+            if (index < startIndex || index > endIndex) {
+                node.remove();
+                renderedNodes.delete(index);
+            }
+        }
+
+        for (let i = startIndex; i <= endIndex; i++) {
+            if (!renderedNodes.has(i)) {
+                const node = createDOMItem(items[i], i);
+                node.style.position = 'absolute';
+                node.style.top = `${i * ITEM_HEIGHT}px`;
+                node.style.left = '0';
+                node.style.right = '0';
+                node.style.height = `${ITEM_HEIGHT}px`;
+                spacer.appendChild(node);
+                renderedNodes.set(i, node);
+            }
+        }
+    }
+
+    scrollListener = renderChunk;
+    container.addEventListener('scroll', scrollListener);
+
+    // Initial render
+    renderChunk();
 }

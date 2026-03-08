@@ -1,95 +1,10 @@
 const { state, store } = require('./state');
 const { showToast } = require('./window-manager');
 const crypto = require('crypto');
-const { Worker } = require('worker_threads');
-const path = require('path');
-
-// Initialize compression worker
-const workerPath = path.join(__dirname, 'compression-worker.js');
-const compressionWorker = new Worker(workerPath);
-const pendingRequests = new Map();
-
-compressionWorker.on('message', (msg) => {
-    const { id, success, result, error } = msg;
-    if (pendingRequests.has(id)) {
-        const { resolve, reject } = pendingRequests.get(id);
-        pendingRequests.delete(id);
-        if (success) resolve(result);
-        else reject(new Error(error));
-    }
-});
-
-function compressDataAsync(data) {
-    if (!data) return Promise.resolve(data);
-    return new Promise((resolve, reject) => {
-        const id = crypto.randomUUID();
-        pendingRequests.set(id, { resolve, reject });
-        compressionWorker.postMessage({ id, action: 'compress', data });
-    });
-}
-
-function decompressDataAsync(data) {
-    if (!data) return Promise.resolve(data);
-    return new Promise((resolve, reject) => {
-        const id = crypto.randomUUID();
-        pendingRequests.set(id, { resolve, reject });
-        compressionWorker.postMessage({ id, action: 'decompress', data });
-    });
-}
-
-const decompressedCache = new Map();
-
-function decompressBatchAsync(dataArray) {
-    if (!dataArray || dataArray.length === 0) return Promise.resolve([]);
-    return new Promise((resolve, reject) => {
-        const id = crypto.randomUUID();
-        pendingRequests.set(id, { resolve, reject });
-        compressionWorker.postMessage({ id, action: 'decompress-batch', data: dataArray });
-    });
-}
-
-async function getDecompressedList(items) {
-    const toDecompress = [];
-
-    items.forEach(item => {
-        if (item.compressed && !decompressedCache.has(item.id)) {
-            toDecompress.push(item);
-        }
-    });
-
-    if (toDecompress.length > 0) {
-        try {
-            const dataArray = toDecompress.map(i => i.content);
-            const results = await decompressBatchAsync(dataArray);
-            toDecompress.forEach((item, index) => {
-                decompressedCache.set(item.id, results[index]);
-            });
-        } catch (e) {
-            console.error('Batch decompression failed:', e);
-        }
-    }
-
-    return items.map(item => {
-        if (item.compressed && decompressedCache.has(item.id)) {
-            return { ...item, content: decompressedCache.get(item.id) };
-        }
-        return item;
-    });
-}
-
-async function getDecompressedHistory() {
-    return getDecompressedList(state.history);
-}
-
-async function getDecompressedFavorites() {
-    return getDecompressedList(state.favorites);
-}
 
 // Broadcast updated data to all windows
-async function broadcast() {
-    const history = await getDecompressedHistory();
-    const favorites = await getDecompressedFavorites();
-    const data = { history, favorites };
+function broadcast() {
+    const data = { history: state.history, favorites: state.favorites };
     if (state.mainWindow && !state.mainWindow.isDestroyed()) {
         state.mainWindow.webContents.send('update-history', data);
     }
@@ -98,22 +13,14 @@ async function broadcast() {
     }
 }
 
-async function addHistory(content) {
+function addHistory(content) {
     if (!content) return;
-    
-    const compressedData = await compressDataAsync(content);
-    
-    const existingIndex = state.history.findIndex(i => {
-        if (i.compressed) return i.content === compressedData;
-        return i.content === content;
-    });
-    
+    const existingIndex = state.history.findIndex(i => i.content === content);
     if (existingIndex !== -1) state.history.splice(existingIndex, 1);
 
     state.history.unshift({
         id: crypto.randomUUID(),
-        content: compressedData,
-        compressed: true,
+        content,
         timestamp: new Date().toISOString()
     });
 
@@ -140,19 +47,13 @@ function clearHistory() {
 
 // ── Favorites (completely independent from history) ──────────────────────────
 
-async function addToFavorites(item) {
-    const compressedData = await compressDataAsync(item.content);
-    
-    const exists = state.favorites.some(f => 
-        (f.compressed ? f.content === compressedData : f.content === item.content)
-    );
-    
+function addToFavorites(item) {
+    const exists = state.favorites.some(f => f.content === item.content);
     if (!exists) {
         state.favorites.unshift({
             id: crypto.randomUUID(),
-            content: compressedData,
-            compressed: true,
-            timestamp: item.timestamp || new Date().toISOString(),
+            content: item.content,
+            timestamp: new Date().toISOString(),
             note: item.note || ''
         });
         store.set('favorites', state.favorites);
@@ -177,28 +78,13 @@ function setItemNote(id, note) {
     broadcast();
 }
 
-function reorderHistory(newHistoryItems) {
-    const newOrderIds = newHistoryItems.map(i => i.id);
-    state.history.sort((a, b) => {
-        let ai = newOrderIds.indexOf(a.id);
-        let bi = newOrderIds.indexOf(b.id);
-        if (ai === -1) ai = 999999;
-        if (bi === -1) bi = 999999;
-        return ai - bi;
-    });
+function reorderHistory(newHistory) {
+    state.history = newHistory;
     store.set('history', state.history);
-    // broadcast() omitted intentional (reordering is usually just state update)
 }
 
-function reorderFavorites(newFavoritesItems) {
-    const newOrderIds = newFavoritesItems.map(i => i.id);
-    state.favorites.sort((a, b) => {
-        let ai = newOrderIds.indexOf(a.id);
-        let bi = newOrderIds.indexOf(b.id);
-        if (ai === -1) ai = 999999;
-        if (bi === -1) bi = 999999;
-        return ai - bi;
-    });
+function reorderFavorites(newFavorites) {
+    state.favorites = newFavorites;
     store.set('favorites', state.favorites);
     broadcast();
 }
@@ -223,7 +109,5 @@ module.exports = {
     setItemNote,
     reorderHistory,
     reorderFavorites,
-    startClipboardWatcher,
-    getDecompressedHistory,
-    getDecompressedFavorites
+    startClipboardWatcher
 };

@@ -23,10 +23,8 @@ import { elements } from './modules/dom.js';
     // Toggle extra settings visibility on load
     if (settings.showWidget) {
         elements.widgetExtraSettings.style.display = 'flex';
-        elements.refreshWidgetBtn.style.display = 'flex';
     } else {
         elements.widgetExtraSettings.style.display = 'none';
-        elements.refreshWidgetBtn.style.display = 'none';
     }
 
     // Formatting Helpers for Shortcuts

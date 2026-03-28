@@ -61,7 +61,9 @@ async function startCapture(mode) {
         if (source) {
             // Get the pixel-perfect screenshot as PNG data URL
             const thumbnail = source.thumbnail;
-            const dataUrl = thumbnail.toDataURL();
+            // Use toPNG() for lossless quality — toDataURL() may lose color fidelity
+            const pngBuffer = thumbnail.toPNG();
+            const dataUrl = 'data:image/png;base64,' + pngBuffer.toString('base64');
 
             const sourceId = source.id;
 
@@ -70,7 +72,9 @@ async function startCapture(mode) {
             win.webContents.on('did-finish-load', () => {
                 if (!win.isDestroyed()) {
                     // Send the high-res screenshot data URL + sourceId (for video mode getUserMedia)
-                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality, captureWidth, captureHeight);
+                    // Include primary display's scaleFactor — clipboard always uses primary DPI
+                    const primarySf = screen.getPrimaryDisplay().scaleFactor || 1;
+                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality, captureWidth, captureHeight, primarySf);
                 }
             });
         } else {

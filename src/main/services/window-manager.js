@@ -64,7 +64,8 @@ function createCapture(type = 'draw', display = null) {
             preload: path.join(__dirname, '../../preload/preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
-            sandbox: true
+            sandbox: true,
+            zoomFactor: 1.0
         }
     });
 

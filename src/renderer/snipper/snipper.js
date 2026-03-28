@@ -18,7 +18,9 @@ const state = {
     history: [],
     dpr: window.devicePixelRatio || 1,
     scaleX: null,
-    scaleY: null
+    scaleY: null,
+    selectedColor: '#ff0000',
+    primarySf: 1
 };
 
 function saveState() {
@@ -70,11 +72,13 @@ function drawOverlay(selX, selY, selW, selH) {
     overlayCtx.fillStyle = 'rgba(0,0,0,1)';
     overlayCtx.fillRect(selX * sx, selY * sy, selW * sx, selH * sy);
     overlayCtx.restore();
-    // Draw white border around selection
+    // Draw border around selection using selected color
     overlayCtx.save();
-    overlayCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+    overlayCtx.strokeStyle = state.selectedColor;
+    overlayCtx.globalAlpha = 0.9;
     overlayCtx.lineWidth = Math.max(1, 2 * sx);
     overlayCtx.strokeRect(selX * sx, selY * sy, selW * sx, selH * sy);
+    overlayCtx.globalAlpha = 1.0;
     overlayCtx.restore();
 }
 
@@ -98,7 +102,7 @@ ctx.imageSmoothingEnabled = false;
 drawCtx.imageSmoothingEnabled = false;
 
 // --- Capture & Initialize Screen ---
-window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
+window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, primarySf) => {
     const logicalW = window.innerWidth;
     const logicalH = window.innerHeight;
 
@@ -121,6 +125,7 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
     state.scaleX = physW / logicalW;
     state.scaleY = physH / logicalH;
     state.dpr = window.devicePixelRatio || 1;
+    state.primarySf = primarySf || 1;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -167,7 +172,10 @@ const dimensionsLabel = document.getElementById('dimensions-label');
 
 function updateDimensions(w, h) {
     if (dimensionsLabel) {
-        dimensionsLabel.textContent = `${Math.round(w)} x ${Math.round(h)}`;
+        // Show physical pixel dimensions (what the final image will actually be)
+        const sx = state.scaleX != null ? state.scaleX : state.dpr;
+        const sy = state.scaleY != null ? state.scaleY : state.dpr;
+        dimensionsLabel.textContent = `${Math.round(w * sx)} x ${Math.round(h * sy)}`;
     }
 }
 
@@ -439,17 +447,30 @@ function getFinalImage() {
     if (!state.selectionRect) return null;
     const sx = state.scaleX != null ? state.scaleX : state.dpr;
     const sy = state.scaleY != null ? state.scaleY : state.dpr;
+    // Use primary display's scaleFactor for clipboard compensation
+    // clipboard.writeImage always divides by primary display's DPI, not current window's
+    const clipboardSf = state.primarySf || 1;
     const r = state.selectionRect;
-    const cw = Math.round(r.w * sx);
-    const ch = Math.round(r.h * sy);
+
+    // Physical pixel dimensions of the selected area
+    const cropW = Math.round(r.w * sx);
+    const cropH = Math.round(r.h * sy);
+
+    // Electron's clipboard.writeImage divides by PRIMARY display's scaleFactor on Windows.
+    // Pre-multiply by primarySf so they cancel out: (cropW * sf) / sf = cropW
+    const outW = Math.round(cropW * clipboardSf);
+    const outH = Math.round(cropH * clipboardSf);
 
     const tc = document.createElement('canvas');
-    tc.width = cw;
-    tc.height = ch;
+    tc.width = outW;
+    tc.height = outH;
     const tctx = tc.getContext('2d');
 
-    tctx.drawImage(canvas, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, cw, ch);
-    tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, cw, ch);
+    // Nearest-neighbor interpolation — no blurring on upscale
+    tctx.imageSmoothingEnabled = false;
+
+    tctx.drawImage(canvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, outW, outH);
+    tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, outW, outH);
 
     return tc.toDataURL('image/png');
 }
@@ -528,6 +549,12 @@ document.querySelectorAll('.color-dot').forEach(d => d.addEventListener('click',
     document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
     d.classList.add('active');
     drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
+    state.selectedColor = d.dataset.color;
+    // Update selection border color immediately if selection exists
+    if (state.selectionRect) {
+        const r = state.selectionRect;
+        drawOverlay(r.x, r.y, r.w, r.h);
+    }
 }));
 
 // Color palette toggle

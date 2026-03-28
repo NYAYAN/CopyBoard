@@ -72,9 +72,10 @@ function drawOverlay(selX, selY, selW, selH) {
     overlayCtx.fillStyle = 'rgba(0,0,0,1)';
     overlayCtx.fillRect(selX * sx, selY * sy, selW * sx, selH * sy);
     overlayCtx.restore();
-    // Draw border around selection using selected color
+    // Draw border around selection using FIXED white color
+    // This decouples the selection UI from the drawing tool color
     overlayCtx.save();
-    overlayCtx.strokeStyle = state.selectedColor;
+    overlayCtx.strokeStyle = '#ffffff';
     overlayCtx.globalAlpha = 0.9;
     overlayCtx.lineWidth = Math.max(1, 2 * sx);
     overlayCtx.strokeRect(selX * sx, selY * sy, selW * sx, selH * sy);
@@ -215,6 +216,10 @@ window.addEventListener('mousedown', (e) => {
             state.isDrawing = true; state.startX = e.clientX; state.startY = e.clientY;
             const sx = state.scaleX != null ? state.scaleX : state.dpr;
             const sy = state.scaleY != null ? state.scaleY : state.dpr;
+            
+            // Set drawing color immediately from state
+            drawCtx.strokeStyle = drawCtx.fillStyle = state.selectedColor;
+
             if (state.activeTool === 'pen') { drawCtx.beginPath(); drawCtx.moveTo(state.startX * sx, state.startY * sy); }
             else state.savedImageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
             return;
@@ -289,6 +294,8 @@ window.addEventListener('mousemove', (e) => {
         const scale = (sx + sy) / 2;
         drawCtx.save();
 
+        // Enforce drawing color from state inside the save/restore block
+        drawCtx.strokeStyle = drawCtx.fillStyle = state.selectedColor;
         drawCtx.lineWidth = 3 * scale;
         drawCtx.font = (20 * scale) + "px Arial";
 

@@ -170,6 +170,7 @@ function toggleWidget(show) {
             createWidgetWindow();
         } else {
             state.widgetWindow.showInactive();
+            state.widgetWindow.moveTop();
         }
     } else {
         if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
@@ -215,11 +216,40 @@ function createWidgetWindow() {
     state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
     state.widgetWindow.loadFile(path.join(__dirname, '../../renderer/widget/widget.html'));
 
+    // Keep widget always on top — re-apply on every show
+    state.widgetWindow.on('show', () => {
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
+            state.widgetWindow.moveTop();
+        }
+    });
+
+    // Periodic alwaysOnTop refresh to prevent other windows from covering widget
+    state._widgetTopInterval = setInterval(() => {
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed() && state.widgetWindow.isVisible()) {
+            if (!state.widgetWindow.isAlwaysOnTop()) {
+                state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
+            }
+            state.widgetWindow.moveTop();
+        } else if (!state.widgetWindow || state.widgetWindow.isDestroyed()) {
+            clearInterval(state._widgetTopInterval);
+            state._widgetTopInterval = null;
+        }
+    }, 3000);
+
+    state.widgetWindow.on('closed', () => {
+        if (state._widgetTopInterval) {
+            clearInterval(state._widgetTopInterval);
+            state._widgetTopInterval = null;
+        }
+    });
+
     // Notify renderer of the saved side and config once it has loaded
     state.widgetWindow.webContents.on('did-finish-load', () => {
         state.widgetWindow.webContents.setZoomFactor(s);
         if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
             state.widgetWindow.showInactive();
+            state.widgetWindow.moveTop();
         }
         notifySide();
         state.widgetWindow.webContents.send('widget-config', {

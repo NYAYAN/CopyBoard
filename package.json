@@ -70,7 +70,6 @@
   "dependencies": {
     "electron-store": "^8.1.0",
     "electron-updater": "^6.3.9",
-    "tesseract.js": "^5.1.1",
-    "uuid": "^13.0.0"
+    "tesseract.js": "^5.1.1"
   }
 }

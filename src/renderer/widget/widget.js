@@ -9,6 +9,8 @@ const historyItemsContainer = document.getElementById('history-items');
 const tabHistory = document.getElementById('tab-history');
 const tabFavorites = document.getElementById('tab-favorites');
 
+const widgetSearch = document.getElementById('widget-search');
+
 let isOpen = false;
 let isHistoryOpen = false;
 let isDragging = false;
@@ -20,6 +22,7 @@ let lastHistoryRequestId = 0;
 let activeTab = 'history'; // 'history' | 'favorites'
 let allHistoryItems = [];
 let allFavoriteItems = [];
+let searchQuery = '';
 let currentOpacity = 1;
 let lastDragEndTime = 0;
 
@@ -207,13 +210,23 @@ function renderHistory(history, favorites) {
     allHistoryItems = history || [];
     allFavoriteItems = favorites || [];
 
-    const displayItems = activeTab === 'favorites' ? allFavoriteItems : allHistoryItems;
+    let displayItems = activeTab === 'favorites' ? allFavoriteItems : allHistoryItems;
+
+    // Apply Search Filter
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        displayItems = displayItems.filter(item => {
+            const contentMatch = item.content && item.content.toLowerCase().includes(q);
+            const noteMatch = item.note && item.note.toLowerCase().includes(q);
+            return contentMatch || noteMatch;
+        });
+    }
 
     historyItemsContainer.scrollTop = 0;
     hideTooltip();
 
     if (displayItems.length === 0) {
-        const msg = activeTab === 'favorites' ? 'Favori öğe yok' : 'Geçmiş boş';
+        const msg = searchQuery ? 'Eşleşen sonuç bulunamadı' : (activeTab === 'favorites' ? 'Favori öğe yok' : 'Geçmiş boş');
         historyItemsContainer.innerHTML = `<div style="padding: 20px; text-align: center; opacity: 0.5; font-size: 13px;">${msg}</div>`;
         return;
     }
@@ -233,6 +246,12 @@ async function loadHistory() {
         renderHistory(data.history || [], data.favorites || []);
     }
 }
+
+// --- Search ---
+widgetSearch.addEventListener('input', (e) => {
+    searchQuery = e.target.value.trim();
+    renderHistory(allHistoryItems, allFavoriteItems);
+});
 
 // --- Tab Switching ---
 tabHistory.addEventListener('click', () => {
@@ -278,6 +297,10 @@ function closeAll() {
     mainBtn.classList.remove('active');
     historyPanel.classList.remove('open');
     hideTooltip();
+
+    // Reset search
+    searchQuery = '';
+    widgetSearch.value = '';
 
     if (!mainBtn.matches(':hover')) {
         mainBtn.style.opacity = currentOpacity.toString();

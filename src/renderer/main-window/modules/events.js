@@ -13,7 +13,8 @@ import {
 let state = {
     history: [],
     favorites: [],
-    activeTab: 'all'
+    activeTab: 'all',
+    searchQuery: ''
 };
 
 export function initState(data) {
@@ -29,7 +30,7 @@ export function updateHistoryState(data) {
         // Fallback if old format received
         state.history = Array.isArray(data) ? data : [];
     }
-    renderHistory(state.history, state.favorites, state.activeTab);
+    renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
 }
 
 export function setupEventListeners() {
@@ -44,13 +45,19 @@ export function setupEventListeners() {
                 elements.tabBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 state.activeTab = btn.dataset.tab;
-                renderHistory(state.history, state.favorites, state.activeTab);
+                renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
 
                 setTimeout(() => {
                     elements.listElement.classList.remove('tab-switching');
                 }, 50);
             }, 150);
         });
+    });
+
+    // Search
+    elements.searchInput.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value.trim();
+        renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
     });
 
     // Window Controls

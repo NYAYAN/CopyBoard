@@ -146,6 +146,51 @@ h1 {
     font-weight: 500;
 }
 
+/* Search */
+.search-container {
+    padding: 8px 14px;
+    background: rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon {
+    position: absolute;
+    left: 10px;
+    width: 14px;
+    height: 14px;
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+
+#search-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 8px 10px 8px 32px;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    outline: none;
+    transition: var(--transition);
+}
+
+#search-input:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(137, 87, 229, 0.2);
+}
+
+#search-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
 /* Settings & About */
 .settings-panel {
     background: rgba(0, 0, 0, 0.2);

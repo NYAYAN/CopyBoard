@@ -34,6 +34,9 @@ export const elements = {
     saveNoteBtn: document.getElementById('save-note-btn'),
     cancelNoteBtn: document.getElementById('cancel-note-btn'),
 
+    // Search
+    searchInput: document.getElementById('search-input'),
+
     // Other
     tabBtns: document.querySelectorAll('.tab-btn'),
     autostartCheck: document.getElementById('autostart-check'),

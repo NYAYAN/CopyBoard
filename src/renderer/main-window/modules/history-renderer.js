@@ -2,13 +2,24 @@ import { elements } from './dom.js';
 import { openNoteModal } from './notes.js';
 import { onDragStart, onDragOver, onDrop } from './drag-drop.js';
 
-export function renderHistory(history, favorites, activeTab) {
+export function renderHistory(history, favorites, activeTab, query = '') {
     elements.listElement.innerHTML = '';
 
-    const items = activeTab === 'favorites' ? favorites : history;
+    let items = activeTab === 'favorites' ? favorites : history;
+
+    // Search Filter
+    if (query) {
+        const q = query.toLowerCase();
+        items = items.filter(item => {
+            const contentMatch = item.content && item.content.toLowerCase().includes(q);
+            const noteMatch = item.note && item.note.toLowerCase().includes(q);
+            return contentMatch || noteMatch;
+        });
+    }
 
     if (!items || items.length === 0) {
-        elements.listElement.innerHTML = '<div class="empty-state">Liste boş.</div>';
+        const msg = query ? 'Eşleşen sonuç bulunamadı.' : 'Liste boş.';
+        elements.listElement.innerHTML = `<div class="empty-state">${msg}</div>`;
         return;
     }
 

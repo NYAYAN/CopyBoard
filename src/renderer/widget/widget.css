@@ -83,6 +83,29 @@ body {
     border-bottom-color: var(--primary);
 }
 
+.search-container {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border);
+}
+
+#widget-search {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    color: var(--text);
+    font-size: 11px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+#widget-search:focus {
+    border-color: var(--primary);
+    background: rgba(0, 0, 0, 0.5);
+}
+
 
 .history-items {
     flex: 1;
@@ -208,23 +231,6 @@ body {
 .left-side .widget-container {
     right: auto;
     left: 0;
-}
-
-/* Upward Layout (isUp: true gelince) */
-.up-side .widget-container {
-    /* flex-direction: column-reverse;
-    justify-content: flex-end; */
-}
-
-.up-side .widget-menu {
-    /* top: auto;
-    bottom: 70px;
-    transform-origin: bottom center; */
-}
-
-.up-side .history-panel {
-    /* top: auto;
-    bottom: 10px; */
 }
 
 /* ── Base Widget Styles ─────────────────────────────────────────────────── */

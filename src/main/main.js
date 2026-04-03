@@ -1,6 +1,6 @@
-const { app, dialog, clipboard } = require('electron');
+const { app, dialog, clipboard, screen } = require('electron');
 const { state } = require('./services/state');
-const { showMain, createMainWindow, toggleWidget } = require('./services/window-manager');
+const { showMain, createMainWindow, toggleWidget, handleDisplayChange } = require('./services/window-manager');
 const { initTray } = require('./services/tray-manager');
 const { registerIpcHandlers } = require('./services/ipc-handlers');
 const { initAutoUpdater } = require('./services/update-manager');
@@ -54,6 +54,22 @@ if (!gotTheLock) {
 
     // Start Clipboard Watcher
     const clipInterval = startClipboardWatcher(clipboard);
+
+    // Monitor for display changes to prevent widget from getting lost
+    screen.on('display-added', () => {
+      console.log('Display added, checking widget focus...');
+      handleDisplayChange();
+    });
+
+    screen.on('display-removed', () => {
+      console.log('Display removed, checking widget focus...');
+      handleDisplayChange();
+    });
+
+    screen.on('display-metrics-changed', () => {
+      console.log('Display metrics changed, re-validating widget position...');
+      handleDisplayChange();
+    });
 
     // Initialize Widget if enabled in settings
     if (state.showWidget) {

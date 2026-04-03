@@ -183,6 +183,9 @@ function createWidgetWindow() {
     state.widgetPos = store.get('widgetPos') || { x: screen.getPrimaryDisplay().workAreaSize.width - 80, y: 100 };
     state.widgetSide = store.get('widgetSide') || 'right';
 
+    // Ensure the saved position is visible on current displays
+    ensureWidgetInBounds();
+
     const s = (state.widgetScale || 100) / 100;
     const TOTAL_WIDTH = Math.round(418 * s); // 350 panel + 68 buttons scaled
     const COLLAPSED_HEIGHT = Math.round(68 * s);
@@ -267,15 +270,19 @@ function handleWidgetAction(action, data) {
     };
 
     if (action === 'expand') {
+        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
         calculateDirection();
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: EXP_H });
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: EXP_H });
     } else if (action === 'expand-history') {
+        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
         calculateDirection();
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: HIS_H });
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: HIS_H });
     } else if (action === 'collapse-history') {
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: EXP_H });
+        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: EXP_H });
     } else if (action === 'collapse') {
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: COL_H });
+        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: COL_H });
     } else if (action === 'drag') {
         const bounds = state.widgetWindow.getBounds();
         const currentSide = state.widgetSide || 'right';
@@ -290,30 +297,40 @@ function handleWidgetAction(action, data) {
         state.widgetWindow.setBounds({ x: newWinX, y: newY, width: FULL_W, height: bounds.height });
 
     } else if (action === 'drag-end') {
-        // ...Existing drag-end logic...
-        calculateDirection();
-        // Find nearest display to snap the widget safely within bounds
         const bounds = state.widgetWindow.getBounds();
         const currentSide = state.widgetSide || 'right';
         const btnX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
 
-        // Get display nearest to the button center
         const display = screen.getDisplayNearestPoint({
             x: Math.round(btnX + BTN_W / 2),
             y: Math.round(bounds.y + COL_H / 2)
         });
         const db = display.workArea;
 
-        // Final Clamping to ensure it doesn't stay off-screen
         let finalBtnX = btnX;
         let finalY = bounds.y;
 
-        if (finalBtnX < db.x) finalBtnX = db.x;
-        if (finalBtnX > db.x + db.width - BTN_W) finalBtnX = db.x + db.width - BTN_W;
-        if (finalY < db.y) finalY = db.y;
-        if (finalY > db.y + db.height - COL_H) finalY = db.y + db.height - COL_H;
+        // Snapping Thresholds (60px)
+        const SNAP_THRESHOLD = 60;
+        const MARGIN = 10;
 
-        // Determine new side based on which half of the display it's on
+        const distLeft = Math.abs(finalBtnX - db.x);
+        const distRight = Math.abs(finalBtnX - (db.x + db.width - BTN_W));
+        const distTop = Math.abs(finalY - db.y);
+        const distBottom = Math.abs(finalY - (db.y + db.height - COL_H));
+
+        if (distLeft < SNAP_THRESHOLD) finalBtnX = db.x + MARGIN;
+        else if (distRight < SNAP_THRESHOLD) finalBtnX = db.x + db.width - BTN_W - MARGIN;
+
+        if (distTop < SNAP_THRESHOLD) finalY = db.y + MARGIN;
+        else if (distBottom < SNAP_THRESHOLD) finalY = db.y + db.height - COL_H - MARGIN;
+
+        // General clamping to keep it on-screen
+        if (finalBtnX < db.x) finalBtnX = db.x + MARGIN;
+        if (finalBtnX > db.x + db.width - BTN_W) finalBtnX = db.x + db.width - BTN_W - MARGIN;
+        if (finalY < db.y) finalY = db.y + MARGIN;
+        if (finalY > db.y + db.height - COL_H) finalY = db.y + db.height - COL_H - MARGIN;
+
         const newSide = (finalBtnX < db.x + db.width / 2) ? 'left' : 'right';
 
         state.widgetSide = newSide;
@@ -321,8 +338,20 @@ function handleWidgetAction(action, data) {
         store.set('widgetPos', state.widgetPos);
         store.set('widgetSide', newSide);
 
+        // Relative coordinates (0.0 to 1.0)
+        const relX = (finalBtnX - db.x) / (db.width - BTN_W);
+        const relY = (finalY - db.y) / (db.height - COL_H);
+
+        store.set('widgetDockParams', {
+            displayId: display.id,
+            relX,
+            relY,
+            side: newSide
+        });
+
         const targetWindowX = (newSide === 'left') ? finalBtnX : finalBtnX - PANEL_W;
         state.widgetWindow.setBounds({ x: Math.round(targetWindowX), y: Math.round(finalY), width: FULL_W, height: COL_H });
+        calculateDirection();
         notifySide();
 
     } else if (action === 'open-list') {
@@ -342,14 +371,103 @@ function updateWidgetScale(scaleValue) {
         state.widgetWindow.webContents.setZoomFactor(s);
 
         // Refresh bounds with new scale by simulating a collapse (or current mode)
-        // Assume collapsed for simplest resizing mapping, wait, better yet,
-        // we can just re-apply current height logic. But since scale can change quickly, collapsing it is safe.
         const FULL_W = Math.round(418 * s);
         const COL_H = Math.round(68 * s);
         const winX = getWindowX();
 
         state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: COL_H });
     }
+}
+
+/**
+ * Ensures the widget is within at least one of the current displays.
+ * Restores position using relative coordinates for stability during transitions.
+ */
+function ensureWidgetInBounds() {
+    let targetDisplay;
+    const s = (state.widgetScale || 100) / 100;
+    const BTN_SIZE = Math.round(68 * s);
+
+    if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+        const winBounds = state.widgetWindow.getBounds();
+        targetDisplay = screen.getDisplayMatching(winBounds);
+    }
+
+    let dockParams = store.get('widgetDockParams');
+    if (!targetDisplay) {
+        const displays = screen.getAllDisplays();
+        targetDisplay = displays.find(d => d.id === (dockParams && dockParams.displayId)) || screen.getPrimaryDisplay();
+    }
+    const db = targetDisplay.workArea;
+    const safeWidth = Math.max(1, db.width - BTN_SIZE);
+    const safeHeight = Math.max(1, db.height - BTN_SIZE);
+
+    // Use relative coordinates if available
+    let newX, newY;
+    if (dockParams && dockParams.relX !== undefined) {
+        newX = db.x + (dockParams.relX * safeWidth);
+        newY = db.y + (dockParams.relY * safeHeight);
+    } else {
+        // Fallback to absolute or default
+        newX = state.widgetPos ? state.widgetPos.x : db.x + db.width - BTN_SIZE - 10;
+        newY = state.widgetPos ? state.widgetPos.y : db.y + 100;
+    }
+
+    // Clamp to screen bounds
+    if (newX < db.x) newX = db.x + 10;
+    if (newX > db.x + db.width - BTN_SIZE) newX = db.x + db.width - BTN_SIZE - 10;
+    if (newY < db.y) newY = db.y + 10;
+    if (newY > db.y + db.height - BTN_SIZE) newY = db.y + db.height - BTN_SIZE - 10;
+
+    const newSide = (newX < db.x + db.width / 2) ? 'left' : 'right';
+
+    state.widgetPos = { x: Math.round(newX), y: Math.round(newY) };
+    state.widgetSide = newSide;
+
+    store.set('widgetPos', state.widgetPos);
+    store.set('widgetSide', state.widgetSide);
+    
+    // Refresh dock params
+    store.set('widgetDockParams', {
+        displayId: targetDisplay.id,
+        relX: (state.widgetPos.x - db.x) / safeWidth,
+        relY: (state.widgetPos.y - db.y) / safeHeight,
+        side: newSide
+    });
+}
+
+/**
+ * Called when displays are added/removed/resized.
+ */
+let activeSyncTimeouts = [];
+
+function handleDisplayChange() {
+    // Clear all existing timeouts for previous events
+    activeSyncTimeouts.forEach(t => clearTimeout(t));
+    activeSyncTimeouts = [];
+    
+    const runSync = () => {
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            ensureWidgetInBounds();
+            const s = (state.widgetScale || 100) / 100;
+            const FULL_W = Math.round(418 * s);
+            const COL_H = Math.round(68 * s);
+            const winX = getWindowX();
+
+            state.widgetWindow.setBounds({
+                x: Math.round(winX),
+                y: Math.round(state.widgetPos.y),
+                width: FULL_W,
+                height: COL_H
+            });
+            notifySide();
+        }
+    };
+
+    // Triple-Check Sequence: catch OS re-layouts during multi-monitor flashes
+    activeSyncTimeouts.push(setTimeout(runSync, 500));
+    activeSyncTimeouts.push(setTimeout(runSync, 2000));
+    activeSyncTimeouts.push(setTimeout(runSync, 5000));
 }
 
 module.exports = {
@@ -359,5 +477,6 @@ module.exports = {
     showToast,
     toggleWidget,
     handleWidgetAction,
-    updateWidgetScale
+    updateWidgetScale,
+    handleDisplayChange
 };

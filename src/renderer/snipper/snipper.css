@@ -317,21 +317,31 @@ button.close:hover {
 .text-input-container {
     position: absolute;
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
-    /* Keep handle at top */
-    background: #1e1e2e;
-    border: 2px solid #8be9fd;
+    background: rgba(30,30,46, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px dashed rgba(139, 233, 253, 0.5);
     border-radius: 4px;
     z-index: 100;
-    padding: 2px;
+    padding: 0;
 }
 
 .text-drag-handle {
+    position: absolute;
+    top: -20px;
+    left: -1px;
     cursor: move;
-    padding: 4px 8px;
+    padding: 2px 10px;
+    font-size: 10px;
     color: #8be9fd;
     user-select: none;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(30,30,46, 0.6);
+    border: 1px dashed rgba(139, 233, 253, 0.5);
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    display: inline-block;
 }
 
 .text-input-field {

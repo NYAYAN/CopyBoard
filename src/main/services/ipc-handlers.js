@@ -296,10 +296,12 @@ function registerIpcHandlers() {
                     });
 
                     if (p) {
-                        if (fs.existsSync(state.tempVideoPath)) {
+                        if (fs.existsSync(state.tempVideoPath) && fs.statSync(state.tempVideoPath).size > 0) {
                             fs.copyFileSync(state.tempVideoPath, p);
                             showToast('Video Kaydedildi.', 'success');
                             try { fs.unlinkSync(state.tempVideoPath); } catch (err) { console.error('Temp deletion failed:', err); }
+                        } else {
+                            showToast('Hata: Video verisi alınamadı. Kayıt başarısız.', 'error');
                         }
                     } else {
                         // Cancelled - Add temp path to history

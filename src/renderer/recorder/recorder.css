@@ -40,10 +40,9 @@ body:not(.is-recording) #overlay:active {
 
 #selection-box {
     position: absolute;
-    outline: 3px solid var(--accent);
-    /* Border yerine outline kullanıyoruz */
-    outline-offset: 1px;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+    outline: 4px solid var(--accent);
+    outline-offset: -4px; /* Border inside to keep it visible on screen edges */
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7); /* Darker backdrop for more contrast */
     z-index: 100;
 }
 
@@ -226,9 +225,11 @@ body.is-recording #selection-box {
 @keyframes pulse {
     0% {
         outline-color: var(--accent);
+        outline-width: 4px;
     }
 
     100% {
         outline-color: var(--danger);
+        outline-width: 6px;
     }
 }

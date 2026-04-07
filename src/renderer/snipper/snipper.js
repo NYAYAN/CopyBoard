@@ -51,11 +51,19 @@ function resizeCanvas() {
     });
 
     drawCtx.setTransform(1, 0, 0, 1, 0, 0);
+    initDrawCtx();
+}
+
+function initDrawCtx() {
+    const sx = state.scaleX != null ? state.scaleX : state.dpr;
+    const sy = state.scaleY != null ? state.scaleY : state.dpr;
+    const scale = (sx + sy) / 2;
+
     drawCtx.lineCap = 'round';
     drawCtx.lineJoin = 'round';
-    drawCtx.strokeStyle = drawCtx.fillStyle = '#ff0000';
-    drawCtx.lineWidth = 3;
-    drawCtx.font = "20px Arial";
+    drawCtx.strokeStyle = drawCtx.fillStyle = state.selectedColor || '#ff0000';
+    drawCtx.lineWidth = 3 * scale;
+    drawCtx.font = (20 * scale) + "px Arial";
 }
 
 // Draw the dimming overlay with a clear "hole" for the selection area
@@ -130,6 +138,7 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    initDrawCtx(); // Ensure context properties are set after canvas.width/height resets them
     clearOverlay();
     resetUI();
 
@@ -532,6 +541,7 @@ textInput.addEventListener('keydown', (e) => {
             const sy = state.scaleY != null ? state.scaleY : state.dpr;
             const scale = (sx + sy) / 2;
             drawCtx.save();
+            drawCtx.fillStyle = state.selectedColor;
             drawCtx.font = (20 * scale) + "px Arial";
             const cp = new Path2D(); cp.rect(state.selectionRect.x * sx, state.selectionRect.y * sy, state.selectionRect.w * sx, state.selectionRect.h * sy);
             drawCtx.clip(cp);

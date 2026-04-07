@@ -1,5 +1,4 @@
 import { elements } from './dom.js';
-import { renderHistory } from './history-renderer.js';
 
 let dragStartIndex;
 
@@ -16,31 +15,23 @@ export function onDragOver(e) {
     e.dataTransfer.dropEffect = 'move';
 }
 
-export function onDrop(e, currentHistory, activeTab) {
+export function onDrop(e, favorites, activeTab) {
     e.stopPropagation();
-    // Context check passed via binding or caller
     if (activeTab !== 'favorites') return;
 
     const dragEndIndex = +this.getAttribute('data-list-index');
-    const item = this;
+    this.classList.remove('dragging');
 
-    if (dragStartIndex !== dragEndIndex) {
-        swapFavorites(dragStartIndex, dragEndIndex, currentHistory);
-        item.classList.remove('dragging');
+    if (dragStartIndex !== undefined && dragStartIndex !== dragEndIndex) {
+        moveFavorite(dragStartIndex, dragEndIndex, favorites);
     }
 }
 
-function swapFavorites(fromIndex, toIndex, currentHistory) {
-    const favorites = currentHistory.filter(i => i.isFavorite);
-    const itemA = favorites[fromIndex];
-    const itemB = favorites[toIndex];
-    const realIndexA = currentHistory.findIndex(i => i.id === itemA.id);
-    const realIndexB = currentHistory.findIndex(i => i.id === itemB.id);
+function moveFavorite(fromIndex, toIndex, favorites) {
+    // Correctly move the item in the array
+    const [movedItem] = favorites.splice(fromIndex, 1);
+    favorites.splice(toIndex, 0, movedItem);
 
-    const temp = currentHistory[realIndexA];
-    currentHistory[realIndexA] = currentHistory[realIndexB];
-    currentHistory[realIndexB] = temp;
-
-    window.api.reorderHistory(currentHistory);
-    renderHistory(currentHistory, 'favorites'); // Re-render immediately
+    // Use the dedicated favorites reorder IPC
+    window.api.reorderFavorites(favorites);
 }

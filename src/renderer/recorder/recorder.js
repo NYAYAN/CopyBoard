@@ -69,12 +69,17 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
         img.onload = () => {
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            // Apply default size (500x500) automatically when recorder starts
+            applyDefaultSize();
             window.api.notifyReady();
         };
         img.src = dataUrl;
     } else {
         // Fallback for initial frame if thumbnail fails
-        setTimeout(() => window.api.notifyReady(), 50);
+        setTimeout(() => {
+            applyDefaultSize();
+            window.api.notifyReady();
+        }, 50);
     }
 });
 
@@ -220,27 +225,40 @@ async function startRecording() {
         video.srcObject = stream;
         video.play();
 
-        const cropW = Math.floor(state.selectionRect.w * sx);
-        const cropH = Math.floor(state.selectionRect.h * sy);
+        const cropWOriginal = Math.floor(state.selectionRect.w * sx);
+        const cropHOriginal = Math.floor(state.selectionRect.h * sy);
+        
+        // Limit to 4K max to ensure encoder compatibility and performance
+        let finalW = Math.min(cropWOriginal, 3840);
+        let finalH = Math.min(cropHOriginal, 2160);
+        
+        // Final dimensions MUST BE EVEN for most encoders (H.264/VP9)
+        finalW = (finalW % 2 === 0) ? finalW : Math.max(2, finalW - 1);
+        finalH = (finalH % 2 === 0) ? finalH : Math.max(2, finalH - 1);
+
         const cropCanvas = document.createElement('canvas');
-        cropCanvas.width = cropW;
-        cropCanvas.height = cropH;
+        cropCanvas.width = finalW;
+        cropCanvas.height = finalH;
         const cropCtx = cropCanvas.getContext('2d');
 
         cropCtx.imageSmoothingEnabled = false;
 
         const fps = state.videoQuality === 'ultra' ? 60 : (state.videoQuality === 'high' ? 60 : 30);
-        const bitrate = state.videoQuality === 'ultra' ? 250000000 : (state.videoQuality === 'high' ? 120000000 : (state.videoQuality === 'medium' ? 40000000 : 10000000));
+        // Optimized bitrates: high enough for quality, low enough for steady encoding
+        const bitrate = state.videoQuality === 'ultra' ? 50000000 : (state.videoQuality === 'high' ? 25000000 : (state.videoQuality === 'medium' ? 10000000 : 5000000));
 
         let options = { mimeType: 'video/webm', videoBitsPerSecond: bitrate };
         try {
-            if (MediaRecorder.isTypeSupported('video/webm; codecs=h264')) {
-                options = { mimeType: 'video/webm; codecs=h264', videoBitsPerSecond: bitrate };
-            } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
+            // Prefer standard VP9 for high quality / efficiency
+            if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
                 options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: bitrate };
+            } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp8')) {
+                options = { mimeType: 'video/webm; codecs=vp8', videoBitsPerSecond: bitrate };
             }
-        } catch (e) { }
+        } catch (e) { console.error('Option selection failed', e); }
 
+        if (window.api.sendDebugLog) window.api.sendDebugLog(`Starting recording: ${finalW}x${finalH} @ ${fps}fps, ${bitrate/1000000}Mbps, Mime: ${options.mimeType}`);
+        
         state.mediaRecorder = new MediaRecorder(cropCanvas.captureStream(fps), options);
 
         state.mediaRecorder.ondataavailable = async (e) => {
@@ -251,9 +269,15 @@ async function startRecording() {
         const drawLoop = () => {
             if (state.isRecording) {
                 const r = state.selectionRect;
-                cropCtx.drawImage(video,
-                    r.x * sx, r.y * sy, r.w * sx, r.h * sy,
-                    0, 0, cropCanvas.width, cropCanvas.height);
+                // Ensure drawImage source coordinates are within video metadata limits
+                const sw = Math.min(Math.floor(r.w * sx), Math.floor(video.videoWidth));
+                const sh = Math.min(Math.floor(r.h * sy), Math.floor(video.videoHeight));
+                
+                if (sw > 0 && sh > 0) {
+                    cropCtx.drawImage(video,
+                        Math.floor(r.x * sx), Math.floor(r.y * sy), sw, sh,
+                        0, 0, cropCanvas.width, cropCanvas.height);
+                }
                 requestAnimationFrame(drawLoop);
             } else { stream.getTracks().forEach(t => t.stop()); }
         };
@@ -306,25 +330,27 @@ function stopRecording() {
 }
 
 btnRecord.addEventListener('click', startRecording);
+function applyDefaultSize() {
+    if (state.isRecording) return;
+    const w = 500, h = 500;
+    const left = Math.floor((window.innerWidth - w) / 2);
+    const top = Math.floor((window.innerHeight - h) / 2);
+
+    state.selectionRect = { x: left, y: top, w: w, h: h };
+    selectionBox.style.width = w + 'px';
+    selectionBox.style.height = h + 'px';
+    selectionBox.style.left = left + 'px';
+    selectionBox.style.top = top + 'px';
+    selectionBox.style.display = 'block';
+    selectionBox.classList.remove('hidden');
+    overlay.style.display = 'none';
+    if (instruction) instruction.style.display = 'none';
+    updateDimensions(w, h);
+}
+
 const btnResetSize = document.getElementById('btn-reset-size');
 if (btnResetSize) {
-    btnResetSize.addEventListener('click', () => {
-        if (state.isRecording) return;
-        const w = 500, h = 500;
-        const left = Math.floor((window.innerWidth - w) / 2);
-        const top = Math.floor((window.innerHeight - h) / 2);
-
-        state.selectionRect = { x: left, y: top, w: w, h: h };
-        selectionBox.style.width = w + 'px';
-        selectionBox.style.height = h + 'px';
-        selectionBox.style.left = left + 'px';
-        selectionBox.style.top = top + 'px';
-        selectionBox.style.display = 'block';
-        selectionBox.classList.remove('hidden');
-        overlay.style.display = 'none';
-        if (instruction) instruction.style.display = 'none';
-        updateDimensions(w, h);
-    });
+    btnResetSize.addEventListener('click', applyDefaultSize);
 }
 btnStop.addEventListener('click', (e) => { e.stopPropagation(); stopRecording(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (state.isRecording) stopRecording(); window.api.closeSnipper(); } });

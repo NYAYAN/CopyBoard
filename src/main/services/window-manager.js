@@ -213,13 +213,14 @@ function createWidgetWindow() {
         }
     });
 
-    state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
+    state.widgetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    state.widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     state.widgetWindow.loadFile(path.join(__dirname, '../../renderer/widget/widget.html'));
 
     // Keep widget always on top — re-apply on every show
     state.widgetWindow.on('show', () => {
         if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
-            state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
+            state.widgetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
             state.widgetWindow.moveTop();
         }
     });
@@ -227,9 +228,8 @@ function createWidgetWindow() {
     // Periodic alwaysOnTop refresh to prevent other windows from covering widget
     state._widgetTopInterval = setInterval(() => {
         if (state.widgetWindow && !state.widgetWindow.isDestroyed() && state.widgetWindow.isVisible()) {
-            if (!state.widgetWindow.isAlwaysOnTop()) {
-                state.widgetWindow.setAlwaysOnTop(true, 'screen-saver');
-            }
+            // Unconditionally re-assert to stay ahead of other topmost windows
+            state.widgetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
             state.widgetWindow.moveTop();
         } else if (!state.widgetWindow || state.widgetWindow.isDestroyed()) {
             clearInterval(state._widgetTopInterval);
@@ -313,7 +313,17 @@ function handleWidgetAction(action, data) {
     } else if (action === 'collapse') {
         const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
         state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: COL_H });
-    } else if (action === 'drag') {
+    }
+
+    // Always re-assert topmost after bound changes in widget mode
+    if (['expand', 'expand-history', 'collapse-history', 'collapse'].includes(action)) {
+        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
+            state.widgetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+            state.widgetWindow.moveTop();
+        }
+    }
+
+    if (action === 'drag') {
         const bounds = state.widgetWindow.getBounds();
         const currentSide = state.widgetSide || 'right';
         const currentBtnX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
@@ -325,6 +335,9 @@ function handleWidgetAction(action, data) {
         const newWinX = (currentSide === 'left') ? newBtnX : newBtnX - PANEL_W;
         state.widgetPos = { x: newBtnX, y: newY };
         state.widgetWindow.setBounds({ x: newWinX, y: newY, width: FULL_W, height: bounds.height });
+        // Re-assert topmost after bounds change
+        state.widgetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+        state.widgetWindow.moveTop();
 
     } else if (action === 'drag-end') {
         const bounds = state.widgetWindow.getBounds();

@@ -4,6 +4,7 @@ const btnSnippet = document.getElementById('btn-snippet');
 const btnScreenshot = document.getElementById('btn-screenshot');
 const btnOcr = document.getElementById('btn-ocr');
 const btnVideo = document.getElementById('btn-video');
+const btnOpenMain = document.getElementById('btn-open-main');
 const historyPanel = document.getElementById('history-panel');
 const historyItemsContainer = document.getElementById('history-items');
 const tabHistory = document.getElementById('tab-history');
@@ -407,6 +408,10 @@ btnSnippet.addEventListener('click', async () => {
 btnScreenshot.addEventListener('click', () => window.api.widgetAction('capture-draw'));
 btnOcr.addEventListener('click', () => window.api.widgetAction('capture-ocr'));
 btnVideo.addEventListener('click', () => window.api.widgetAction('capture-video'));
+btnOpenMain.addEventListener('click', () => {
+    window.api.widgetAction('open-list');
+    closeAll();
+});
 
 window.addEventListener('blur', () => { if (isOpen) closeAll(); });
 

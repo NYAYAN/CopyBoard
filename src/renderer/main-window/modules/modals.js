@@ -18,12 +18,6 @@ export function resetView() {
     hideModal(elements.addItemModal);
     hideModal(elements.noteModal);
     hideModal(elements.confirmModal);
-
-    if (elements.searchInput) {
-        elements.searchInput.value = '';
-        // Trigger a fake input event to reset the list if needed, 
-        // or just rely on the fact that most resetView calls are followed by a re-render.
-    }
 }
 
 export function showToast(message, type) {

@@ -1,4 +1,4 @@
-import { initState, setupEventListeners, updateHistoryState } from './modules/events.js';
+import { initState, setupEventListeners, updateHistoryState, resetSearchState } from './modules/events.js';
 import { renderHistory } from './modules/history-renderer.js';
 import { showToast } from './modules/modals.js';
 import { elements } from './modules/dom.js';
@@ -61,16 +61,8 @@ window.api.onShowToast((message, type) => {
 });
 
 window.api.onResetView(() => {
-    // Import dynamically to avoid circular issues if they arise, or move logic to events
-    // Ideally call a function in events/modals
-    // For now, let's just trigger a click on 'all' or similar via the logic in events
-    // Or restart the view state
-
-    // Simple reset logic:
     import('./modules/modals.js').then(({ resetView }) => {
         resetView();
-        // Switch to 'all' tab if not
-        const allTabBtn = document.querySelector('.tab-btn[data-tab="all"]');
-        if (allTabBtn && !allTabBtn.classList.contains('active')) allTabBtn.click();
+        resetSearchState();
     });
 });

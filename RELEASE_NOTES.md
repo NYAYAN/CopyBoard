@@ -1,30 +1,24 @@
-# CopyBoard v2.5.1 - Widget & Performans İyileştirmeleri 🚀
+# CopyBoard v2.6.3 - Widget İyileştirmeleri ve Hata Düzeltmeleri 🚀
 
-v2.5.0 ile duyurduğumuz Yüzen Araç (Floating Widget) özelliğimizi sizden gelen geri bildirimlerle daha stabil hale getirdik!
+Bu sürümde floating widget (yüzen araç) deneyimini iyileştirdik ve önemli bir arama hatasını giderdik!
 
 ## ✨ Yeni Özellikler & İyileştirmeler
 
-### 🎯 Gelişmiş Sürükle ve Bırak
-- Widget'ın ekran kenarlarına yapışma mantığı tamamen yenilendi.
-- Daha hassas ve sorunsuz bir şekilde ekranın sağına veya soluna yapıştırma.
-- Sürükleme sırasında widget ve kenar arasında oluşan görsel boşluklar giderildi.
+### 🚀 Widget Yenilikleri
+- **Hızlı Erişim**: Artık widget üzerinden tek tıkla ana uygulama penceresini açabilirsiniz.
+- **Tazelenen İkonlar**: Widget ikonları artık daha modern ve işlevlerini daha iyi yansıtıyor (Geçmiş için Saat, Ekran Yakalama için Makas).
 
-### 📐 Akıllı Panel Yönü
-- Widget'ın ekranın hangi tarafında olduğuna bağlı olarak açılan panelin yönü artık dinamik olarak ayarlanıyor.
-- Panel her zaman ekranın merkezine doğru açılır, böylece içerikleriniz asla ekran dışına taşmaz.
-
-### 💾 Kalıcı Ayarlar
-- "Yüzen Araç" ayarının uygulama yeniden başlatıldığında sıfırlanması sorunu giderildi.
-- Artık tercihleriniz oturumlar arasında korunur.
+### 🔍 Akıllı Arama
+- Uygulama her açıldığında arama kutusu ve sonuç listesi otomatik olarak sıfırlanır, böylece her seferinde temiz bir başlangıç yaparsınız.
 
 ## 📦 Kurulum
 
-1. `CopyBoard-Setup-2.5.1.exe` dosyasını indirin.
+1. `CopyBoard-Setup-2.6.3.exe` dosyasını indirin.
 2. Kurulum sihirbazını takip edin.
 3. Uygulamayı başlatın.
 
 ### Otomatik Güncelleme
-Eski bir sürümü kullanıyorsanız, uygulamayı açtığınızda otomatik olarak yeni sürümü algılayacak ve güncelleme isteyecektir.
+Uygulamayı açtığınızda otomatik olarak yeni sürümü algılayacak ve güncelleme isteyecektir.
 
 ## ⌨️ Kısayollar
 

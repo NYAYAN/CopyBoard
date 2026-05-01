@@ -198,3 +198,17 @@ function setupShortcutInput(element, callback) {
         callback(keys.join('+'));
     });
 }
+
+export function resetSearchState() {
+    state.searchQuery = '';
+    if (elements.searchInput) elements.searchInput.value = '';
+    
+    // Reset tabs to 'all'
+    state.activeTab = 'all';
+    elements.tabBtns.forEach(b => {
+        if (b.dataset.tab === 'all') b.classList.add('active');
+        else b.classList.remove('active');
+    });
+
+    renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
+}

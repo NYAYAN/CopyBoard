@@ -1,6 +1,17 @@
 # Changelog
 
-## [2.5.1] - 2026-02-23
+## [2.6.3] - 2026-05-01
+
+### ✨ Yeni Özellikler & İyileştirmeler
+- **Widget "Uygulamayı Aç" Butonu**: Floating widget menüsüne ana uygulama penceresini açan bir buton eklendi.
+- **Modern İkonlar**: Widget üzerindeki ikonlar daha modern ve anlaşılır sürümleriyle güncellendi (Saat/Geçmiş, Makas, Scan Text).
+- **Widget Boyutlandırma**: Menü yüksekliği yeni butonu kapsayacak şekilde optimize edildi.
+
+### 🐛 Hata Düzeltmeleri
+- **Arama Sıfırlama**: Uygulama odağını kaybedip tekrar açıldığında arama kutusu ve listenin senkronize şekilde sıfırlanması sağlandı.
+
+## [2.6.2] - 2026-04-15
+- Performans iyileştirmeleri ve hata düzeltmeleri.
 
 ### ✨ Yeni Özellikler & İyileştirmeler
 - **Widget Sürükleme**: Ekran kenarlarına yapışma mantığı geliştirildi, görsel boşluklar giderildi.

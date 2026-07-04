@@ -2,6 +2,25 @@ import { elements } from './dom.js';
 import { openNoteModal } from './notes.js';
 import { onDragStart, onDragOver, onDrop } from './drag-drop.js';
 
+// Cached formatters — constructing Intl.DateTimeFormat per item per render is costly
+const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+// Shared row-action icons + search predicate come from the classic script loaded before
+// renderer.js (see ../shared/render-utils.js and the <script> tag in index.html). ES
+// modules can read window globals freely; this keeps the 4 overlapping icons in one place.
+const { ICONS: SHARED_ICONS, matchesSearch } = window.CopyBoardShared;
+
+// Monochrome inline SVGs (stroke=currentColor) matching the header icon set, so row
+// actions render consistently across OSes and don't reflow on state swaps (fixed box).
+// The 4 shared icons come from SHARED_ICONS; check/noteAdd/noteEdit are main-window-only.
+const ICONS = {
+    ...SHARED_ICONS,
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    noteAdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>',
+    noteEdit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+};
+
 export function renderHistory(history, favorites, activeTab, query = '') {
     elements.listElement.innerHTML = '';
 
@@ -10,11 +29,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
     // Search Filter
     if (query) {
         const q = query.toLowerCase();
-        items = items.filter(item => {
-            const contentMatch = item.content && item.content.toLowerCase().includes(q);
-            const noteMatch = item.note && item.note.toLowerCase().includes(q);
-            return contentMatch || noteMatch;
-        });
+        items = items.filter(item => matchesSearch(item, q));
     }
 
     if (!items || items.length === 0) {
@@ -30,9 +45,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         const itemContent = item.content;
         const itemDate = item.timestamp ? new Date(item.timestamp) : new Date();
 
-        const dateStr = itemDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const timeStr = itemDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-        const metaText = `${dateStr} ${timeStr}`;
+        const metaText = `${DATE_FMT.format(itemDate)} ${TIME_FMT.format(itemDate)}`;
 
         const domItem = document.createElement('div');
         domItem.className = 'history-item';
@@ -43,6 +56,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         if (activeTab === 'favorites') {
             domItem.classList.add('favorites-tab');
             domItem.dataset.tabContext = 'favorites';
+            domItem.dataset.itemId = item.id;
             domItem.setAttribute('draggable', 'true');
             domItem.addEventListener('dragstart', onDragStart);
             domItem.addEventListener('dragover', onDragOver);
@@ -76,8 +90,9 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         if (activeTab === 'favorites') {
             const infoBtn = document.createElement('button');
             infoBtn.className = `action-btn info-btn ${item.note ? 'has-note' : ''}`;
-            infoBtn.innerHTML = item.note ? '📝' : 'ℹ️';
+            infoBtn.innerHTML = item.note ? ICONS.noteEdit : ICONS.noteAdd;
             infoBtn.title = item.note ? 'Notu Düzenle' : 'Not Ekle';
+            infoBtn.setAttribute('aria-label', item.note ? 'Notu Düzenle' : 'Not Ekle');
             if (item.note) infoBtn.title += `\nNot: ${item.note.substring(0, 50)}${item.note.length > 50 ? '...' : ''}`;
             infoBtn.addEventListener('click', (e) => { e.stopPropagation(); openNoteModal(item); });
             actionsDiv.appendChild(infoBtn);
@@ -88,8 +103,9 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         if (activeTab === 'favorites') {
             // In Favoriler: always ⭐, clicking removes from favorites
             starBtn.className = 'action-btn star-btn active';
-            starBtn.innerHTML = '⭐';
+            starBtn.innerHTML = ICONS.starFilled;
             starBtn.title = 'Favorilerden Çıkar';
+            starBtn.setAttribute('aria-label', 'Favorilerden Çıkar');
             starBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 window.api.removeFromFavorites(item.id);
@@ -98,8 +114,9 @@ export function renderHistory(history, favorites, activeTab, query = '') {
             // In Tümü: show ⭐ if already favorited (by content), ☆ if not
             const isAlreadyFavorited = favoritedContents.has(itemContent);
             starBtn.className = `action-btn star-btn ${isAlreadyFavorited ? 'active' : ''}`;
-            starBtn.innerHTML = isAlreadyFavorited ? '⭐' : '☆';
+            starBtn.innerHTML = isAlreadyFavorited ? ICONS.starFilled : ICONS.starOutline;
             starBtn.title = isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : 'Favorilere Ekle';
+            starBtn.setAttribute('aria-label', isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : 'Favorilere Ekle');
             starBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (!isAlreadyFavorited) {
@@ -111,19 +128,21 @@ export function renderHistory(history, favorites, activeTab, query = '') {
 
         const copyBtn = document.createElement('button');
         copyBtn.className = 'action-btn copy-btn';
-        copyBtn.innerHTML = '📋';
+        copyBtn.innerHTML = ICONS.copy;
         copyBtn.title = 'Kopyala';
+        copyBtn.setAttribute('aria-label', 'Kopyala');
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            copyBtn.innerHTML = '✅';
-            setTimeout(() => { copyBtn.innerHTML = '📋'; }, 800);
+            copyBtn.innerHTML = ICONS.check;
+            setTimeout(() => { copyBtn.innerHTML = ICONS.copy; }, 800);
             window.api.copyItem(itemContent);
         });
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn delete-btn';
-        deleteBtn.innerHTML = '✕';
+        deleteBtn.innerHTML = ICONS.trash;
         deleteBtn.title = activeTab === 'favorites' ? 'Favorilerden Çıkar' : 'Sil';
+        deleteBtn.setAttribute('aria-label', activeTab === 'favorites' ? 'Favorilerden Çıkar' : 'Sil');
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (activeTab === 'favorites') {
@@ -142,10 +161,10 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         domItem.addEventListener('click', (e) => {
             if (e.target.closest('.action-btn')) return;
             domItem.classList.add('copied');
-            copyBtn.innerHTML = '✅';
+            copyBtn.innerHTML = ICONS.check;
             setTimeout(() => {
                 domItem.classList.remove('copied');
-                copyBtn.innerHTML = '📋';
+                copyBtn.innerHTML = ICONS.copy;
             }, 800);
             window.api.copyItem(itemContent);
         });

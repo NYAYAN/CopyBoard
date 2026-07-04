@@ -19,13 +19,3 @@ export function resetView() {
     hideModal(elements.noteModal);
     hideModal(elements.confirmModal);
 }
-
-export function showToast(message, type) {
-    elements.toastElement.textContent = message;
-    elements.toastElement.className = `toast visible ${type}`;
-    // Clear previous if any (handled via simple timeout re-assignment usually, 
-    // but here we just rely on CSS transitions mostly or simplified logic)
-    // A more robust way:
-    if (window.toastTimeout) clearTimeout(window.toastTimeout);
-    window.toastTimeout = setTimeout(() => elements.toastElement.className = 'toast hidden', 3000);
-}

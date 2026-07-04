@@ -29,6 +29,15 @@ if (savedFavorites === null) {
     // Clean isFavorite flag from history
     savedHistory = savedHistory.map(i => { const { isFavorite, hiddenFromHistory, ...rest } = i; return rest; });
     store.set('history', savedHistory);
+} else {
+    // Backfill ids on any legacy favorites that lack one (drag-reorder and remove key off id).
+    let favChanged = false;
+    savedFavorites = savedFavorites.map(item => {
+        if (typeof item === 'string') { favChanged = true; return { id: crypto.randomUUID(), content: item, timestamp: new Date().toISOString() }; }
+        if (!item.id) { favChanged = true; item.id = crypto.randomUUID(); }
+        return item;
+    });
+    if (favChanged) store.set('favorites', savedFavorites);
 }
 
 const state = {
@@ -36,6 +45,7 @@ const state = {
     snipperWindow: null,
     ocrWindow: null,
     recorderWindow: null,
+    captureWindows: [], // all active capture overlay windows (one per monitor)
     widgetWindow: null,
     tray: null,
     toastWindow: null,
@@ -43,6 +53,7 @@ const state = {
     favorites: savedFavorites,
     maxItems: store.get('maxItems', 50),
     autoStart: store.get('autoStart', true),
+    clipboardPaused: store.get('clipboardPaused', false),
     videoQuality: store.get('videoQuality', 'high'),
     shortcuts: {
         list: store.get('globalShortcut', 'Alt+V'),

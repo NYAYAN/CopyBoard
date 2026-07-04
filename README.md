@@ -1,8 +1,8 @@
-# CopyBoard v2.5.1
+# CopyBoard v2.6.3
 
 > **Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR (Resimden Yazıya Çevirme) Uygulaması**
 
-![Version](https://img.shields.io/badge/version-2.5.1-blue)
+![Version](https://img.shields.io/badge/version-2.6.3-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-ISC-green)
 
@@ -70,8 +70,8 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 ## 🚀 Kurulum (Kullanıcılar İçin)
 
 1. **[Releases](https://github.com/NYAYAN/CopyBoard/releases)** sayfasından işletim sisteminize uygun sürümü indirin:
-   - **Windows:** `CopyBoard-Setup-2.5.1.exe`
-   - **macOS:** `CopyBoard-2.5.1.dmg`
+   - **Windows:** `CopyBoard-Setup-2.6.3.exe`
+   - **macOS:** `CopyBoard-2.6.3.dmg`
 2. İndirdiğiniz dosyayı çalıştırın (macOS'te uygulamayı `Applications` klasörüne sürükleyin).
 3. Kurulum tamamlandığında uygulama otomatik olarak başlayacak ve sistem tepsisine (saat yanı) yerleşecektir.
 
@@ -92,7 +92,7 @@ Proje modern bir mimariye taşınmış ve modüler hale getirilmiştir.
 - **Node.js** (v16+)
 - **npm**
 
-### Proje Yapısı (v2.5.1)
+### Proje Yapısı (v2.6.3)
 ```
 src/
 ├── main/              # Backend (Electron Main Process)
@@ -100,9 +100,13 @@ src/
 │   └── main.js        # Ana giriş noktası
 ├── renderer/          # Frontend (Electron Renderer Process)
 │   ├── main-window/   # Ana Pano Arayüzü (ES Modules)
+│   ├── widget/        # Yüzen Araç (Floating Widget)
 │   ├── snipper/       # Ekran Alıntısı Aracı
 │   ├── ocr/           # OCR Aracı
-│   └── recorder/      # Video Kaydedici
+│   ├── recorder/      # Video Kaydedici
+│   ├── update/        # Güncelleme Penceresi
+│   ├── toast/         # Bildirim (Toast)
+│   └── shared/        # Ortak Varlıklar (cursor vb.)
 └── preload/           # Preload Scriptleri
 ```
 

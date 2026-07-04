@@ -1,19 +1,19 @@
-# CopyBoard v2.6.3 - Widget İyileştirmeleri ve Hata Düzeltmeleri 🚀
+# CopyBoard v2.7.0 - Performans ve Mimari Güncellemesi 🚀
 
-Bu sürümde floating widget (yüzen araç) deneyimini iyileştirdik ve önemli bir arama hatasını giderdik!
+Bu sürümde uygulama altyapısında kapsamlı bir performans iyileştirmesi (performance & upgrade) gerçekleştirdik!
 
 ## ✨ Yeni Özellikler & İyileştirmeler
 
-### 🚀 Widget Yenilikleri
-- **Hızlı Erişim**: Artık widget üzerinden tek tıkla ana uygulama penceresini açabilirsiniz.
-- **Tazelenen İkonlar**: Widget ikonları artık daha modern ve işlevlerini daha iyi yansıtıyor (Geçmiş için Saat, Ekran Yakalama için Makas).
+### 🚀 Mimari İyileştirmeler
+- **Modüler Yapı**: Uygulama içi iletişim (IPC) sistemi baştan aşağı yenilenerek modüler hale getirildi. Artık çok daha hızlı ve stabil.
 
-### 🔍 Akıllı Arama
-- Uygulama her açıldığında arama kutusu ve sonuç listesi otomatik olarak sıfırlanır, böylece her seferinde temiz bir başlangıç yaparsınız.
+### ⚡ Performans Optimizasyonları
+- Ekran yakalama (Snipper) ve video kaydı işlemleri sırasında bellek ve CPU kullanımı düşürüldü.
+- Hızlı açılış süresi ve daha akıcı arayüz geçişleri.
 
 ## 📦 Kurulum
 
-1. `CopyBoard-Setup-2.6.3.exe` dosyasını indirin.
+1. `CopyBoard-Setup-2.7.0.exe` dosyasını indirin.
 2. Kurulum sihirbazını takip edin.
 3. Uygulamayı başlatın.
 

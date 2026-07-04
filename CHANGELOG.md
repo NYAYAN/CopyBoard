@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.7.0] - 2026-07-04
+
+### 🚀 Mimari Değişiklikler & İyileştirmeler
+- **Modüler IPC**: Uygulama içi iletişim sistemi (IPC) tamamen yeniden yazılarak alt modüllere ayrıldı. Bu sayede kod tabanı daha temiz ve yönetilebilir hale geldi.
+- **Performans**: Uygulama genelinde bellek kullanımı ve hız optimizasyonları yapıldı. 
+
+### 🎨 UI/UX Geliştirmeleri
+- **Widget**: Widget menüsü ve bileşenlerinin etkileşimleri daha pürüzsüz hale getirildi.
+- **Araçlar**: Ekran Yakalama ve Video Kaydı araçlarında görsel ve altyapısal iyileştirmeler yapıldı.
+
 ## [2.6.3] - 2026-05-01
 
 ### ✨ Yeni Özellikler & İyileştirmeler

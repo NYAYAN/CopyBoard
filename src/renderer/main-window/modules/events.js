@@ -17,6 +17,19 @@ let state = {
     searchQuery: ''
 };
 
+// When the window is hidden we defer the (expensive) full list re-render and
+// flush it once on visibilitychange. State above is always kept current.
+let pendingRender = false;
+
+// Registered at module load (before the async startup IIFE's awaits) so a render
+// deferred during startup is never missed when the window is first shown.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && pendingRender) {
+        pendingRender = false;
+        renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
+    }
+});
+
 export function initState(data) {
     state.history = data.history || [];
     state.favorites = data.favorites || [];
@@ -29,6 +42,11 @@ export function updateHistoryState(data) {
     } else {
         // Fallback if old format received
         state.history = Array.isArray(data) ? data : [];
+    }
+    // Skip the full DOM rebuild while hidden; re-render when the window is shown.
+    if (document.visibilityState === 'hidden') {
+        pendingRender = true;
+        return;
     }
     renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
 }
@@ -78,12 +96,21 @@ export function setupEventListeners() {
             hideModal(elements.addItemModal);
         }
     });
+    // Ctrl/Cmd+Enter confirms; plain Enter stays a newline (multi-line textarea).
+    elements.manualTextInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            elements.confirmAddBtn.click();
+        }
+    });
 
     // Note Modal
     elements.closeNoteBtn.addEventListener('click', closeNoteModal);
     elements.editNoteBtn.addEventListener('click', () => showNoteEditMode(elements.noteInput.value));
     elements.cancelNoteBtn.addEventListener('click', () => {
-        const item = state.history.find(i => i.id === getCurrentNoteItemId());
+        // Notes are opened from the favorites tab, so look there first; fall back to history.
+        const id = getCurrentNoteItemId();
+        const item = state.favorites.find(i => i.id === id) || state.history.find(i => i.id === id);
         if (item && item.note) {
             showNoteViewMode(item.note);
         } else {
@@ -122,6 +149,7 @@ export function setupEventListeners() {
 
     // Inputs
     elements.autostartCheck.addEventListener('change', (e) => window.api.setAutoStart(e.target.checked));
+    elements.incognitoCheck.addEventListener('change', (e) => window.api.setClipboardPaused(e.target.checked));
     elements.widgetCheck.addEventListener('change', (e) => {
         window.api.setShowWidget(e.target.checked);
         elements.widgetExtraSettings.style.display = e.target.checked ? 'flex' : 'none';
@@ -152,7 +180,17 @@ export function setupEventListeners() {
 
     // Global Keys
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') window.api.closeWindow();
+        if (e.key === 'Escape') {
+            // Close an open modal first; only hide the window if no modal is open.
+            const openModal = document.querySelector('.modal-overlay:not(.hidden)');
+            if (openModal === elements.noteModal) {
+                closeNoteModal();
+            } else if (openModal) {
+                hideModal(openModal);
+            } else {
+                window.api.closeWindow();
+            }
+        }
         const isMac = navigator.platform.toUpperCase().includes('MAC');
         if (e.altKey && (isMac ? e.code === 'KeyU' : e.key.toLowerCase() === 'u')) {
             console.log('Manual update check');

@@ -3,6 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <link rel="stylesheet" href="snipper.css">
 </head>
 
@@ -68,12 +70,12 @@
         </div>
         <div class="divider"></div>
         <div class="color-group collapsed">
-            <div class="color-dot active" data-color="#ff0000" style="background: #ff0000;"></div>
-            <div class="color-dot" data-color="#00ff00" style="background: #00ff00;"></div>
-            <div class="color-dot" data-color="#0000ff" style="background: #0000ff;"></div>
-            <div class="color-dot" data-color="#ffff00" style="background: #ffff00;"></div>
-            <div class="color-dot" data-color="#ffffff" style="background: #ffffff;"></div>
-            <div class="color-dot" data-color="#000000" style="background: #000000;"></div>
+            <div class="color-dot active" data-color="#ff0000" style="background: #ff0000;" tabindex="0" role="button" aria-label="Kırmızı"></div>
+            <div class="color-dot" data-color="#00ff00" style="background: #00ff00;" tabindex="0" role="button" aria-label="Yeşil"></div>
+            <div class="color-dot" data-color="#0000ff" style="background: #0000ff;" tabindex="0" role="button" aria-label="Mavi"></div>
+            <div class="color-dot" data-color="#ffff00" style="background: #ffff00;" tabindex="0" role="button" aria-label="Sarı"></div>
+            <div class="color-dot" data-color="#ffffff" style="background: #ffffff;" tabindex="0" role="button" aria-label="Beyaz"></div>
+            <div class="color-dot" data-color="#000000" style="background: #000000;" tabindex="0" role="button" aria-label="Siyah"></div>
         </div>
         <button class="color-toggle-btn" id="color-toggle" title="Renkler">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

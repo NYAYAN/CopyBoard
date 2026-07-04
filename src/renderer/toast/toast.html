@@ -2,12 +2,17 @@
 <html>
 
 <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline';">
     <style>
         :root {
             --bg: #1e1e2e;
             --accent: #8957e5;
             --success: #50fa7b;
             --info: #8be9fd;
+            --error: #ff5555;
+            --warning: #f1fa8c;
             --text: #ffffff;
         }
 
@@ -36,6 +41,9 @@
             transform: translateX(120%);
             transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             min-width: 200px;
+            max-width: 360px;
+            position: relative;
+            overflow: hidden;
         }
 
         .toast.show {
@@ -43,7 +51,14 @@
         }
 
         .icon {
-            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .icon svg {
+            width: 18px;
+            height: 18px;
         }
 
         .success .icon {
@@ -54,6 +69,18 @@
             color: var(--info);
         }
 
+        .error .icon {
+            color: var(--error);
+        }
+
+        .warning .icon {
+            color: var(--warning);
+        }
+
+        #message {
+            word-break: break-word;
+        }
+
         .progress {
             position: absolute;
             bottom: 0;
@@ -61,7 +88,7 @@
             height: 3px;
             background: var(--accent);
             width: 100%;
-            border-radius: 0 0 0 12px;
+            border-radius: 0 0 12px 12px;
         }
     </style>
 </head>
@@ -73,35 +100,7 @@
         <div id="progress" class="progress"></div>
     </div>
 
-    <script>
-        // contextBridge through preload.js
-        window.api.onShowToast((message, type) => {
-            const toast = document.getElementById('toast');
-            const msg = document.getElementById('message');
-            const icon = document.getElementById('icon');
-            const progress = document.getElementById('progress');
-
-            msg.textContent = message;
-            toast.className = 'toast show ' + type;
-            icon.textContent = type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️');
-
-            // Auto close after 3s
-            progress.style.transition = 'none';
-            progress.style.width = '100%';
-            setTimeout(() => {
-                progress.style.transition = 'width 3s linear';
-                progress.style.width = '0%';
-            }, 10);
-
-            setTimeout(() => {
-                toast.classList.remove('show');
-                // notify main to destroy toast window
-                setTimeout(() => {
-                    window.api.toastFinished();
-                }, 500);
-            }, 3000);
-        });
-    </script>
+    <script src="toast.js"></script>
 </body>
 
 </html>

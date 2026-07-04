@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.7.0] - 2026-07-05
+
+### ✨ Yeni Özellikler
+- **Çoklu Monitör Desteği:** Ekran Görüntüsü, OCR ve Video Kaydı artık tüm monitörlerde çalışıyor. Kısayola basınca tüm ekranlar kararır ve istediğiniz monitörde alan seçersiniz (video, alanı çizdiğiniz monitörü kaydeder).
+- **Otomatik Güncelleme Kontrolü:** Uygulama açılışında güncellemeleri otomatik kontrol ediyor.
+
+### 🎨 İyileştirmeler
+- Yüzen araç (widget) daha modern, düz (flat) bir tasarıma kavuştu.
+- Ayarlar ekranı: açıkken yalnızca ayarlar görünüyor, kaydırılabilir ve "Geçmişi Temizle" butonu her zaman erişilebilir.
+- "Yeni Öğe Ekle" penceresinde Ctrl+Enter ile ekleme, Esc ile kapatma.
+
+### 🐛 Hata Düzeltmeleri
+- **Video Kaydı:** Seçim çerçevesi artık kaydedilen videoya yansımıyor.
+- OCR başarısız/boş sonuçta bilgilendirme; ekran görüntüsü kaydında dostça hata mesajı.
+- Kısayol çakışmasında uyarı ve önceki çalışan kısayolun korunması.
+- Arama açıkken favori sürükle-sıralama hatası giderildi; aynı metin tekrar kopyalanınca favori notu korunuyor.
+- Ekran Alıntısı metin aracında Ctrl+Z / Ctrl+C / Esc davranışı düzeltildi.
+- Güncelleme penceresi ve altyapıda güvenlik ve kararlılık iyileştirmeleri.
+
 ## [2.6.3] - 2026-05-01
 
 ### ✨ Yeni Özellikler & İyileştirmeler

@@ -34,50 +34,62 @@ async function startCapture(mode) {
             return;
         }
         state.isCapturing = true;
+        state.lastMode = mode;
 
-        const cursorPoint = screen.getCursorScreenPoint();
-        const display = screen.getDisplayNearestPoint(cursorPoint);
-        const { width, height } = display.bounds;
-        const scaleFactor = display.scaleFactor || 1;
+        // Multi-monitor: dim EVERY display so the user can select on whichever monitor they
+        // want (the selection stays within one monitor). One overlay window per display.
+        const displays = screen.getAllDisplays();
+        const multiMonitor = displays.length > 1;
 
-        // Physical pixel dimensions — this is what Snipping Tool uses
-        const captureWidth = Math.round(width * scaleFactor);
-        const captureHeight = Math.round(height * scaleFactor);
+        // desktopCapturer.getSources takes ONE thumbnailSize for all sources, so request the
+        // largest monitor's physical size — no screen is captured below native resolution.
+        // Each source's thumbnail keeps its own aspect ratio and is stretched to fill its own
+        // overlay canvas (sized to that display), so per-monitor DPI stays correct.
+        const maxW = Math.max(...displays.map(d => Math.round(d.bounds.width * (d.scaleFactor || 1))));
+        const maxH = Math.max(...displays.map(d => Math.round(d.bounds.height * (d.scaleFactor || 1))));
 
         let sources;
         try {
-            // Capture at PHYSICAL pixel resolution — this gives us native quality like Snipping Tool
             sources = await desktopCapturer.getSources({
                 types: ['screen'],
-                thumbnailSize: { width: captureWidth, height: captureHeight },
+                thumbnailSize: { width: maxW, height: maxH },
                 fetchWindowIcons: false
             });
         } catch (sourceErr) {
             throw new Error(`Ekran kaynakları alınamadı: ${sourceErr.message || sourceErr}`);
         }
 
-        const source = sources.find(s => s.display_id == display.id) || sources[0];
+        let createdAny = false;
+        displays.forEach((display, i) => {
+            // Match each display to its screen source; if display_id is unavailable (empty on
+            // some GPU/RDP configs) fall back to index order (source list tracks display order),
+            // then to the first source.
+            let source = sources.find(s => String(s.display_id) === String(display.id));
+            if (!source) source = sources[i] || sources[0];
+            if (!source) return;
 
-        if (source) {
-            // Get the pixel-perfect screenshot as PNG data URL
-            const thumbnail = source.thumbnail;
-            // Use toPNG() for lossless quality — toDataURL() may lose color fidelity
-            const pngBuffer = thumbnail.toPNG();
-            const dataUrl = 'data:image/png;base64,' + pngBuffer.toString('base64');
+            const scaleFactor = display.scaleFactor || 1;
+            // Physical pixel dimensions for THIS display — native quality like Snipping Tool.
+            const captureWidth = Math.round(display.bounds.width * scaleFactor);
+            const captureHeight = Math.round(display.bounds.height * scaleFactor);
 
+            // toPNG() for lossless quality — toDataURL() may lose color fidelity.
+            const dataUrl = 'data:image/png;base64,' + source.thumbnail.toPNG().toString('base64');
             const sourceId = source.id;
 
-            state.lastMode = mode;
             const win = createCapture(mode, display);
             win.webContents.on('did-finish-load', () => {
                 if (!win.isDestroyed()) {
-                    // Send the high-res screenshot data URL + sourceId (for video mode getUserMedia)
-                    // Include primary display's scaleFactor — clipboard always uses primary DPI
-                    const primarySf = screen.getPrimaryDisplay().scaleFactor || 1;
-                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality, captureWidth, captureHeight, primarySf);
+                    // Screenshot data URL + THIS monitor's sourceId (video getUserMedia records
+                    // this monitor). Crop is emitted at native pixels and written via nativeImage
+                    // scaleFactor 1.0, so paste size stays monitor-independent.
+                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality, captureWidth, captureHeight, multiMonitor);
                 }
             });
-        } else {
+            createdAny = true;
+        });
+
+        if (!createdAny) {
             state.isCapturing = false;
         }
 

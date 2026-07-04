@@ -19,13 +19,19 @@ const state = {
     dpr: window.devicePixelRatio || 1,
     scaleX: null,
     scaleY: null,
-    selectedColor: '#ff0000',
-    primarySf: 1
+    selectedColor: '#ff0000'
 };
+
+// Blur perf: throttle the heavy recompute and reuse scratch canvases
+let lastBlurTime = 0;
+let lastBlurX = 0, lastBlurY = 0; // last pointer pos so mouseup can commit the release rect
+let blurTempCanvas = null;
+let blurOutCanvas = null;
 
 function saveState() {
     state.history.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
-    if (state.history.length > 20) state.history.shift();
+    // Each entry is a full-canvas ImageData (~33MB at 4K); cap to bound peak memory
+    if (state.history.length > 10) state.history.shift();
 }
 
 function undo() {
@@ -102,16 +108,18 @@ resizeCanvas();
 // --- Preload Verification ---
 if (!window.api) {
     alert('CRITICAL: window.api is UNDEFINED! Preload script failed to load.');
-} else {
-    console.log('window.api is available:', Object.keys(window.api));
+    // Abort: without the bridge nothing below works. Throwing stops the rest of the module
+    // so we fail with one clear message instead of a cascade of TypeErrors.
+    throw new Error('CopyBoard snipper: preload bridge (window.api) unavailable.');
 }
+console.log('window.api is available:', Object.keys(window.api));
 
 // Ensure sharp pixel rendering
 ctx.imageSmoothingEnabled = false;
 drawCtx.imageSmoothingEnabled = false;
 
 // --- Capture & Initialize Screen ---
-window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, primarySf) => {
+window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
     const logicalW = window.innerWidth;
     const logicalH = window.innerHeight;
 
@@ -134,7 +142,6 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
     state.scaleX = physW / logicalW;
     state.scaleY = physH / logicalH;
     state.dpr = window.devicePixelRatio || 1;
-    state.primarySf = primarySf || 1;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -223,6 +230,7 @@ window.addEventListener('mousedown', (e) => {
 
             saveState();
             state.isDrawing = true; state.startX = e.clientX; state.startY = e.clientY;
+            lastBlurX = state.startX; lastBlurY = state.startY; // reset so a click (no drag) never commits a stale blur rect
             const sx = state.scaleX != null ? state.scaleX : state.dpr;
             const sy = state.scaleY != null ? state.scaleY : state.dpr;
             
@@ -317,12 +325,19 @@ window.addEventListener('mousemove', (e) => {
             drawCtx.lineTo(e.clientX * sx, e.clientY * sy); drawCtx.stroke();
             state.startX = e.clientX; state.startY = e.clientY;
         } else if (state.activeTool === 'blur') {
-            drawCtx.putImageData(state.savedImageData, 0, 0);
+            lastBlurX = e.clientX; lastBlurY = e.clientY;
             let w = e.clientX - state.startX, h = e.clientY - state.startY;
             if (Math.abs(w) > 5 && Math.abs(h) > 5) {
-                const x = Math.min(state.startX, e.clientX);
-                const y = Math.min(state.startY, e.clientY);
-                applyBlur(x, y, Math.abs(w), Math.abs(h));
+                const now = performance.now();
+                // Throttle the heavy blur recompute to ~60fps; on skipped frames keep
+                // the previous preview (no clear) so it doesn't flicker.
+                if (now - lastBlurTime >= 16) {
+                    lastBlurTime = now;
+                    drawCtx.putImageData(state.savedImageData, 0, 0);
+                    applyBlur(Math.min(state.startX, e.clientX), Math.min(state.startY, e.clientY), Math.abs(w), Math.abs(h));
+                }
+            } else {
+                drawCtx.putImageData(state.savedImageData, 0, 0);
             }
         } else {
             drawCtx.putImageData(state.savedImageData, 0, 0);
@@ -347,6 +362,20 @@ window.addEventListener('mouseup', () => {
         if (state.isSelecting && (r.width < 10 || r.height < 10)) { resetUI(); return; }
         state.selectionRect = { x: r.left, y: r.top, w: r.width, h: r.height };
         showToolbar(r);
+    }
+    // Blur is throttled during drag; force the final (release) rectangle so the
+    // committed/exported blur is never a stale frame.
+    if (state.isDrawing && state.activeTool === 'blur' && state.savedImageData && state.selectionRect &&
+        Math.abs(lastBlurX - state.startX) > 5 && Math.abs(lastBlurY - state.startY) > 5) {
+        const sx = state.scaleX != null ? state.scaleX : state.dpr;
+        const sy = state.scaleY != null ? state.scaleY : state.dpr;
+        drawCtx.save();
+        const cp = new Path2D();
+        cp.rect(state.selectionRect.x * sx, state.selectionRect.y * sy, state.selectionRect.w * sx, state.selectionRect.h * sy);
+        drawCtx.clip(cp);
+        drawCtx.putImageData(state.savedImageData, 0, 0);
+        applyBlur(Math.min(state.startX, lastBlurX), Math.min(state.startY, lastBlurY), Math.abs(lastBlurX - state.startX), Math.abs(lastBlurY - state.startY));
+        drawCtx.restore();
     }
     state.isDraggingText = state.isResizing = state.isMoving = state.isSelecting = state.isDrawing = false;
     document.body.classList.remove('selecting');
@@ -390,7 +419,8 @@ function applyBlur(x, y, w, h) {
     const sy = state.scaleY != null ? state.scaleY : state.dpr;
     const cw = Math.round(w * sx);
     const ch = Math.round(h * sy);
-    const tempCanvas = document.createElement('canvas');
+    if (!blurTempCanvas) blurTempCanvas = document.createElement('canvas');
+    const tempCanvas = blurTempCanvas;
     tempCanvas.width = cw;
     tempCanvas.height = ch;
     const tempCtx = tempCanvas.getContext('2d');
@@ -442,7 +472,8 @@ function applyBlur(x, y, w, h) {
 
     drawCtx.save();
     drawCtx.setTransform(1, 0, 0, 1, 0, 0);
-    const tempImg = document.createElement('canvas');
+    if (!blurOutCanvas) blurOutCanvas = document.createElement('canvas');
+    const tempImg = blurOutCanvas;
     tempImg.width = bw; tempImg.height = bh;
     tempImg.getContext('2d').putImageData(imageData, 0, 0);
     drawCtx.drawImage(tempImg, x * sx, y * sy);
@@ -463,30 +494,23 @@ function getFinalImage() {
     if (!state.selectionRect) return null;
     const sx = state.scaleX != null ? state.scaleX : state.dpr;
     const sy = state.scaleY != null ? state.scaleY : state.dpr;
-    // Use primary display's scaleFactor for clipboard compensation
-    // clipboard.writeImage always divides by primary display's DPI, not current window's
-    const clipboardSf = state.primarySf || 1;
     const r = state.selectionRect;
 
-    // Physical pixel dimensions of the selected area
+    // Crop at NATIVE physical pixels. clipboard.writeImage emits a DIB sized by
+    // (pixels / nativeImage.scaleFactor); snip-copy-v2 uses scaleFactor 1.0, so the
+    // pasted/saved image is exactly cropW x cropH regardless of which monitor or DPI
+    // captured it (matches Windows Snipping Tool). No primary-display compensation.
     const cropW = Math.round(r.w * sx);
     const cropH = Math.round(r.h * sy);
 
-    // Electron's clipboard.writeImage divides by PRIMARY display's scaleFactor on Windows.
-    // Pre-multiply by primarySf so they cancel out: (cropW * sf) / sf = cropW
-    const outW = Math.round(cropW * clipboardSf);
-    const outH = Math.round(cropH * clipboardSf);
-
     const tc = document.createElement('canvas');
-    tc.width = outW;
-    tc.height = outH;
+    tc.width = cropW;
+    tc.height = cropH;
     const tctx = tc.getContext('2d');
-
-    // Nearest-neighbor interpolation — no blurring on upscale
     tctx.imageSmoothingEnabled = false;
 
-    tctx.drawImage(canvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, outW, outH);
-    tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, outW, outH);
+    tctx.drawImage(canvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, cropW, cropH);
+    tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, cropW, cropH);
 
     return tc.toDataURL('image/png');
 }
@@ -534,7 +558,7 @@ function safeGetImage() {
 
 textInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); const v = textInput.value.trim();
+        e.preventDefault(); e.stopPropagation(); const v = textInput.value.trim();
         if (v) {
             saveState();
             const sx = state.scaleX != null ? state.scaleX : state.dpr;
@@ -550,10 +574,13 @@ textInput.addEventListener('keydown', (e) => {
             drawCtx.restore();
         }
         textInputContainer.style.display = 'none'; textInput.value = '';
-    } else if (e.key === 'Escape') { textInputContainer.style.display = 'none'; textInput.value = ''; }
+    } else if (e.key === 'Escape') { e.stopPropagation(); textInputContainer.style.display = 'none'; textInput.value = ''; }
 });
 
 document.addEventListener('keydown', (e) => {
+    // While typing an annotation, leave undo/copy/close to the textarea (and its own
+    // Enter/Escape handler); don't trigger canvas undo, image copy, or window close.
+    if (document.activeElement === textInput) return;
     if (e.key === 'Escape') window.api.closeSnipper();
     if (e.ctrlKey && e.key.toLowerCase() === 'z') undo();
     if (e.ctrlKey && e.key.toLowerCase() === 'c') {
@@ -562,17 +589,23 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-document.querySelectorAll('.color-dot').forEach(d => d.addEventListener('click', () => {
-    document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
-    d.classList.add('active');
-    drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
-    state.selectedColor = d.dataset.color;
-    // Update selection border color immediately if selection exists
-    if (state.selectionRect) {
-        const r = state.selectionRect;
-        drawOverlay(r.x, r.y, r.w, r.h);
-    }
-}));
+document.querySelectorAll('.color-dot').forEach(d => {
+    const selectColor = () => {
+        document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
+        d.classList.add('active');
+        drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
+        state.selectedColor = d.dataset.color;
+        // Update selection border color immediately if selection exists
+        if (state.selectionRect) {
+            const r = state.selectionRect;
+            drawOverlay(r.x, r.y, r.w, r.h);
+        }
+    };
+    d.addEventListener('click', selectColor);
+    d.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectColor(); }
+    });
+});
 
 // Color palette toggle
 const colorToggle = document.getElementById('color-toggle');

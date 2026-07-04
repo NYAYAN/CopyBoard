@@ -31,9 +31,6 @@ function createMainWindow() {
         }
     });
 
-    // Clear cache
-    try { state.mainWindow.webContents.session.clearCache(); } catch (e) { }
-
     state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http')) require('electron').shell.openExternal(url);
         return { action: 'deny' };
@@ -50,6 +47,10 @@ function createMainWindow() {
 
 function createCapture(type = 'draw', display = null) {
     if (!display) display = screen.getPrimaryDisplay();
+    // Fullscreen on the target display (x/y select the monitor). Fullscreen hides the OS
+    // taskbar so it isn't shown twice (real taskbar + the taskbar baked into the captured
+    // screenshot). This is per-monitor: the original single-window code already opened a
+    // fullscreen overlay on whichever monitor the cursor was on, secondary monitors included.
     const win = new BrowserWindow({
         x: display.bounds.x, y: display.bounds.y,
         width: display.bounds.width, height: display.bounds.height,
@@ -69,29 +70,22 @@ function createCapture(type = 'draw', display = null) {
         }
     });
 
+    // The video recorder captures the LIVE desktop via getUserMedia, so this fullscreen
+    // overlay window — its pulsing selection outline, toolbar and timer — would otherwise
+    // be filmed into the recording. Exclude it from all screen capture (including our own
+    // getUserMedia) while keeping it visible to the user: WDA_EXCLUDEFROMCAPTURE on Windows,
+    // NSWindowSharingNone on macOS. Snipper/OCR annotate a pre-captured PNG, so they don't
+    // need this.
+    if (type === 'video') {
+        try { win.setContentProtection(true); } catch (e) { console.error('setContentProtection failed:', e); }
+    }
+
     // Hide Widget during capture
     if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
         state.widgetWindow.hide();
     }
 
-    let file = '../renderer/snipper/snipper.html';
-    if (type === 'ocr') file = '../renderer/ocr/ocr.html';
-    if (type === 'video') file = '../renderer/recorder/recorder.html';
-
-    win.loadFile(path.join(__dirname, file)); // __dirname is src/main/services, so we go up one more? No wait.
-    // __dirname here is src/main/services
-    // file is ../renderer...
-    // path.join('src/main/services', '../renderer/snipper/snipper.html') -> src/main/renderer/snipper... WRONG
-    // We need to go up to src: ../../ -> src/main -> src
-    // path.join(__dirname, '../../renderer/snipper/snipper.html') would be correct.
-    // The logic in main.js was path.join(__dirname, '../renderer/...') because main.js was in src/main.
-
-    // So here inside src/main/services:
-    // ../ -> src/main
-    // ../../ -> src
-    // ../../renderer -> src/renderer
-
-    // Let's fix the path logic here to be safe
+    // __dirname is src/main/services → go up two levels to reach src/renderer
     const rendererPath = path.resolve(__dirname, '../../renderer');
 
     if (type === 'ocr') win.loadFile(path.join(rendererPath, 'ocr/ocr.html'));
@@ -100,19 +94,21 @@ function createCapture(type = 'draw', display = null) {
 
     const level = process.platform === 'darwin' ? 'pop-up-menu' : 'screen-saver';
     win.setAlwaysOnTop(true, level);
-    // Clear cache
-    try { win.webContents.session.clearCache(); } catch (e) { }
 
     win.webContents.setWindowOpenHandler(() => { return { action: 'deny' }; });
 
     win.on('closed', () => {
-        state.isCapturing = false;
-        if (type === 'ocr') state.ocrWindow = null;
-        else if (type === 'video') state.recorderWindow = null;
-        else state.snipperWindow = null;
+        state.captureWindows = state.captureWindows.filter(w => w !== win);
+        if (type === 'ocr' && state.ocrWindow === win) state.ocrWindow = null;
+        else if (type === 'video' && state.recorderWindow === win) state.recorderWindow = null;
+        else if (state.snipperWindow === win) state.snipperWindow = null;
 
-        // Restore Widget if enabled
-        if (state.showWidget) toggleWidget(true);
+        // End the capture session only once EVERY monitor's overlay is gone, so the
+        // widget doesn't flash back while other capture windows are still open.
+        if (state.captureWindows.length === 0) {
+            state.isCapturing = false;
+            if (state.showWidget) toggleWidget(true);
+        }
     });
 
     if (process.platform === 'darwin') {
@@ -122,16 +118,25 @@ function createCapture(type = 'draw', display = null) {
 
     win.webContents.on('before-input-event', (event, input) => {
         if (input.key === 'Escape') {
-            win.close();
             event.preventDefault();
+            closeAllCaptureWindows(); // ESC on any monitor cancels the whole capture
         }
     });
 
     if (type === 'ocr') state.ocrWindow = win;
     else if (type === 'video') state.recorderWindow = win;
     else state.snipperWindow = win;
+    state.captureWindows.push(win);
 
     return win;
+}
+
+// Close every capture overlay (across all monitors). Pass a window to keep alive — used
+// when a video recording starts on one monitor and the overlays on the others must go away.
+function closeAllCaptureWindows(exceptWin = null) {
+    state.captureWindows.slice().forEach(w => {
+        if (w && !w.isDestroyed() && w !== exceptWin) w.close();
+    });
 }
 
 function showToast(message, type = 'info') {
@@ -290,29 +295,34 @@ function handleWidgetAction(action, data) {
     const PANEL_W = Math.round(350 * s);
     const BTN_W = Math.round(68 * s);
 
-    // Yön Hesaplama Fonksiyonu
+    const baseY = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
+
+    // Decide whether panels open upward (when there isn't enough room below the
+    // button) and notify the renderer so it can mirror the layout in CSS.
     const calculateDirection = () => {
         const display = screen.getDisplayNearestPoint(state.widgetPos);
         const db = display.workArea;
         const spaceBelow = (db.y + db.height) - state.widgetPos.y;
         const isUp = spaceBelow < HIS_H;
         state.widgetWindow.webContents.send('widget-direction', isUp);
+        return isUp;
     };
 
+    // Top-align the window when opening down; bottom-align the button (window
+    // grows upward) when opening up — so the button never moves on screen.
+    const topYFor = (height, isUp) => isUp ? Math.round(baseY + COL_H - height) : baseY;
+
     if (action === 'expand') {
-        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
-        calculateDirection();
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: EXP_H });
+        const isUp = calculateDirection();
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: topYFor(EXP_H, isUp), width: FULL_W, height: EXP_H });
     } else if (action === 'expand-history') {
-        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
-        calculateDirection();
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: HIS_H });
+        const isUp = calculateDirection();
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: topYFor(HIS_H, isUp), width: FULL_W, height: HIS_H });
     } else if (action === 'collapse-history') {
-        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: EXP_H });
+        const isUp = calculateDirection();
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: topYFor(EXP_H, isUp), width: FULL_W, height: EXP_H });
     } else if (action === 'collapse') {
-        const y = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: y, width: FULL_W, height: COL_H });
+        state.widgetWindow.setBounds({ x: Math.round(winX), y: baseY, width: FULL_W, height: COL_H });
     }
 
     // Always re-assert topmost after bound changes in widget mode
@@ -521,5 +531,6 @@ module.exports = {
     toggleWidget,
     handleWidgetAction,
     updateWidgetScale,
-    handleDisplayChange
+    handleDisplayChange,
+    closeAllCaptureWindows
 };

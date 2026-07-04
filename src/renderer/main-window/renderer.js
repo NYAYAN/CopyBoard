@@ -1,6 +1,5 @@
 import { initState, setupEventListeners, updateHistoryState, resetSearchState } from './modules/events.js';
 import { renderHistory } from './modules/history-renderer.js';
-import { showToast } from './modules/modals.js';
 import { elements } from './modules/dom.js';
 
 (async () => {
@@ -14,6 +13,7 @@ import { elements } from './modules/dom.js';
     // 3. UI Setup from Settings
     elements.maxItemsInput.value = settings.maxItems;
     elements.autostartCheck.checked = settings.autoStart;
+    elements.incognitoCheck.checked = settings.clipboardPaused || false;
     elements.widgetCheck.checked = settings.showWidget;
     elements.widgetTransparentCheck.checked = settings.widgetTransparent;
     elements.widgetColorInput.value = settings.widgetColor || '#8957e5';
@@ -54,10 +54,6 @@ import { elements } from './modules/dom.js';
 // IPC Event Listeners
 window.api.onUpdateHistory((history) => {
     updateHistoryState(history);
-});
-
-window.api.onShowToast((message, type) => {
-    showToast(message, type);
 });
 
 window.api.onResetView(() => {

@@ -1,4 +1,4 @@
-﻿CopyBoard v2.3.0 - Sürüm Notları
+﻿CopyBoard v2.6.3 - Sürüm Notları
 
 Gelişmiş Pano Yöneticisi ve OCR Aracı
 
@@ -24,7 +24,7 @@ DETAYLI ÖZELLİKLER:
 
 5. Ekran Alıntısı Aracı (Snipping Tool):
    - Ekranın istediğiniz bir bölümünün görüntüsünü alabilirsiniz.
-   - Alınan görüntü üzerinde çizim yapabilir (Ok, Kalem, Şekiller) ve metin ekleyebilirsiniz.
+   - Alınan görüntü üzerinde çizim yapabilir (Ok, Kalem, Şekiller, Blur/Bulanıklaştırma) ve metin ekleyebilirsiniz.
    - Görüntüyü panoya kopyalamak için butonları kullanabilir veya doğrudan "Ctrl + C" yapabilirsiniz.
 
 6. Video Ekran Kaydı:
@@ -34,6 +34,10 @@ DETAYLI ÖZELLİKLER:
 7. Gelişmiş OCR (Resimden Metin Okuma):
    - Ekranda gördüğünüz herhangi bir yazıyı (bu bir resim, PDF veya video karesi olabilir) seçerek metne dönüştürebilir ve kopyalayabilirsiniz.
    - Türkçe ve İngilizce metinleri destekler.
+
+8. Yüzen Araç (Floating Widget):
+   - Masaüstünde her an elinizin altında duran, dilediğiniz köşeye yaslanabilen yüzen araç.
+   - Pano, Ekran Yakalama, OCR ve Video Kaydı araçlarına tek tıkla erişim sağlar.
 
 KISAYOLLAR (Varsayılan):
 - Alt + V: Pano Listesi

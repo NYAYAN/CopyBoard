@@ -57,7 +57,26 @@ GitHub Actions için hızlı yönergeler
 
 - Tag ile release oluşturun: `git tag v1.0.0 && git push --tags` — bu tetikleyecek `v*` patternli workflow'u.
 
-Workflow dosyası repo'ya eklendi: `.github/workflows/release.yml` — bu dosya Windows runner üzerinde `npm run build` yaptıktan sonra `cert.pfx`'i çözüp `signtool` ile `dist/*.exe` dosyalarını imzalar ve Release'e yükler.
+Workflow dosyası: `.github/workflows/release.yml` — Windows runner'da `npm run dist` çalışırken `PFX_BASE64` secret'ı `WIN_CSC_LINK`, `PFX_PASSWORD` secret'ı `WIN_CSC_KEY_PASSWORD` ortam değişkeni olarak verilir. Secret'lar mevcutsa electron-builder NSIS installer'ı imzalar; yoksa boş kalır ve build imzasız üretilir (`forceCodeSigning: false`). Ayrı bir `signtool` adımı gerekmez.
+
+Mevcut durum: UYGULAMA İMZASIZ
+- `package.json` → `build.win`: `verifyUpdateCodeSignature: false`, `forceCodeSigning: false`. Yani sürümler imzasız çıkıyor ve otomatik güncelleme GitHub HTTPS + electron-updater'ın paket meta verisindeki SHA-512 bütünlük kontrolü ile korunuyor (yayıncı kimlik doğrulaması yok, ama bozuk/eksik indirme yine yakalanır).
+
+⛔ Neden imza doğrulaması (`verifyUpdateCodeSignature`) şu an KAPALI ve self-signed ile AÇILMAMALI
+- electron-updater (v6.x) indirilen Windows güncellemesini `Get-AuthenticodeSignature` ile doğrular ve CN karşılaştırmasını **yalnızca** imza durumu `Valid (0)` ise yapar (`windowsExecutableCodeSignatureVerifier.ts`).
+- Self-signed sertifika son kullanıcının makinesinde Trusted Root/Trusted Publishers'ta **olmadığı** için durum `NotTrusted (4)` döner → doğrulama **başarısız** olur → her güncelleme `ERR_UPDATER_INVALID_SIGNATURE` ile **reddedilir**.
+- Sonuç: CA imzalı (OV/EV) bir sertifika olmadan `verifyUpdateCodeSignature: true` yapmak, tüm kullanıcılar için otomatik güncellemeyi **kırar**. Bu yüzden kapalı bırakıldı. (Kaynak: electron-builder/electron-updater kaynak kodu + GHSA-9jxc-qjr9-vjxq.)
+
+✅ CA sertifikası edindiğinde imzalama + doğrulamayı açma adımları
+1. GitHub secret'larını ayarla: `PFX_BASE64` (cert.pfx base64'ü, sonunda boşluk/yenisatır olmadan, < 8192 karakter) ve `PFX_PASSWORD`.
+2. `package.json` → `build.win`'de `verifyUpdateCodeSignature: true` ve `forceCodeSigning: true` yap.
+3. `build.win.publisherName`'i sertifikanın **subject CN**'i ile birebir eşleşecek şekilde pinle, ör: `"publisherName": ["Nurullah YAYAN"]` (dizi, ileride sertifika rotasyonunu köprülemeyi kolaylaştırır).
+4. İlk imzalı sürümden sonra installer içindeki `resources/app-update.yml`'da `publisherName:` satırının gerçekten yazıldığını doğrula (boşsa doğrulama sessizce no-op olur; electron-builder #1913/#2875/#3507).
+5. CN'i sürümler arası **sabit** tut; değiştirmek (ör. farklı CA'ya geçiş) eski istemcilerde güncellemeleri reddettirir.
+
+Notlar
+- Self-signed sertifika SmartScreen güvenini sağlamaz; ilk kurulumda "bilinmeyen yayıncı" uyarısı için yine gerçek/EV sertifika gerekir.
+- macOS: `mac.identity = null` (imzasız). Güncelleme penceresi mac kullanıcılarını "İndir (GitHub)" ile elle indirmeye yönlendirir (`src/renderer/update/update-dialog.js`) ve ana süreç mac'te in-app indirme/kurulumu atlar (`src/main/services/update-manager.js`) — yani başarısız bir kuruluma sokulmazlar. Gerçek mac otomatik güncellemesi Apple Developer ID + notarization gerektirir, ayrıca ele alınmalı.
 
 Yerel yardımcı komut dosyası
 - Repo içinde `scripts/generate-pfx-and-secrets.ps1` adlı PowerShell script'i eklendi. Bu script:

@@ -12,6 +12,12 @@ const tabFavorites = document.getElementById('tab-favorites');
 
 const widgetSearch = document.getElementById('widget-search');
 
+// Monochrome SVGs for the history-row actions (matches the main-window icon set) and the
+// list search predicate — both come from the shared classic script loaded before this one
+// (see ../shared/render-utils.js and the <script> tag in widget.html). The widget's row
+// actions use exactly the 4 shared icons, so ICONS is that shared set verbatim.
+const { ICONS, matchesSearch } = window.CopyBoardShared;
+
 let isOpen = false;
 let isHistoryOpen = false;
 let isDragging = false;
@@ -23,9 +29,11 @@ let lastHistoryRequestId = 0;
 let activeTab = 'history'; // 'history' | 'favorites'
 let allHistoryItems = [];
 let allFavoriteItems = [];
+let favoritedContentsSet = new Set(); // rebuilt on data change, not per scroll frame
 let searchQuery = '';
 let currentOpacity = 1;
 let lastDragEndTime = 0;
+let scrollRaf = null;
 
 // Opacity event listeners for main button
 mainBtn.addEventListener('mouseenter', () => {
@@ -38,35 +46,86 @@ mainBtn.addEventListener('mouseleave', () => {
     }
 });
 
-// --- setIgnoreMouseEvents ---
-function updateMouseEvents() {
-    if (isOpen || isHistoryOpen || isDragging || isPointerDown) {
-        window.api.setIgnoreMouseEvents(false);
+// --- Circular hit-test ---
+// Only the visible round button (plus a small margin) is interactive. The
+// square corners around the circle stay click-through, so a click there falls
+// to the app underneath instead of triggering the widget.
+function isOverMainButton(clientX, clientY, margin = 6) {
+    const rect = mainBtn.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const radius = rect.width / 2 + margin;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    return dx * dx + dy * dy <= radius * radius;
+}
+
+// True only over an actually-visible widget surface: the round main button (always),
+// the round menu items (when the menu is open), or the history panel rect (when open).
+// Everything else — the wide transparent panel-gap left of the buttons AND the gaps
+// between icons — forwards clicks to the app underneath.
+function isOverInteractive(x, y) {
+    if (isHistoryOpen) {
+        const p = historyPanel.getBoundingClientRect();
+        if (x >= p.left && x <= p.right && y >= p.top && y <= p.bottom) return true;
+    }
+    if (isOverMainButton(x, y)) return true;
+    if (isOpen) {
+        for (const b of menu.querySelectorAll('.menu-item')) {
+            const r = b.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            const radius = r.width / 2 + 6;
+            const dx = x - cx;
+            const dy = y - cy;
+            if (dx * dx + dy * dy <= radius * radius) return true;
+        }
+    }
+    return false;
+}
+
+// --- setIgnoreMouseEvents (only fire IPC when the state actually changes) ---
+let lastIgnoreState = null;
+function setIgnore(ignore, options) {
+    if (lastIgnoreState === ignore) return;
+    lastIgnoreState = ignore;
+    window.api.setIgnoreMouseEvents(ignore, options);
+}
+
+// Last known cursor position (client coords). Lets refreshIgnore() re-evaluate the
+// capture/forward decision after a state change (open/close) even when the mouse has
+// NOT moved — otherwise closing the menu with a stationary cursor over the button
+// would leave the window in forward mode and the button unclickable until a mousemove.
+let lastMouseX = 0, lastMouseY = 0, haveMousePos = false;
+
+function refreshIgnore() {
+    // During an active drag/press keep capturing so the gesture isn't lost.
+    if (isDragging || isPointerDown) {
+        setIgnore(false);
+        return;
+    }
+    // Capture only when the cursor is over a real widget surface (round buttons /
+    // open panel); forward everywhere else so the app underneath stays clickable —
+    // including the empty panel-area beside the buttons when the menu is open.
+    if (haveMousePos && isOverInteractive(lastMouseX, lastMouseY)) {
+        setIgnore(false);
     } else {
-        window.api.setIgnoreMouseEvents(true, { forward: true });
+        setIgnore(true, { forward: true });
     }
 }
+
+// Public name used by the action/timeout handlers; now position-aware (re-uses the
+// last cursor position) so transitions with a stationary cursor are handled correctly.
+function updateMouseEvents() { refreshIgnore(); }
 updateMouseEvents();
 
 // Use mousemove (not mouseenter/leave) so setIgnoreMouseEvents(true,{forward})
-// forwarded events still trigger detection even when mouse was already over button.
+// forwarded events still trigger detection even when the mouse was already over a button.
 document.addEventListener('mousemove', (e) => {
-    if (isOpen || isHistoryOpen || isDragging || isPointerDown) {
-        window.api.setIgnoreMouseEvents(false);
-        return;
-    }
-
-    // Butonun konumunu al ve hit-detection için tolerans (margin) ekle
-    const rect = mainBtn.getBoundingClientRect();
-    const margin = 10;
-    const over = e.clientX >= rect.left - margin && e.clientX <= rect.right + margin
-        && e.clientY >= rect.top - margin && e.clientY <= rect.bottom + margin;
-
-    if (over) {
-        window.api.setIgnoreMouseEvents(false);
-    } else {
-        window.api.setIgnoreMouseEvents(true, { forward: true });
-    }
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    haveMousePos = true;
+    refreshIgnore();
 }, { passive: true });
 
 // --- Tooltip ---
@@ -118,8 +177,8 @@ function renderVirtualList(items) {
         historyItemsContainer.appendChild(spacer);
     }
 
-    // Build set of favorited content for quick lookup
-    const favoritedContents = new Set(allFavoriteItems.map(f => f.content));
+    // Favorited-content lookup is rebuilt in renderHistory (on data change), not here
+    const favoritedContents = favoritedContentsSet;
 
     for (let i = visibleStart; i < visibleEnd; i++) {
         const item = items[i];
@@ -133,40 +192,47 @@ function renderVirtualList(items) {
         textEl.textContent = item.content;
         div.appendChild(textEl);
 
-        // Star button: add to/remove from favorites
+        // Row actions (favorite / copy / delete) — mirrors the main window's row
+        const actions = document.createElement('div');
+        actions.className = 'history-actions';
+
+        const isFav = isInFavoritesTab || favoritedContents.has(item.content);
         const starBtn = document.createElement('button');
-        starBtn.className = 'delete-btn'; // reuse style but repurpose
-        starBtn.style.cssText = 'font-size:13px; background:transparent; border:none; right:30px;';
-        if (isInFavoritesTab) {
-            starBtn.textContent = '⭐';
-            starBtn.title = 'Favorilerden Çıkar';
-            starBtn.onclick = (e) => {
-                e.stopPropagation();
-                hideTooltip();
+        starBtn.className = 'action-btn star-btn' + (isFav ? ' active' : '');
+        starBtn.innerHTML = isFav ? ICONS.starFilled : ICONS.starOutline;
+        starBtn.title = isInFavoritesTab ? 'Favorilerden Çıkar' : (isFav ? 'Zaten Favorilerde' : 'Favorilere Ekle');
+        starBtn.setAttribute('aria-label', starBtn.title);
+        starBtn.onclick = (e) => {
+            e.stopPropagation();
+            hideTooltip();
+            if (isInFavoritesTab) {
                 window.api.removeFromFavorites(item.id);
                 allFavoriteItems = allFavoriteItems.filter(f => f.id !== item.id);
                 renderHistory(allHistoryItems, allFavoriteItems);
-            };
-        } else {
-            const isFav = favoritedContents.has(item.content);
-            starBtn.textContent = isFav ? '⭐' : '☆';
-            starBtn.title = isFav ? 'Zaten Favorilerde' : 'Favorilere Ekle';
-            starBtn.onclick = (e) => {
-                e.stopPropagation();
-                if (!isFav) {
-                    window.api.addToFavorites({ content: item.content, timestamp: item.timestamp });
-                    allFavoriteItems.unshift({ id: '_local_' + Date.now(), content: item.content, timestamp: item.timestamp });
-                    renderHistory(allHistoryItems, allFavoriteItems);
-                }
-            };
-        }
-        div.appendChild(starBtn);
+            } else if (!favoritedContents.has(item.content)) {
+                // Add and let the main-process broadcast refresh the list with the REAL id.
+                // (Previously inserted a fake '_local_'+Date.now() id that couldn't be removed
+                // and desynced the widget from the store.)
+                window.api.addToFavorites({ content: item.content, timestamp: item.timestamp });
+            }
+        };
 
-        // Delete button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'action-btn';
+        copyBtn.innerHTML = ICONS.copy;
+        copyBtn.title = 'Kopyala';
+        copyBtn.setAttribute('aria-label', 'Kopyala');
+        copyBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.api.copyItem(item.content);
+            closeAll();
+        };
+
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'delete-btn';
-        deleteBtn.textContent = '×';
+        deleteBtn.className = 'action-btn del';
+        deleteBtn.innerHTML = ICONS.trash;
         deleteBtn.title = isInFavoritesTab ? 'Favorilerden Çıkar' : 'Sil';
+        deleteBtn.setAttribute('aria-label', deleteBtn.title);
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
             hideTooltip();
@@ -179,7 +245,11 @@ function renderVirtualList(items) {
             }
             renderHistory(allHistoryItems, allFavoriteItems);
         };
-        div.appendChild(deleteBtn);
+
+        actions.appendChild(starBtn);
+        actions.appendChild(copyBtn);
+        actions.appendChild(deleteBtn);
+        div.appendChild(actions);
 
         div.addEventListener('click', () => {
             window.api.copyItem(item.content);
@@ -210,21 +280,21 @@ function renderVirtualList(items) {
 function renderHistory(history, favorites) {
     allHistoryItems = history || [];
     allFavoriteItems = favorites || [];
+    favoritedContentsSet = new Set(allFavoriteItems.map(f => f.content));
 
     let displayItems = activeTab === 'favorites' ? allFavoriteItems : allHistoryItems;
 
     // Apply Search Filter
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        displayItems = displayItems.filter(item => {
-            const contentMatch = item.content && item.content.toLowerCase().includes(q);
-            const noteMatch = item.note && item.note.toLowerCase().includes(q);
-            return contentMatch || noteMatch;
-        });
+        displayItems = displayItems.filter(item => matchesSearch(item, q));
     }
 
     historyItemsContainer.scrollTop = 0;
     hideTooltip();
+
+    // Cancel any pending scroll render from a previous list
+    if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
 
     if (displayItems.length === 0) {
         const msg = searchQuery ? 'Eşleşen sonuç bulunamadı' : (activeTab === 'favorites' ? 'Favori öğe yok' : 'Geçmiş boş');
@@ -234,7 +304,12 @@ function renderHistory(history, favorites) {
 
     historyItemsContainer.onscroll = () => {
         hideTooltip();
-        renderVirtualList(displayItems);
+        // Throttle re-renders to one per animation frame to avoid scroll jank
+        if (scrollRaf) return;
+        scrollRaf = requestAnimationFrame(() => {
+            scrollRaf = null;
+            renderVirtualList(displayItems);
+        });
     };
 
     renderVirtualList(displayItems);
@@ -272,7 +347,9 @@ tabFavorites.addEventListener('click', () => {
 });
 
 // --- Menu Toggle ---
-mainBtn.addEventListener('click', () => {
+mainBtn.addEventListener('click', (e) => {
+    // Ignore clicks landing on the square corners outside the round button
+    if (!isOverMainButton(e.clientX, e.clientY)) return;
     if (isDragging || (Date.now() - lastDragEndTime < 200)) return;
     if (collapseTimeout) { clearTimeout(collapseTimeout); collapseTimeout = null; }
 
@@ -329,6 +406,7 @@ mainBtn.addEventListener('pointerdown', (e) => {
     mainBtn.setPointerCapture(e.pointerId);
 
     const onPointerMove = (moveEvent) => {
+        lastMouseX = moveEvent.clientX; lastMouseY = moveEvent.clientY; haveMousePos = true;
         const deltaX = moveEvent.screenX - dragStartX;
         const deltaY = moveEvent.screenY - dragStartY;
         if (!isDragging && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) isDragging = true;
@@ -388,7 +466,7 @@ btnSnippet.addEventListener('click', async () => {
     isHistoryOpen = !isHistoryOpen;
     if (isHistoryOpen) {
         mainBtn.style.opacity = '1';
-        window.api.setIgnoreMouseEvents(false);
+        setIgnore(false);
         window.api.widgetAction('expand-history');
         await loadHistory();
         setTimeout(() => { if (isHistoryOpen) historyPanel.classList.add('open'); }, 10);

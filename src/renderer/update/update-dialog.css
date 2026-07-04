@@ -1,3 +1,14 @@
+:root {
+    --accent: #8957e5;
+    --accent-dark: #6f42c1;
+    --accent-hover: #a27bf6;
+    --surface: #1e1e2e;
+    --surface-elevated: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.1);
+    --text: #ececf1;
+    --text-secondary: #a0a0b0;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -5,27 +16,29 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--surface);
     margin: 0;
     padding: 0;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
     height: 100vh;
+    color: var(--text);
 }
 
 .update-container {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
+    background: var(--surface);
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 14px;
 }
 
 .update-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
     padding: 20px 20px;
     text-align: center;
     color: white;
@@ -75,7 +88,7 @@ body {
     font-size: 15px;
     font-weight: 700;
     margin: 0;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
     line-height: 1.3;
 }
 
@@ -94,7 +107,8 @@ body {
     gap: 10px;
     margin-bottom: 16px;
     padding: 12px;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
     border-radius: 12px;
 }
 
@@ -109,7 +123,7 @@ body {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #64748b;
+    color: var(--text-secondary);
     font-weight: 600;
 }
 
@@ -120,12 +134,12 @@ body {
 }
 
 .version-number.current {
-    color: #64748b;
+    color: var(--text-secondary);
 }
 
 .version-number.new {
-    color: #667eea;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: var(--accent-hover);
+    background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -133,7 +147,7 @@ body {
 
 .version-arrow {
     font-size: 24px;
-    color: #667eea;
+    color: var(--accent-hover);
     font-weight: bold;
 }
 
@@ -148,23 +162,24 @@ body {
 .release-notes h3 {
     font-size: 13px;
     font-weight: 600;
-    color: #334155;
+    color: var(--text);
     margin-bottom: 8px;
 }
 
 .notes-content {
-    background: #f8fafc;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px;
     font-size: 12px;
     line-height: 1.5;
-    color: #475569;
+    color: var(--text-secondary);
     flex: 1;
     overflow-y: auto;
 }
 
 .notes-content strong {
-    color: #1e293b;
+    color: var(--text);
     font-size: 11.5px;
     display: block;
     margin-top: 6px;
@@ -181,17 +196,17 @@ body {
 }
 
 .notes-content::-webkit-scrollbar-track {
-    background: #e2e8f0;
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 3px;
 }
 
 .notes-content::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 3px;
 }
 
 .notes-content::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: rgba(255, 255, 255, 0.28);
 }
 
 /* Styles for GitHub rendered HTML */
@@ -217,7 +232,8 @@ body {
 .download-progress {
     margin-bottom: 16px;
     padding: 12px;
-    background: #f8fafc;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
     border-radius: 12px;
     transition: all 0.3s ease;
 }
@@ -236,19 +252,19 @@ body {
 .progress-label {
     font-size: 13px;
     font-weight: 600;
-    color: #334155;
+    color: var(--text);
 }
 
 .progress-percent {
     font-size: 13px;
     font-weight: 700;
-    color: #667eea;
+    color: var(--accent-hover);
 }
 
 .progress-bar {
     width: 100%;
     height: 8px;
-    background: #e2e8f0;
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     overflow: hidden;
     margin-bottom: 8px;
@@ -256,7 +272,7 @@ body {
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
     border-radius: 4px;
     transition: width 0.3s ease;
     width: 0%;
@@ -266,7 +282,7 @@ body {
     display: flex;
     justify-content: space-between;
     font-size: 11px;
-    color: #64748b;
+    color: var(--text-secondary);
 }
 
 .update-actions {
@@ -296,13 +312,18 @@ body {
     height: 16px;
 }
 
+.btn:focus-visible {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: 2px;
+}
+
 .btn-secondary {
-    background: #f1f5f9;
-    color: #475569;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
 }
 
 .btn-secondary:hover {
-    background: #e2e8f0;
+    background: rgba(255, 255, 255, 0.14);
     transform: translateY(-1px);
 }
 
@@ -311,13 +332,13 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
     color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 15px rgba(137, 87, 229, 0.4);
 }
 
 .btn-primary:hover {
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    box-shadow: 0 6px 20px rgba(137, 87, 229, 0.55);
     transform: translateY(-2px);
 }
 

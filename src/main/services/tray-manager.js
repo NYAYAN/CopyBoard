@@ -22,19 +22,7 @@ function initTray() {
     const contextMenu = Menu.buildFromTemplate([
         { label: 'Göster', click: showMain },
         { type: 'separator' },
-        {
-            label: 'Ekran Görüntüsü Al', click: () => {
-                const { capture } = require('./ipc-handlers'); // Circular dependency avoidance if needed
-                // Actually capture logic is in ipc-handlers mostly, but creating capture window is WindowManager. 
-                // We need the `capture` ORCHESTRATOR function which handles desktopCapturer.
-                // Let's assume passed in or handle it here?
-                // Better: Make a capture helper in a utils or separate file. 
-                // For now, let's keep it simple. We can emit an event or require properly.
-                // Or simply call a global function if we attach it to 'global' (ugly).
-                // Let's refactor `capture()` into a service too.
-                require('./capture-service').startCapture('draw');
-            }
-        },
+        { label: 'Ekran Görüntüsü Al', click: () => require('./capture-service').startCapture('draw') },
         { label: 'Metin Oku (OCR)', click: () => require('./capture-service').startCapture('ocr') },
         { label: 'Video Kaydet', click: () => require('./capture-service').startCapture('video') },
         { type: 'separator' },

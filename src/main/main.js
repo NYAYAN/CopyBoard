@@ -1,9 +1,9 @@
-const { app, dialog, clipboard, screen } = require('electron');
+const { app, dialog, clipboard, screen, powerMonitor } = require('electron');
 const { state } = require('./services/state');
 const { showMain, createMainWindow, toggleWidget, handleDisplayChange } = require('./services/window-manager');
 const { initTray } = require('./services/tray-manager');
 const { registerIpcHandlers } = require('./services/ipc-handlers');
-const { initAutoUpdater } = require('./services/update-manager');
+const { initAutoUpdater, checkForUpdatesSilently } = require('./services/update-manager');
 const { startClipboardWatcher } = require('./services/history-manager');
 
 // Hot Reload handled externally or disabled
@@ -53,7 +53,15 @@ if (!gotTheLock) {
     }
 
     // Start Clipboard Watcher
-    const clipInterval = startClipboardWatcher(clipboard);
+    let clipInterval = startClipboardWatcher(clipboard);
+
+    // Pause the 1s clipboard poll while the machine is asleep or locked (saves wakeups/battery)
+    const pausePoll = () => { if (clipInterval) { clearInterval(clipInterval); clipInterval = null; } };
+    const resumePoll = () => { if (!clipInterval) clipInterval = startClipboardWatcher(clipboard); };
+    powerMonitor.on('suspend', pausePoll);
+    powerMonitor.on('lock-screen', pausePoll);
+    powerMonitor.on('resume', resumePoll);
+    powerMonitor.on('unlock-screen', resumePoll);
 
     // Monitor for display changes to prevent widget from getting lost
     screen.on('display-added', () => {
@@ -83,6 +91,15 @@ if (!gotTheLock) {
       try {
         app.setLoginItemSettings({ openAtLogin: state.autoStart, path: app.getPath('exe'), args: ['--hidden'] });
       } catch (e) { }
+    }
+
+    // Silent startup update check (packaged builds only). README advertises a startup
+    // auto-check; this stays quiet unless an update is available, in which case the
+    // 'update-available' handler opens the dialog. Delayed so it doesn't compete with launch.
+    if (app.isPackaged) {
+      setTimeout(() => {
+        try { checkForUpdatesSilently(); } catch (e) { console.error('Auto update check failed:', e); }
+      }, 5000);
     }
 
     app.on('before-quit', () => {

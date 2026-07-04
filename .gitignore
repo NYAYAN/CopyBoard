@@ -11,6 +11,9 @@ CopyBoard-win32-x64
 # Large Files / Tesseract Models
 *.traineddata
 
+# Release artifacts (installers, release-notes archives, etc.)
+*.zip
+
 # Cache
 __pycache__
 *.log

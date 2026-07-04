@@ -40,6 +40,9 @@ function createUpdateWindow(updateInfo) {
         }
     });
 
+    // Mirror to shared state so other services (e.g. open-url) can close it
+    state.updateWindow = updateWindow;
+
     updateWindow.loadFile(path.join(__dirname, '../../renderer/update/update-dialog.html'));
 
     updateWindow.once('ready-to-show', () => {
@@ -57,6 +60,7 @@ function createUpdateWindow(updateInfo) {
 
     updateWindow.on('closed', () => {
         updateWindow = null;
+        state.updateWindow = null;
     });
 }
 
@@ -113,16 +117,35 @@ function initAutoUpdater() {
 function checkForUpdates() {
     state.manualUpdateCheck = true;
     try {
+        // Don't toast here: a failed check also emits autoUpdater 'error', whose handler
+        // shows the single error toast and resets manualUpdateCheck. Toasting here too
+        // would surface the same failure twice for one manual check.
         autoUpdater.checkForUpdates().catch(err => {
             console.error('Check for updates failed:', err);
-            showToast('Güncelleme kontrolü başarısız oldu', 'error');
         });
     } catch (err) {
         console.error('Check for updates error:', err);
     }
 }
 
+// Silent startup/background check: leave manualUpdateCheck false so "no update available"
+// and errors stay quiet; only an available update opens the dialog (via 'update-available').
+function checkForUpdatesSilently() {
+    try {
+        autoUpdater.checkForUpdates().catch(err => console.error('Startup update check failed:', err));
+    } catch (err) {
+        console.error('Startup update check error:', err);
+    }
+}
+
 function downloadUpdate() {
+    // macOS ships unsigned; Squirrel.Mac cannot apply updates, so the update
+    // dialog redirects mac users to a manual GitHub download. Guard here too as
+    // defense-in-depth so the main process never starts a doomed in-app download.
+    if (process.platform === 'darwin') {
+        console.warn('[Updater] In-app download skipped on macOS (unsigned app) — use manual GitHub download.');
+        return;
+    }
     try {
         const downloadPromise = autoUpdater.downloadUpdate();
         if (downloadPromise && typeof downloadPromise.catch === 'function') {
@@ -142,6 +165,10 @@ function downloadUpdate() {
 }
 
 function installUpdate() {
+    if (process.platform === 'darwin') {
+        console.warn('[Updater] quitAndInstall skipped on macOS (unsigned app).');
+        return;
+    }
     try {
         autoUpdater.quitAndInstall(false, true);
     } catch (err) {
@@ -152,6 +179,7 @@ function installUpdate() {
 module.exports = {
     initAutoUpdater,
     checkForUpdates,
+    checkForUpdatesSilently,
     downloadUpdate,
     installUpdate
 };

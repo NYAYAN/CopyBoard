@@ -179,11 +179,23 @@ body.is-recording #selection-box {
     color: #fff;
 }
 
-.tool-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+.tool-btn:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.tool-btn:focus-visible,
+.toolbar-select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .tool-btn.danger {
+    color: var(--danger);
+}
+
+/* Primary action: red record dot stands out among the neutral tools */
+#btn-record {
     color: var(--danger);
 }
 

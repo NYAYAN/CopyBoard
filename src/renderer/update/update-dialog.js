@@ -57,27 +57,31 @@ window.api.onUpdateError((message) => {
     }
 });
 
-// Format release notes from markdown to HTML with basic XSS protection
+// Format release notes from markdown to safe HTML.
+// SECURITY: releaseNotes comes from the GitHub release feed over the network and is
+// UNTRUSTED. We HTML-escape the input FIRST, then apply a fixed set of markdown->HTML
+// transforms to the already-escaped text. This way only our own markers can ever produce
+// tags; any attacker-supplied HTML (e.g. <img onerror>, <svg onload>) is neutralised to
+// inert text before it can reach innerHTML. (Replaces the old <script>/<iframe> denylist,
+// which was trivially bypassed by other event-handler-bearing tags.)
 function formatReleaseNotes(notes) {
     if (!notes) return 'Yeni özellikler ve iyileştirmeler.';
 
-    // Because GitHub release notes often come pre-formatted with HTML (like <p>, <strong>),
-    // blindly escaping < and > breaks the layout.
-    // Instead of full escape, we'll just strip out dangerous tags like <script> or <iframe>.
-    let sanitized = notes.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
+    const escaped = String(notes)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
-    // Sometimes GitHub provides raw markdown. If there are no HTML tags, we convert manually:
-    if (!sanitized.includes('<p>') && !sanitized.includes('<strong>')) {
-        sanitized = sanitized
-            .replace(/^#+ (.+)$/gm, '<strong>$1</strong>') // All headers (#, ##, ###) to strong
-            .replace(/^- (.+)$/gm, '• $1') // Bullet points
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Bold
-            .replace(/\n/g, '<br>'); // Line breaks
-    }
+    const formatted = escaped
+        .replace(/^#+ (.+)$/gm, '<strong>$1</strong>') // Headers (#, ##, ###) -> strong
+        .replace(/^- (.+)$/gm, '• $1')                  // Bullet points
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Bold
+        .replace(/\n/g, '<br>');                        // Line breaks
 
     // Wrap in a stylized container to match the UI better (smaller fonts for lists etc)
-    return `<div class="release-html-content">${sanitized}</div>`;
+    return `<div class="release-html-content">${formatted}</div>`;
 }
 
 // Update download progress
@@ -130,16 +134,17 @@ window.api.onUpdateDownloaded(() => {
     updateBtn.disabled = true;
     updateBtn.style.fontSize = '11px';
 
-    // Auto-install after 3 seconds
+    // Auto-install after 3 seconds — display (3),(2),(1) then install (no "(0)" frame, no 4th second)
     let countdown = 3;
+    updateBtn.textContent = `Yeniden Başlatılıyor... (${countdown})`;
     const countdownInterval = setInterval(() => {
-        updateBtn.textContent = `Yeniden Başlatılıyor... (${countdown})`;
         countdown--;
-
-        if (countdown < 0) {
+        if (countdown <= 0) {
             clearInterval(countdownInterval);
             window.api.installUpdate();
+            return;
         }
+        updateBtn.textContent = `Yeniden Başlatılıyor... (${countdown})`;
     }, 1000);
 
     // Allow user to cancel auto-install

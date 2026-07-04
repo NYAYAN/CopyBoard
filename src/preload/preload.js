@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
     toastFinished: () => ipcRenderer.send('toast-finished'),
     openExternal: (url) => ipcRenderer.send('open-url', url),
     setAutoStart: (val) => ipcRenderer.send('set-autostart', val),
+    setClipboardPaused: (val) => ipcRenderer.send('set-clipboard-paused', val),
     setVideoQuality: (val) => ipcRenderer.send('set-video-quality', val),
     setShowWidget: (show) => ipcRenderer.send('set-show-widget', show),
     setWidgetTransparent: (val) => ipcRenderer.send('set-widget-transparent', val),
@@ -32,7 +33,7 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateHistory: (callback) => ipcRenderer.on('update-history', (_, value) => callback(value)),
 
     // Snipper & OCR & Recorder
-    onCaptureScreen: (callback) => ipcRenderer.on('capture-screen', (_, data, mode, sourceId, quality, captureWidth, captureHeight, primarySf) => callback(data, mode, sourceId, quality, captureWidth, captureHeight, primarySf)),
+    onCaptureScreen: (callback) => ipcRenderer.on('capture-screen', (_, data, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => callback(data, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor)),
     sendOCR: (dataUrl) => ipcRenderer.send('ocr-process', dataUrl),
     sendCopyImage: (dataUrl) => ipcRenderer.send('snip-copy-v2', dataUrl), // RENAMED due to channel blocking
     sendSaveImage: (dataUrl) => ipcRenderer.send('snip-save-image', dataUrl),

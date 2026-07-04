@@ -28,7 +28,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "icon.png",
+      "icon": "icon.ico",
       "verifyUpdateCodeSignature": false,
       "forceCodeSigning": false
     },
@@ -56,6 +56,7 @@
       "src/**/*",
       "package.json",
       "icon.png",
+      "icon.ico",
       "trayIcon.png",
       "!**/*.map",
       "!**/*.idb",
@@ -64,8 +65,7 @@
   },
   "devDependencies": {
     "electron": "^39.2.7",
-    "electron-builder": "^25.1.8",
-    "electron-packager": "^17.1.2"
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
     "electron-store": "^8.1.0",

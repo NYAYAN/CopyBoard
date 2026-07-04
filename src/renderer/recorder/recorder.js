@@ -41,7 +41,7 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
+window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => {
     state.sourceId = sourceId;
     state.videoQuality = quality || 'high';
     if (qualitySelect) qualitySelect.value = state.videoQuality;
@@ -69,15 +69,18 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
         img.onload = () => {
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            // Apply default size (500x500) automatically when recorder starts
-            applyDefaultSize();
+            // Auto-place a default 500x500 box ONLY on a single monitor. With multiple monitors,
+            // leave every overlay empty (dimmed + "select area") so the user draws the region on
+            // the ONE monitor they want — a default box on every screen makes it unclear which
+            // monitor records.
+            if (!multiMonitor) applyDefaultSize();
             window.api.notifyReady();
         };
         img.src = dataUrl;
     } else {
         // Fallback for initial frame if thumbnail fails
         setTimeout(() => {
-            applyDefaultSize();
+            if (!multiMonitor) applyDefaultSize();
             window.api.notifyReady();
         }, 50);
     }
@@ -313,7 +316,14 @@ async function startRecording() {
         state.lastIgnoreState = true;
         window.api.setIgnoreMouseEvents(true, { forward: true });
 
-    } catch (e) { console.error('Kayıt hatası:', e); }
+    } catch (e) {
+        console.error('Kayıt hatası:', e);
+        // Surface the failure and reset to a retryable state. The UI changes above only
+        // run after a successful setup, so the Record button is still visible here.
+        state.isRecording = false;
+        state.mediaRecorder = null;
+        alert('Kayıt başlatılamadı: ' + (e && e.message ? e.message : e));
+    }
 }
 
 function stopRecording() {

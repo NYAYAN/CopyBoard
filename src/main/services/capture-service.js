@@ -41,37 +41,35 @@ async function startCapture(mode) {
         const displays = screen.getAllDisplays();
         const multiMonitor = displays.length > 1;
 
-        // desktopCapturer.getSources takes ONE thumbnailSize for all sources, so request the
-        // largest monitor's physical size — no screen is captured below native resolution.
-        // Each source's thumbnail keeps its own aspect ratio and is stretched to fill its own
-        // overlay canvas (sized to that display), so per-monitor DPI stays correct.
-        const maxW = Math.max(...displays.map(d => Math.round(d.bounds.width * (d.scaleFactor || 1))));
-        const maxH = Math.max(...displays.map(d => Math.round(d.bounds.height * (d.scaleFactor || 1))));
-
-        let sources;
-        try {
-            sources = await desktopCapturer.getSources({
-                types: ['screen'],
-                thumbnailSize: { width: maxW, height: maxH },
-                fetchWindowIcons: false
-            });
-        } catch (sourceErr) {
-            throw new Error(`Ekran kaynakları alınamadı: ${sourceErr.message || sourceErr}`);
-        }
-
+        // Capture EACH display at ITS OWN native (physical-pixel) resolution. desktopCapturer
+        // applies a single thumbnailSize to the whole getSources() call, so a shared "largest
+        // monitor" size upscales-then-downscales lower-res screens — e.g. a 1080p laptop next to
+        // a 4K monitor came out blurry. Calling getSources() once per display, sized to that
+        // display, keeps every monitor pixel-sharp (native quality like Snipping Tool).
         let createdAny = false;
-        displays.forEach((display, i) => {
-            // Match each display to its screen source; if display_id is unavailable (empty on
-            // some GPU/RDP configs) fall back to index order (source list tracks display order),
-            // then to the first source.
-            let source = sources.find(s => String(s.display_id) === String(display.id));
-            if (!source) source = sources[i] || sources[0];
-            if (!source) return;
-
+        for (let i = 0; i < displays.length; i++) {
+            const display = displays[i];
             const scaleFactor = display.scaleFactor || 1;
-            // Physical pixel dimensions for THIS display — native quality like Snipping Tool.
             const captureWidth = Math.round(display.bounds.width * scaleFactor);
             const captureHeight = Math.round(display.bounds.height * scaleFactor);
+
+            let sources;
+            try {
+                sources = await desktopCapturer.getSources({
+                    types: ['screen'],
+                    thumbnailSize: { width: captureWidth, height: captureHeight },
+                    fetchWindowIcons: false
+                });
+            } catch (sourceErr) {
+                console.error(`Ekran kaynağı alınamadı (display ${display.id}):`, sourceErr);
+                continue;
+            }
+
+            // Match this display to its screen source; if display_id is unavailable (empty on
+            // some GPU/RDP configs) fall back to index order, then to the first source.
+            let source = sources.find(s => String(s.display_id) === String(display.id));
+            if (!source) source = sources[i] || sources[0];
+            if (!source) continue;
 
             // toPNG() for lossless quality — toDataURL() may lose color fidelity.
             const dataUrl = 'data:image/png;base64,' + source.thumbnail.toPNG().toString('base64');
@@ -87,10 +85,10 @@ async function startCapture(mode) {
                 }
             });
             createdAny = true;
-        });
+        }
 
         if (!createdAny) {
-            state.isCapturing = false;
+            throw new Error('Ekran kaynakları alınamadı');
         }
 
     } catch (e) {

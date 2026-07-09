@@ -5,9 +5,10 @@ const { state, store } = require('../state');
 function registerCoreHandlers() {
     ipcMain.handle('get-history', () => ({ history: state.history, favorites: state.favorites }));
     ipcMain.handle('get-settings', () => ({
-        maxItems: state.maxItems, globalShortcut: state.shortcuts.list,
+        maxItems: state.maxItems, quickPasteCount: state.quickPasteCount, globalShortcut: state.shortcuts.list,
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
         globalShortcutOcr: state.shortcuts.ocr,
+        globalShortcutPaste: state.shortcuts.paste,
         autoStart: state.autoStart, videoQuality: state.videoQuality,
         clipboardPaused: state.clipboardPaused || false,
         showWidget: state.showWidget || false,

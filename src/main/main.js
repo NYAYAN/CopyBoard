@@ -1,6 +1,7 @@
 const { app, dialog, clipboard, screen, powerMonitor } = require('electron');
 const { state } = require('./services/state');
-const { showMain, createMainWindow, toggleWidget, handleDisplayChange } = require('./services/window-manager');
+const { showMain, createMainWindow, toggleWidget, handleDisplayChange, createQuickPasteWindow } = require('./services/window-manager');
+const { disposePasteHelper } = require('./services/paste-service');
 const { initTray } = require('./services/tray-manager');
 const { registerIpcHandlers } = require('./services/ipc-handlers');
 const { initAutoUpdater, checkForUpdatesSilently } = require('./services/update-manager');
@@ -79,6 +80,11 @@ if (!gotTheLock) {
       handleDisplayChange();
     });
 
+    // Pre-create the quick-paste picker (hidden) so the first Alt+X opens instantly.
+    try {
+      createQuickPasteWindow();
+    } catch (e) { console.error('QuickPaste init failed:', e); }
+
     // Initialize Widget if enabled in settings
     if (state.showWidget) {
       try {
@@ -104,6 +110,7 @@ if (!gotTheLock) {
 
     app.on('before-quit', () => {
       clearInterval(clipInterval);
+      disposePasteHelper();
       if (state.tray && !state.tray.isDestroyed()) state.tray.destroy();
     });
   });

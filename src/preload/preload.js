@@ -4,10 +4,12 @@ contextBridge.exposeInMainWorld('api', {
     getHistory: () => ipcRenderer.invoke('get-history'),
     getSettings: () => ipcRenderer.invoke('get-settings'),
     setMaxItems: (count) => ipcRenderer.send('set-max-items', count),
+    setQuickPasteCount: (count) => ipcRenderer.send('set-quickpaste-count', count),
     setShortcut: (shortcut) => ipcRenderer.send('set-shortcut', shortcut),
     setImageShortcut: (shortcut) => ipcRenderer.send('set-image-shortcut', shortcut),
     setVideoShortcut: (shortcut) => ipcRenderer.send('set-video-shortcut', shortcut),
     setOcrShortcut: (shortcut) => ipcRenderer.send('set-ocr-shortcut', shortcut),
+    setPasteShortcut: (shortcut) => ipcRenderer.send('set-paste-shortcut', shortcut),
     copyItem: (text) => ipcRenderer.send('copy-item', text),
     deleteHistoryItem: (id) => ipcRenderer.send('delete-history-item', id),
     addToFavorites: (item) => ipcRenderer.send('add-to-favorites', item),
@@ -43,6 +45,11 @@ contextBridge.exposeInMainWorld('api', {
     onWidgetSide: (callback) => ipcRenderer.on('widget-side', (_, side) => callback(side)),
     onWidgetDirection: (callback) => ipcRenderer.on('widget-direction', (_, isUp) => callback(isUp)),
     onWidgetConfig: (callback) => ipcRenderer.on('widget-config', (_, config) => callback(config)),
+
+    // Quick-paste picker
+    quickPastePick: (text) => ipcRenderer.send('quickpaste-pick', text),
+    quickPasteDismiss: () => ipcRenderer.send('quickpaste-dismiss'),
+    onQuickPasteShow: (callback) => ipcRenderer.on('quickpaste-show', (_, data) => callback(data)),
 
     recordStart: () => ipcRenderer.send('record-start'),
     recordChunk: (buffer) => ipcRenderer.send('record-chunk', buffer),

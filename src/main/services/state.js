@@ -47,11 +47,13 @@ const state = {
     recorderWindow: null,
     captureWindows: [], // all active capture overlay windows (one per monitor)
     widgetWindow: null,
+    quickPasteWindow: null,
     tray: null,
     toastWindow: null,
     history: savedHistory,
     favorites: savedFavorites,
     maxItems: store.get('maxItems', 50),
+    quickPasteCount: store.get('quickPasteCount', 20),
     autoStart: store.get('autoStart', true),
     clipboardPaused: store.get('clipboardPaused', false),
     videoQuality: store.get('videoQuality', 'high'),
@@ -59,7 +61,8 @@ const state = {
         list: store.get('globalShortcut', 'Alt+V'),
         draw: store.get('globalShortcutImage', 'Alt+9'),
         video: store.get('globalShortcutVideo', 'Alt+8'),
-        ocr: store.get('globalShortcutOcr', 'Alt+2')
+        ocr: store.get('globalShortcutOcr', 'Alt+2'),
+        paste: store.get('globalShortcutPaste', 'Alt+X')
     },
     showWidget: store.get('showWidget', false),
     widgetTransparent: store.get('widgetTransparent', false),

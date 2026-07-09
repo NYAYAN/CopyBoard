@@ -12,6 +12,7 @@ import { elements } from './modules/dom.js';
 
     // 3. UI Setup from Settings
     elements.maxItemsInput.value = settings.maxItems;
+    elements.quickPasteCountInput.value = settings.quickPasteCount;
     elements.autostartCheck.checked = settings.autoStart;
     elements.incognitoCheck.checked = settings.clipboardPaused || false;
     elements.widgetCheck.checked = settings.showWidget;
@@ -42,6 +43,7 @@ import { elements } from './modules/dom.js';
     elements.imageShortcutInput.value = format(settings.globalShortcutImage);
     elements.ocrShortcutInput.value = format(settings.globalShortcutOcr);
     elements.videoShortcutInput.value = format(settings.globalShortcutVideo);
+    elements.pasteShortcutInput.value = format(settings.globalShortcutPaste);
     if (settings.videoQuality) elements.videoQualitySelect.value = settings.videoQuality;
 
     // 4. Render Initial History

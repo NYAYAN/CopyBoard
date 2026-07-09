@@ -1,6 +1,6 @@
 const { ipcMain, globalShortcut } = require('electron');
 const { state, store } = require('../state');
-const { showMain, showToast } = require('../window-manager');
+const { showMain, showToast, toggleQuickPaste } = require('../window-manager');
 const { startCapture } = require('../capture-service');
 
 function registerShortcutHandlers() {
@@ -18,6 +18,7 @@ function registerShortcutHandlers() {
             if (k === 'draw') return () => startCapture('draw');
             if (k === 'video') return () => startCapture('video');
             if (k === 'ocr') return () => startCapture('ocr');
+            if (k === 'paste') return toggleQuickPaste;
             return null;
         };
         const action = actionFor(key);
@@ -43,11 +44,12 @@ function registerShortcutHandlers() {
 
     // Initial Registration
     try {
-        const { list, draw, video, ocr } = state.shortcuts;
+        const { list, draw, video, ocr, paste } = state.shortcuts;
         if (list) globalShortcut.register(list, showMain);
         if (draw) globalShortcut.register(draw, () => startCapture('draw'));
         if (video) globalShortcut.register(video, () => startCapture('video'));
         if (ocr) globalShortcut.register(ocr, () => startCapture('ocr'));
+        if (paste) globalShortcut.register(paste, toggleQuickPaste);
     } catch (err) {
         console.error('Shortcut registration failed:', err);
     }
@@ -56,6 +58,7 @@ function registerShortcutHandlers() {
     ipcMain.on('set-image-shortcut', (e, s) => updateShortcut('draw', s, 'globalShortcutImage'));
     ipcMain.on('set-video-shortcut', (e, s) => updateShortcut('video', s, 'globalShortcutVideo'));
     ipcMain.on('set-ocr-shortcut', (e, s) => updateShortcut('ocr', s, 'globalShortcutOcr'));
+    ipcMain.on('set-paste-shortcut', (e, s) => updateShortcut('paste', s, 'globalShortcutPaste'));
 }
 
 module.exports = { registerShortcutHandlers };

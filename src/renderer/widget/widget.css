@@ -342,21 +342,23 @@ body {
  * to the app underneath (see isOverMainButton in widget.js).
  */
 .main-btn {
-    /* Flat: solid fill (respects the JS-set --primary) with no radial "sphere" sheen
-       and no inset bevels — a flat colored disc instead of a domed button. */
+    /* Flat: solid fill (respects the JS-set --primary) with no radial "sphere" sheen,
+       no inset bevels, and no drop shadow — a flat colored disc. Dropping the blurred
+       shadow also avoids it being clipped by the tight transparent window bounds (only
+       ~10px around the button), which showed up as shading along the window edges. */
     background: var(--primary);
     border-color: rgba(255, 255, 255, 0.18);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+    box-shadow: none;
     z-index: 10;
 }
 
 .main-btn:hover {
     transform: scale(1.08);
     filter: brightness(1.08);
-    box-shadow:
-        0 6px 18px rgba(0, 0, 0, 0.4),
-        0 0 0 4px color-mix(in srgb, var(--primary) 28%, transparent),
-        0 0 20px color-mix(in srgb, var(--primary) 55%, transparent);
+    /* Keep only a crisp, tight ring for hover feedback — it stays inside the window
+       bounds (4px < ~10px margin), so unlike the old blurred glow it never bleeds or
+       gets clipped at the edges. */
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
 .main-btn:active {

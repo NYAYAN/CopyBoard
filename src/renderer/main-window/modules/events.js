@@ -162,6 +162,10 @@ export function setupEventListeners() {
         const value = parseInt(e.target.value);
         if (value > 0) window.api.setMaxItems(value);
     });
+    elements.quickPasteCountInput.addEventListener('change', (e) => {
+        const value = parseInt(e.target.value);
+        if (value > 0) window.api.setQuickPasteCount(value);
+    });
     elements.videoQualitySelect.addEventListener('change', (e) => window.api.setVideoQuality(e.target.value));
 
     // Shortcut Inputs
@@ -169,6 +173,7 @@ export function setupEventListeners() {
     setupShortcutInput(elements.imageShortcutInput, (s) => window.api.setImageShortcut(s));
     setupShortcutInput(elements.ocrShortcutInput, (s) => window.api.setOcrShortcut(s));
     setupShortcutInput(elements.videoShortcutInput, (s) => window.api.setVideoShortcut(s));
+    setupShortcutInput(elements.pasteShortcutInput, (s) => window.api.setPasteShortcut(s));
 
     // Clear History
     elements.clearBtn.addEventListener('click', () => showModal(elements.confirmModal));

@@ -47,10 +47,17 @@ mainBtn.addEventListener('mouseleave', () => {
 });
 
 // --- Circular hit-test ---
-// Only the visible round button (plus a small margin) is interactive. The
-// square corners around the circle stay click-through, so a click there falls
-// to the app underneath instead of triggering the widget.
-function isOverMainButton(clientX, clientY, margin = 6) {
+// Only the visible round button is interactive. The square corners around the
+// circle — and everything just outside the disc — stay click-through, so a click
+// there falls to the app underneath instead of triggering the widget.
+//
+// HIT_MARGIN is extra radius (px) added around a button's visible edge when deciding
+// "on the button" (capture) vs "click-through". 0 = the capture area matches the
+// visible circle exactly; a positive value creates an invisible ring around the
+// button that also swallows clicks meant for the app behind it.
+const HIT_MARGIN = 0;
+
+function isOverMainButton(clientX, clientY, margin = HIT_MARGIN) {
     const rect = mainBtn.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
@@ -75,7 +82,7 @@ function isOverInteractive(x, y) {
             const r = b.getBoundingClientRect();
             const cx = r.left + r.width / 2;
             const cy = r.top + r.height / 2;
-            const radius = r.width / 2 + 6;
+            const radius = r.width / 2 + HIT_MARGIN;
             const dx = x - cx;
             const dy = y - cy;
             if (dx * dx + dy * dy <= radius * radius) return true;

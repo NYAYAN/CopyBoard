@@ -1,6 +1,7 @@
-const { BrowserWindow, screen, app, dialog } = require('electron');
+const { BrowserWindow, screen, app, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const { state, store } = require('./state');
+const { warmPasteHelper } = require('./paste-service');
 
 function showMain() {
     if (state.mainWindow && !state.mainWindow.isDestroyed()) {
@@ -523,6 +524,100 @@ function handleDisplayChange() {
     activeSyncTimeouts.push(setTimeout(runSync, 5000));
 }
 
+// ── Quick-Paste Picker ──────────────────────────────────────────────────────
+// A compact clipboard picker opened by a global shortcut. Created with
+// focusable:false so it NEVER steals focus from the text field the user is in —
+// which is what lets us paste straight into that field after a pick (the
+// 'quickpaste-pick' handler puts the text on the clipboard and fires Ctrl+V).
+//
+// Esc-to-close: the picker is focusable:false so it can't catch a keydown itself.
+// We register Esc as a global accelerator only while it's visible (showQuickPaste)
+// and drop it again on every 'hide'.
+function unregisterQuickPasteEsc() {
+    try { if (globalShortcut.isRegistered('Escape')) globalShortcut.unregister('Escape'); } catch (e) {}
+}
+
+function createQuickPasteWindow() {
+    state.quickPasteWindow = new BrowserWindow({
+        width: 300,
+        height: 380,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        hasShadow: false,
+        focusable: false,
+        backgroundColor: '#00000000',
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, '../../preload/preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+        }
+    });
+
+    state.quickPasteWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    state.quickPasteWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    state.quickPasteWindow.loadFile(path.join(__dirname, '../../renderer/quickpaste/quickpaste.html'));
+
+    state.quickPasteWindow.on('hide', unregisterQuickPasteEsc);
+    state.quickPasteWindow.on('closed', () => { state.quickPasteWindow = null; });
+}
+
+// Place the picker next to the mouse cursor, flipped/clamped to stay fully on the
+// current display's work area.
+function positionQuickPasteAtCursor() {
+    const W = 300, H = 380, GAP = 12;
+    const pt = screen.getCursorScreenPoint();
+    const wa = screen.getDisplayNearestPoint(pt).workArea;
+
+    let x = pt.x + GAP;
+    let y = pt.y + GAP;
+    if (x + W > wa.x + wa.width) x = pt.x - W - GAP;  // flip to the left of the cursor
+    if (y + H > wa.y + wa.height) y = pt.y - H - GAP; // flip above the cursor
+    x = Math.max(wa.x + 8, Math.min(x, wa.x + wa.width - W - 8));
+    y = Math.max(wa.y + 8, Math.min(y, wa.y + wa.height - H - 8));
+
+    state.quickPasteWindow.setBounds({ x: Math.round(x), y: Math.round(y), width: W, height: H });
+}
+
+function showQuickPaste() {
+    if (!state.quickPasteWindow || state.quickPasteWindow.isDestroyed()) return;
+    positionQuickPasteAtCursor();
+    // showInactive (not show) so the user's current app keeps OS keyboard focus.
+    state.quickPasteWindow.showInactive();
+    state.quickPasteWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    state.quickPasteWindow.moveTop();
+    state.quickPasteWindow.webContents.send('quickpaste-show', { count: state.quickPasteCount });
+    // Esc closes the picker while it's open (dropped again on 'hide').
+    try {
+        if (!globalShortcut.isRegistered('Escape')) globalShortcut.register('Escape', hideQuickPaste);
+    } catch (e) { /* Esc is a bonus; the X button still closes it */ }
+    // Prewarm the paste helper now so the actual Ctrl+V is instant once they click.
+    warmPasteHelper();
+}
+
+function toggleQuickPaste() {
+    if (state.quickPasteWindow && !state.quickPasteWindow.isDestroyed() && state.quickPasteWindow.isVisible()) {
+        hideQuickPaste();
+        return;
+    }
+    if (!state.quickPasteWindow || state.quickPasteWindow.isDestroyed()) {
+        createQuickPasteWindow();
+        state.quickPasteWindow.webContents.once('did-finish-load', showQuickPaste);
+    } else {
+        showQuickPaste();
+    }
+}
+
+function hideQuickPaste() {
+    if (state.quickPasteWindow && !state.quickPasteWindow.isDestroyed() && state.quickPasteWindow.isVisible()) {
+        state.quickPasteWindow.hide();
+    }
+}
+
 module.exports = {
     showMain,
     createMainWindow,
@@ -532,5 +627,8 @@ module.exports = {
     handleWidgetAction,
     updateWidgetScale,
     handleDisplayChange,
-    closeAllCaptureWindows
+    closeAllCaptureWindows,
+    createQuickPasteWindow,
+    toggleQuickPaste,
+    hideQuickPaste
 };

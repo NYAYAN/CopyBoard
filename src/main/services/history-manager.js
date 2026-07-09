@@ -11,6 +11,9 @@ function broadcast() {
     if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
         state.widgetWindow.webContents.send('update-history', data);
     }
+    if (state.quickPasteWindow && !state.quickPasteWindow.isDestroyed()) {
+        state.quickPasteWindow.webContents.send('update-history', data);
+    }
 }
 
 function addHistory(content) {

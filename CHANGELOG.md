@@ -1,3 +1,19 @@
+# CopyBoard v2.8.0 Release Notes
+
+Öne çıkan yenilik **Hızlı Yapıştır** (Alt+X): panodan seçip odaktaki metin kutusuna anında yapıştırma. Ayrıca yüzen widget'ta kenar ve tıklama iyileştirmeleri.
+
+## ✨ Yeni Özellikler
+### 📋 Hızlı Yapıştır (Alt+X)
+- Bir metin kutusundayken **Alt+X** ile imlecin yanında son pano öğeleri açılır; tıkladığınız öğe doğrudan o kutuya yapışır (pencere odağı kaybolmaz).
+- Gösterilecek öğe sayısı **Ayarlar**'dan ayarlanabilir (varsayılan 20).
+- `Esc` / ✕ / tekrar `Alt+X` ile kapanır. Kısayol Ayarlar'dan değiştirilebilir.
+
+## 🎨 Widget İyileştirmeleri
+- Widget kenarlarındaki gölge artığı giderildi (tam düz görünüm).
+- Butonun hemen dışına yapılan tıklamalar artık arkadaki uygulamaya geçiyor (görünmez "ölü bölge" kaldırıldı).
+
+---
+
 # CopyBoard v2.7.0 Release Notes
 
 Bu sürümün en büyük yeniliği **çoklu monitör desteği**: artık Ekran Görüntüsü, Metin Tara (OCR) ve Video Kaydı araçlarını istediğiniz monitörde kullanabilirsiniz. Ayrıca arayüz sadeleştirildi ve birçok kullanım kolaylığı ile kararlılık iyileştirmesi eklendi.

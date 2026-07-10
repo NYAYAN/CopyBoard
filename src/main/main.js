@@ -80,7 +80,7 @@ if (!gotTheLock) {
       handleDisplayChange();
     });
 
-    // Pre-create the quick-paste picker (hidden) so the first Alt+X opens instantly.
+    // Pre-create the quick-paste picker (hidden) so the first Ctrl+Shift+V opens instantly.
     try {
       createQuickPasteWindow();
     } catch (e) { console.error('QuickPaste init failed:', e); }

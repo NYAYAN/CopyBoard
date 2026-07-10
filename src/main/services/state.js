@@ -62,7 +62,7 @@ const state = {
         draw: store.get('globalShortcutImage', 'Alt+9'),
         video: store.get('globalShortcutVideo', 'Alt+8'),
         ocr: store.get('globalShortcutOcr', 'Alt+2'),
-        paste: store.get('globalShortcutPaste', 'Alt+X')
+        paste: store.get('globalShortcutPaste', 'CommandOrControl+Shift+V')
     },
     showWidget: store.get('showWidget', false),
     widgetTransparent: store.get('widgetTransparent', false),

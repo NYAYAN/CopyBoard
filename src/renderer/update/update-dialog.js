@@ -57,70 +57,58 @@ window.api.onUpdateError((message) => {
     }
 });
 
-// Format release notes (a small markdown subset) to safe HTML.
-// SECURITY: releaseNotes comes from the GitHub release feed over the network and is
-// UNTRUSTED. We HTML-escape EVERYTHING first, then build tags only from our own markdown
-// markers on the already-escaped text — so attacker-supplied HTML (e.g. <img onerror>,
-// <svg onload>) is neutralised to inert text before it can reach innerHTML.
-// Supported: "#" headers, "-"/"*" bullets, **bold**, `code`, "---" rules, | pipe | tables.
+// Render GitHub release notes safely.
+// electron-updater delivers GitHub release notes as HTML — the <content type="html">
+// of the releases Atom feed (see GitHubProvider getNoteValue), NOT markdown. So we
+// PARSE that HTML and rebuild it from a strict whitelist: text becomes text nodes,
+// only known-safe elements survive, and the ONLY attribute kept is an http(s)/mailto
+// href on links. Scripts, event handlers, styles, src, etc. are all dropped.
+// releaseNotes is untrusted network input, so nothing from it is ever assigned as
+// live HTML — elements are created by name and text via createTextNode.
 function formatReleaseNotes(notes) {
     if (!notes) return 'Yeni özellikler ve iyileştirmeler.';
 
-    const esc = String(notes)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    const ALLOWED = new Set([
+        'P', 'BR', 'HR', 'STRONG', 'B', 'EM', 'I', 'CODE', 'PRE',
+        'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+        'BLOCKQUOTE', 'A', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN'
+    ]);
 
-    // Inline markers, applied to an already-escaped text span.
-    const inline = (s) => s
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // **bold**
-        .replace(/`([^`]+?)`/g, '<code>$1</code>');       // `code`
-
-    const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
-    const isRow = (l) => /^\s*\|.*\|\s*$/.test(l);
-    const isSep = (l) => /-{2,}/.test(l) && /^\s*\|?[\s:|-]+\|?\s*$/.test(l);
-
-    const lines = esc.split(/\r?\n/);
-    const out = [];
-    let i = 0;
-
-    while (i < lines.length) {
-        const line = lines[i];
-
-        // Horizontal rule
-        if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { out.push('<hr>'); i++; continue; }
-
-        // Table: header row + "|---|" separator + body rows
-        if (isRow(line) && i + 1 < lines.length && isSep(lines[i + 1])) {
-            const head = cells(line).map(c => `<th>${inline(c)}</th>`).join('');
-            i += 2;
-            let body = '';
-            while (i < lines.length && isRow(lines[i]) && !isSep(lines[i])) {
-                body += '<tr>' + cells(lines[i]).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
-                i++;
+    const sanitize = (src, dst) => {
+        src.childNodes.forEach((node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                dst.appendChild(document.createTextNode(node.nodeValue));
+            } else if (node.nodeType === Node.ELEMENT_NODE && ALLOWED.has(node.tagName)) {
+                const el = document.createElement(node.tagName);
+                if (node.tagName === 'A') {
+                    const href = node.getAttribute('href') || '';
+                    if (/^(https?:|mailto:)/i.test(href)) {
+                        el.setAttribute('href', href);
+                        el.setAttribute('target', '_blank');
+                        el.setAttribute('rel', 'noreferrer noopener');
+                    }
+                }
+                sanitize(node, el);
+                dst.appendChild(el);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // Blocked tag: drop the tag itself but keep its sanitized contents.
+                sanitize(node, dst);
             }
-            out.push(`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`);
-            continue;
-        }
+        });
+    };
 
-        // Header -> bold block (keeps the existing visual style)
-        let m = line.match(/^\s*#{1,6}\s+(.+?)\s*$/);
-        if (m) { out.push(`<strong>${inline(m[1])}</strong>`); i++; continue; }
-
-        // Bullet
-        m = line.match(/^\s*[-*]\s+(.+?)\s*$/);
-        if (m) { out.push(`• ${inline(m[1])}<br>`); i++; continue; }
-
-        // Blank line -> spacing
-        if (/^\s*$/.test(line)) { out.push('<br>'); i++; continue; }
-
-        // Plain paragraph line
-        out.push(`${inline(line)}<br>`); i++;
+    try {
+        const parsed = new DOMParser().parseFromString(String(notes), 'text/html');
+        const container = document.createElement('div');
+        container.className = 'release-html-content';
+        sanitize(parsed.body, container);
+        return container.outerHTML;
+    } catch (e) {
+        const div = document.createElement('div');
+        div.className = 'release-html-content';
+        div.textContent = String(notes); // inert plain-text fallback
+        return div.outerHTML;
     }
-
-    return `<div class="release-html-content">${out.join('')}</div>`;
 }
 
 // Update download progress

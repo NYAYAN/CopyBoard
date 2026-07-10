@@ -22,6 +22,10 @@ const state = {
     selectedColor: '#ff0000'
 };
 
+// One-shot: the first time the user starts a selection on THIS monitor, tell main to close
+// the overlays on the other monitors (a capture targets a single monitor).
+let monitorClaimed = false;
+
 // Blur perf: throttle the heavy recompute and reuse scratch canvases
 let lastBlurTime = 0;
 let lastBlurX = 0, lastBlurY = 0; // last pointer pos so mouseup can commit the release rect
@@ -250,6 +254,7 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     if (!state.activeTool) {
+        if (!monitorClaimed) { monitorClaimed = true; window.api.claimCaptureMonitor(); }
         resetUI(); state.isSelecting = true;
         document.body.classList.add('selecting');
         // overlay-canvas will update in real-time via drawOverlay() in mousemove

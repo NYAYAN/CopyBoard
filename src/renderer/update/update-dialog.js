@@ -57,31 +57,70 @@ window.api.onUpdateError((message) => {
     }
 });
 
-// Format release notes from markdown to safe HTML.
+// Format release notes (a small markdown subset) to safe HTML.
 // SECURITY: releaseNotes comes from the GitHub release feed over the network and is
-// UNTRUSTED. We HTML-escape the input FIRST, then apply a fixed set of markdown->HTML
-// transforms to the already-escaped text. This way only our own markers can ever produce
-// tags; any attacker-supplied HTML (e.g. <img onerror>, <svg onload>) is neutralised to
-// inert text before it can reach innerHTML. (Replaces the old <script>/<iframe> denylist,
-// which was trivially bypassed by other event-handler-bearing tags.)
+// UNTRUSTED. We HTML-escape EVERYTHING first, then build tags only from our own markdown
+// markers on the already-escaped text — so attacker-supplied HTML (e.g. <img onerror>,
+// <svg onload>) is neutralised to inert text before it can reach innerHTML.
+// Supported: "#" headers, "-"/"*" bullets, **bold**, `code`, "---" rules, | pipe | tables.
 function formatReleaseNotes(notes) {
     if (!notes) return 'Yeni özellikler ve iyileştirmeler.';
 
-    const escaped = String(notes)
+    const esc = String(notes)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 
-    const formatted = escaped
-        .replace(/^#+ (.+)$/gm, '<strong>$1</strong>') // Headers (#, ##, ###) -> strong
-        .replace(/^- (.+)$/gm, '• $1')                  // Bullet points
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Bold
-        .replace(/\n/g, '<br>');                        // Line breaks
+    // Inline markers, applied to an already-escaped text span.
+    const inline = (s) => s
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // **bold**
+        .replace(/`([^`]+?)`/g, '<code>$1</code>');       // `code`
 
-    // Wrap in a stylized container to match the UI better (smaller fonts for lists etc)
-    return `<div class="release-html-content">${formatted}</div>`;
+    const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+    const isRow = (l) => /^\s*\|.*\|\s*$/.test(l);
+    const isSep = (l) => /-{2,}/.test(l) && /^\s*\|?[\s:|-]+\|?\s*$/.test(l);
+
+    const lines = esc.split(/\r?\n/);
+    const out = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+
+        // Horizontal rule
+        if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { out.push('<hr>'); i++; continue; }
+
+        // Table: header row + "|---|" separator + body rows
+        if (isRow(line) && i + 1 < lines.length && isSep(lines[i + 1])) {
+            const head = cells(line).map(c => `<th>${inline(c)}</th>`).join('');
+            i += 2;
+            let body = '';
+            while (i < lines.length && isRow(lines[i]) && !isSep(lines[i])) {
+                body += '<tr>' + cells(lines[i]).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
+                i++;
+            }
+            out.push(`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`);
+            continue;
+        }
+
+        // Header -> bold block (keeps the existing visual style)
+        let m = line.match(/^\s*#{1,6}\s+(.+?)\s*$/);
+        if (m) { out.push(`<strong>${inline(m[1])}</strong>`); i++; continue; }
+
+        // Bullet
+        m = line.match(/^\s*[-*]\s+(.+?)\s*$/);
+        if (m) { out.push(`• ${inline(m[1])}<br>`); i++; continue; }
+
+        // Blank line -> spacing
+        if (/^\s*$/.test(line)) { out.push('<br>'); i++; continue; }
+
+        // Plain paragraph line
+        out.push(`${inline(line)}<br>`); i++;
+    }
+
+    return `<div class="release-html-content">${out.join('')}</div>`;
 }
 
 // Update download progress

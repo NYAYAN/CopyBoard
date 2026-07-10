@@ -6,6 +6,8 @@ const overlay = document.getElementById('overlay');
 let isSelecting = false;
 let startX = 0, startY = 0;
 let scaleX = 1, scaleY = 1;
+// A capture targets one monitor: starting a selection here clears the other monitors'
+// selections; this one clears via onCaptureReset when another starts. Newest wins.
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -14,6 +16,9 @@ function resizeCanvas() {
 
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+
+// Another monitor started a selection → clear ours (back to full dim), stay interactive.
+window.api.onCaptureReset(() => reset());
 
 // --- Capture & Initialize ---
 window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
@@ -58,6 +63,7 @@ function reset() {
 
 // --- Interaction Logic ---
 window.addEventListener('mousedown', (e) => {
+    window.api.claimCaptureMonitor(); // new selection → clear other monitors' selections
     reset();
     isSelecting = true;
     overlay.style.display = 'none';

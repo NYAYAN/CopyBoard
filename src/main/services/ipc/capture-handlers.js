@@ -32,6 +32,20 @@ function registerCaptureHandlers() {
         closeAllCaptureWindows();
     });
 
+    ipcMain.on('capture-claim-monitor', (e) => {
+        // A new selection started on one monitor — tell every OTHER monitor to CLEAR its
+        // selection (back to full dim). Overlays stay open, dark AND interactive, so only the
+        // most-recent selection exists and the user can freely re-select on another monitor.
+        // Single-monitor: no other windows, so this is a no-op.
+        const sender = BrowserWindow.fromWebContents(e.sender);
+        if (!sender) return;
+        state.captureWindows.forEach(w => {
+            if (w && w !== sender && !w.isDestroyed() && !w.webContents.isDestroyed()) {
+                w.webContents.send('capture-reset');
+            }
+        });
+    });
+
     ipcMain.on('snip-ready', (e) => {
         // Multi-monitor: each display's overlay readies itself — show/focus the sender.
         const win = BrowserWindow.fromWebContents(e.sender);

@@ -46,42 +46,57 @@ async function startCapture(mode) {
         // monitor" size upscales-then-downscales lower-res screens — e.g. a 1080p laptop next to
         // a 4K monitor came out blurry. Calling getSources() once per display, sized to that
         // display, keeps every monitor pixel-sharp (native quality like Snipping Tool).
+        // Capture displays with BOUNDED concurrency: parallel enough that the dim appears
+        // fast, but capped so peak memory stays ~O(cap) native thumbnails instead of O(N^2)
+        // when several high-DPI monitors are captured at once (each getSources returns one
+        // thumbnail PER screen). The common 1-2 monitor case is still fully parallel. Each
+        // display is captured at ITS OWN native size for pixel-sharpness.
+        const CAPTURE_CONCURRENCY = 2;
+        const captures = [];
+        for (let start = 0; start < displays.length; start += CAPTURE_CONCURRENCY) {
+            const batch = displays.slice(start, start + CAPTURE_CONCURRENCY);
+            const batchResults = await Promise.all(batch.map(async (display, bi) => {
+                const i = start + bi; // global display index (for the index fallback below)
+                const scaleFactor = display.scaleFactor || 1;
+                const captureWidth = Math.round(display.bounds.width * scaleFactor);
+                const captureHeight = Math.round(display.bounds.height * scaleFactor);
+                try {
+                    const sources = await desktopCapturer.getSources({
+                        types: ['screen'],
+                        thumbnailSize: { width: captureWidth, height: captureHeight },
+                        fetchWindowIcons: false
+                    });
+                    // Match this display to its screen source; if display_id is unavailable
+                    // (empty on some GPU/RDP configs) fall back to index order, then first source.
+                    let source = sources.find(s => String(s.display_id) === String(display.id));
+                    if (!source) source = sources[i] || sources[0];
+                    if (!source) return null;
+                    return {
+                        display,
+                        // toPNG() for lossless quality — toDataURL() may lose color fidelity.
+                        dataUrl: 'data:image/png;base64,' + source.thumbnail.toPNG().toString('base64'),
+                        sourceId: source.id,
+                        captureWidth,
+                        captureHeight
+                    };
+                } catch (sourceErr) {
+                    console.error(`Ekran kaynağı alınamadı (display ${display.id}):`, sourceErr);
+                    return null;
+                }
+            }));
+            captures.push(...batchResults);
+        }
+
         let createdAny = false;
-        for (let i = 0; i < displays.length; i++) {
-            const display = displays[i];
-            const scaleFactor = display.scaleFactor || 1;
-            const captureWidth = Math.round(display.bounds.width * scaleFactor);
-            const captureHeight = Math.round(display.bounds.height * scaleFactor);
-
-            let sources;
-            try {
-                sources = await desktopCapturer.getSources({
-                    types: ['screen'],
-                    thumbnailSize: { width: captureWidth, height: captureHeight },
-                    fetchWindowIcons: false
-                });
-            } catch (sourceErr) {
-                console.error(`Ekran kaynağı alınamadı (display ${display.id}):`, sourceErr);
-                continue;
-            }
-
-            // Match this display to its screen source; if display_id is unavailable (empty on
-            // some GPU/RDP configs) fall back to index order, then to the first source.
-            let source = sources.find(s => String(s.display_id) === String(display.id));
-            if (!source) source = sources[i] || sources[0];
-            if (!source) continue;
-
-            // toPNG() for lossless quality — toDataURL() may lose color fidelity.
-            const dataUrl = 'data:image/png;base64,' + source.thumbnail.toPNG().toString('base64');
-            const sourceId = source.id;
-
-            const win = createCapture(mode, display);
+        for (const cap of captures) {
+            if (!cap) continue;
+            const win = createCapture(mode, cap.display);
             win.webContents.on('did-finish-load', () => {
                 if (!win.isDestroyed()) {
                     // Screenshot data URL + THIS monitor's sourceId (video getUserMedia records
                     // this monitor). Crop is emitted at native pixels and written via nativeImage
                     // scaleFactor 1.0, so paste size stays monitor-independent.
-                    win.webContents.send('capture-screen', dataUrl, mode, sourceId, state.videoQuality, captureWidth, captureHeight, multiMonitor);
+                    win.webContents.send('capture-screen', cap.dataUrl, mode, cap.sourceId, state.videoQuality, cap.captureWidth, cap.captureHeight, multiMonitor);
                 }
             });
             createdAny = true;

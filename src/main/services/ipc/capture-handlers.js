@@ -33,11 +33,18 @@ function registerCaptureHandlers() {
     });
 
     ipcMain.on('capture-claim-monitor', (e) => {
-        // The user started a selection on one monitor — close the OTHER monitors' overlays so
-        // a screenshot/OCR/video targets a single monitor (mirrors video's record-start, but
-        // fired at selection time). Single-monitor: no-op (nothing else to close).
-        const win = BrowserWindow.fromWebContents(e.sender);
-        if (win) closeAllCaptureWindows(win);
+        // The user started a selection on one monitor. Keep every overlay on screen (so the
+        // OTHER monitors stay dimmed/dark) but LOCK them: they ignore selection input, so a
+        // capture still targets a single monitor. (Closing them removed their dark overlay
+        // and caused a hitch on mousedown; locking keeps them dark and is instant.)
+        // Single-monitor: there are no other windows, so this is a no-op.
+        const sender = BrowserWindow.fromWebContents(e.sender);
+        if (!sender) return;
+        state.captureWindows.forEach(w => {
+            if (w && w !== sender && !w.isDestroyed() && !w.webContents.isDestroyed()) {
+                w.webContents.send('capture-locked');
+            }
+        });
     });
 
     ipcMain.on('snip-ready', (e) => {

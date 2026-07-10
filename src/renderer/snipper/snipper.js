@@ -22,9 +22,11 @@ const state = {
     selectedColor: '#ff0000'
 };
 
-// One-shot: the first time the user starts a selection on THIS monitor, tell main to close
-// the overlays on the other monitors (a capture targets a single monitor).
+// The first time the user starts a selection on THIS monitor, tell main to LOCK the other
+// monitors (they stay dark but ignore selection). If instead THIS monitor gets locked
+// (a selection began on another screen), it stays dimmed and inert.
 let monitorClaimed = false;
+let locked = false;
 
 // Blur perf: throttle the heavy recompute and reuse scratch canvases
 let lastBlurTime = 0;
@@ -118,6 +120,9 @@ if (!window.api) {
 }
 console.log('window.api is available:', Object.keys(window.api));
 
+// Selection started on another monitor → this overlay stays dark but becomes inert.
+window.api.onCaptureLocked(() => { locked = true; document.body.style.cursor = 'default'; });
+
 // Ensure sharp pixel rendering
 ctx.imageSmoothingEnabled = false;
 drawCtx.imageSmoothingEnabled = false;
@@ -201,6 +206,7 @@ function updateDimensions(w, h) {
 }
 
 window.addEventListener('mousedown', (e) => {
+    if (locked) return; // another monitor is the active one; stay dark and inert
     if (e.target.closest('.toolbar')) return;
     if (e.target.closest('#text-input-container')) {
         if (e.target === textDragHandle) {

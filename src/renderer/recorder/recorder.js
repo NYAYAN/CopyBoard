@@ -41,11 +41,13 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// One-shot: first region selection on this monitor closes the other monitors' overlays.
+// First region selection here locks the other monitors (they stay dark but inert).
 let monitorClaimed = false;
+let locked = false;
 function claimMonitorOnce() {
     if (!monitorClaimed) { monitorClaimed = true; window.api.claimCaptureMonitor(); }
 }
+window.api.onCaptureLocked(() => { locked = true; document.body.style.cursor = 'default'; });
 
 window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => {
     state.sourceId = sourceId;
@@ -125,6 +127,7 @@ window.addEventListener('mousemove', updateIgnoreMouse);
 
 window.addEventListener('mousedown', (e) => {
     if (state.isRecording) return;
+    if (locked) return; // another monitor is active; stay dark and inert
     if (e.target.closest('.toolbar')) return;
 
     if (state.selectionRect) {
@@ -157,6 +160,7 @@ window.addEventListener('mousedown', (e) => {
 
 btnFullscreen.addEventListener('click', () => {
     if (state.isRecording) return;
+    if (locked) return;
     claimMonitorOnce();
     state.selectionRect = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
     selectionBox.style.left = '0px'; selectionBox.style.top = '0px';
@@ -211,6 +215,7 @@ btnClose.addEventListener('click', () => {
 });
 
 async function startRecording() {
+    if (locked) return;
     if (!state.selectionRect || !state.sourceId) return;
     try {
         const sx = state.scaleX != null ? state.scaleX : state.dpr;

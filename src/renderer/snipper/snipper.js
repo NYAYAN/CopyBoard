@@ -22,6 +22,10 @@ const state = {
     selectedColor: '#ff0000'
 };
 
+// A capture targets a single monitor: when a selection starts on one monitor, the others
+// clear theirs (reset to full dim) so only the latest selection exists — see the
+// claimCaptureMonitor() call below and the onCaptureReset handler.
+
 // Blur perf: throttle the heavy recompute and reuse scratch canvases
 let lastBlurTime = 0;
 let lastBlurX = 0, lastBlurY = 0; // last pointer pos so mouseup can commit the release rect
@@ -113,6 +117,9 @@ if (!window.api) {
     throw new Error('CopyBoard snipper: preload bridge (window.api) unavailable.');
 }
 console.log('window.api is available:', Object.keys(window.api));
+
+// Another monitor started a selection → clear ours (back to full dim), stay interactive.
+window.api.onCaptureReset(() => resetUI());
 
 // Ensure sharp pixel rendering
 ctx.imageSmoothingEnabled = false;
@@ -250,6 +257,7 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     if (!state.activeTool) {
+        window.api.claimCaptureMonitor(); // new selection → clear other monitors' selections
         resetUI(); state.isSelecting = true;
         document.body.classList.add('selecting');
         // overlay-canvas will update in real-time via drawOverlay() in mousemove

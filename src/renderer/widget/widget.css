@@ -350,6 +350,11 @@ body {
     border-color: rgba(255, 255, 255, 0.18);
     box-shadow: none;
     z-index: 10;
+    /* Keep the button on a stable compositing layer at all times so the hover scale()
+       doesn't promote-then-demote it and pixel-snap the icon 1-2px sideways on
+       enter/leave. (Fixes the icon nudging right after the shrink animation settles.) */
+    will-change: transform;
+    backface-visibility: hidden;
 }
 
 .main-btn:hover {

@@ -41,6 +41,20 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+// A capture targets one monitor: starting a region selection here clears the other monitors'
+// selections; this one clears via onCaptureReset when another monitor starts. Newest wins.
+function resetSelection() {
+    if (state.isRecording) return;
+    state.selectionRect = null;
+    state.isSelecting = state.isMoving = state.isResizing = false;
+    selectionBox.style.display = 'none';
+    selectionBox.classList.add('hidden');
+    overlay.style.display = 'block';
+    if (instruction) instruction.style.display = '';
+    document.body.classList.remove('selecting');
+}
+window.api.onCaptureReset(() => resetSelection());
+
 window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => {
     state.sourceId = sourceId;
     state.videoQuality = quality || 'high';
@@ -137,6 +151,7 @@ window.addEventListener('mousedown', (e) => {
             return;
         }
     }
+    window.api.claimCaptureMonitor(); // new selection → clear other monitors' selections
     state.isSelecting = true;
     document.body.classList.add('selecting');
     state.startX = e.clientX; state.startY = e.clientY;
@@ -150,6 +165,7 @@ window.addEventListener('mousedown', (e) => {
 
 btnFullscreen.addEventListener('click', () => {
     if (state.isRecording) return;
+    window.api.claimCaptureMonitor();
     state.selectionRect = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
     selectionBox.style.left = '0px'; selectionBox.style.top = '0px';
     selectionBox.style.width = window.innerWidth + 'px'; selectionBox.style.height = window.innerHeight + 'px';

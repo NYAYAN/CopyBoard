@@ -6,6 +6,7 @@ export const elements = {
     addManualBtn: document.getElementById('add-manual-btn'),
     settingsPanel: document.getElementById('settings-panel'),
     aboutPanel: document.getElementById('about-panel'),
+    aboutVersion: document.getElementById('about-version'),
     maxItemsInput: document.getElementById('max-items'),
     quickPasteCountInput: document.getElementById('quickpaste-count'),
     shortcutInput: document.getElementById('shortcut-input'),

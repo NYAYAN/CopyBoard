@@ -1,10 +1,11 @@
-const { ipcMain, BrowserWindow } = require('electron');
+const { ipcMain, BrowserWindow, app } = require('electron');
 const { state, store } = require('../state');
 
 // Core / app-wide IPC: initial data fetch, simple persisted toggles, window chrome.
 function registerCoreHandlers() {
     ipcMain.handle('get-history', () => ({ history: state.history, favorites: state.favorites }));
     ipcMain.handle('get-settings', () => ({
+        appVersion: app.getVersion(),
         maxItems: state.maxItems, quickPasteCount: state.quickPasteCount, globalShortcut: state.shortcuts.list,
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
         globalShortcutOcr: state.shortcuts.ocr,

@@ -1,35 +1,30 @@
 # CopyBoard v2.8.0 - Hızlı Yapıştır 📋⚡
 
-Bu sürümün yıldızı **Hızlı Yapıştır**: bir kısayola basın, panonuzdaki son öğelerden birini seçin, tam o an bulunduğunuz metin kutusuna **anında yapışsın**. Kopyala‑yapıştır için artık uygulama değiştirip listede kaybolmaya son.
+Bu sürümün yıldızı **Hızlı Yapıştır** — pano geçmişinizi tam yazdığınız yerde kullanın.
 
-## ✨ Yeni Özellikler
+## Hızlı Yapıştır Nedir?
+Kopyaladığınız eski bir metni yapıştırmak için artık CopyBoard penceresini açıp aramanıza gerek yok. Yazdığınız yerde bir kısayola basın, listeden seçin, anında o alana yapışsın.
 
-### 📋 Hızlı Yapıştır (Alt+X)
-- Herhangi bir uygulamada bir metin kutusundayken **Alt+X**'e basın; imlecinizin yanında son kopyaladıklarınız açılır.
-- Bir öğeye **tıklayın → doğrudan o kutuya yapışır.** Pencere odağınız hiç kaybolmaz.
-- **Ayarlanabilir liste:** Kaç öğe görüneceğini Ayarlar'dan seçin (varsayılan 20).
-- **Kolay kapatma:** `Esc`, ✕ düğmesi ya da tekrar `Alt+X`.
-- Kısayolu **Ayarlar → "Hızlı Yapıştır"** alanından değiştirebilirsiniz.
+## Nasıl Kullanılır?
+- Bir metin kutusuna yazarken (tarayıcı, Word, sohbet, form — fark etmez) **Alt + X**'e basın.
+- İmlecinizin yanında son kopyaladıklarınız açılır.
+- İstediğiniz öğeye tıklayın; tam o an bulunduğunuz alana yapışır. Pencere odağınız kaybolmaz.
+- Kapatmak için **Esc**, **✕** düğmesi ya da tekrar **Alt + X**.
 
-## 🎨 Widget İyileştirmeleri
-- **Tertemiz kenarlar:** Yüzen widget'ın kenarlarında görünen gölge artığı giderildi; buton artık tam anlamıyla düz (flat).
-- **Doğru tıklama alanı:** Butonun hemen dışına yaptığınız tıklamalar artık arkadaki uygulamaya geçiyor — görünmez "ölü bölge" kaldırıldı.
+## İpuçları
+- Listede kaç öğe görüneceğini **Ayarlar → Hızlı Yapıştır Liste Sayısı** ile seçin (varsayılan 20).
+- Kısayolu değiştirmek isterseniz **Ayarlar → Hızlı Yapıştır** alanını kullanın.
 
-## 📦 Kurulum
-1. `CopyBoard-Setup-2.8.0.exe` dosyasını indirin.
-2. Kurulum sihirbazını takip edin.
-3. Uygulamayı başlatın.
+## Widget İyileştirmeleri
+- Yüzen widget'ın kenarlarındaki gölge artığı giderildi; artık tertemiz, düz bir görünüm.
+- Butonun hemen dışına yaptığınız tıklamalar artık arkadaki uygulamaya geçiyor; görünmez "ölü bölge" kaldırıldı.
 
-### Otomatik Güncelleme
-Uygulamayı açtığınızda yeni sürümü otomatik algılar ve güncellemeyi önerir.
+## Kısayollar
+- **Alt + V** — Pano listesini aç
+- **Alt + X** — Hızlı Yapıştır (yeni!)
+- **Alt + 9** — Ekran görüntüsü (Çizim & Blur)
+- **Alt + 8** — Video kaydet
+- **Alt + 2** — OCR (Resimden yazıya)
 
-## ⌨️ Kısayollar
-- **Alt+V**: Pano listesini göster
-- **Alt+X**: Hızlı Yapıştır *(yeni!)*
-- **Alt+9**: Ekran görüntüsü al (Çizim & Blur)
-- **Alt+8**: Video kaydet
-- **Alt+2**: OCR (Resimden yazı okuma)
-
----
-
-**Tam Değişiklik Listesi**: [CHANGELOG.md](CHANGELOG.md)
+## Güncelleme
+Uygulamayı açık tuttuğunuzda yeni sürüm otomatik bildirilir. Dilerseniz CopyBoard-Setup-2.8.0.exe ile de kurabilirsiniz.

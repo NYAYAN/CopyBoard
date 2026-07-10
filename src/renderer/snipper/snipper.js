@@ -22,11 +22,9 @@ const state = {
     selectedColor: '#ff0000'
 };
 
-// The first time the user starts a selection on THIS monitor, tell main to LOCK the other
-// monitors (they stay dark but ignore selection). If instead THIS monitor gets locked
-// (a selection began on another screen), it stays dimmed and inert.
-let monitorClaimed = false;
-let locked = false;
+// A capture targets a single monitor: when a selection starts on one monitor, the others
+// clear theirs (reset to full dim) so only the latest selection exists — see the
+// claimCaptureMonitor() call below and the onCaptureReset handler.
 
 // Blur perf: throttle the heavy recompute and reuse scratch canvases
 let lastBlurTime = 0;
@@ -120,8 +118,8 @@ if (!window.api) {
 }
 console.log('window.api is available:', Object.keys(window.api));
 
-// Selection started on another monitor → this overlay stays dark but becomes inert.
-window.api.onCaptureLocked(() => { locked = true; document.body.style.cursor = 'default'; });
+// Another monitor started a selection → clear ours (back to full dim), stay interactive.
+window.api.onCaptureReset(() => resetUI());
 
 // Ensure sharp pixel rendering
 ctx.imageSmoothingEnabled = false;
@@ -206,7 +204,6 @@ function updateDimensions(w, h) {
 }
 
 window.addEventListener('mousedown', (e) => {
-    if (locked) return; // another monitor is the active one; stay dark and inert
     if (e.target.closest('.toolbar')) return;
     if (e.target.closest('#text-input-container')) {
         if (e.target === textDragHandle) {
@@ -260,7 +257,7 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     if (!state.activeTool) {
-        if (!monitorClaimed) { monitorClaimed = true; window.api.claimCaptureMonitor(); }
+        window.api.claimCaptureMonitor(); // new selection → clear other monitors' selections
         resetUI(); state.isSelecting = true;
         document.body.classList.add('selecting');
         // overlay-canvas will update in real-time via drawOverlay() in mousemove

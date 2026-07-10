@@ -41,13 +41,19 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// First region selection here locks the other monitors (they stay dark but inert).
-let monitorClaimed = false;
-let locked = false;
-function claimMonitorOnce() {
-    if (!monitorClaimed) { monitorClaimed = true; window.api.claimCaptureMonitor(); }
+// A capture targets one monitor: starting a region selection here clears the other monitors'
+// selections; this one clears via onCaptureReset when another monitor starts. Newest wins.
+function resetSelection() {
+    if (state.isRecording) return;
+    state.selectionRect = null;
+    state.isSelecting = state.isMoving = state.isResizing = false;
+    selectionBox.style.display = 'none';
+    selectionBox.classList.add('hidden');
+    overlay.style.display = 'block';
+    if (instruction) instruction.style.display = '';
+    document.body.classList.remove('selecting');
 }
-window.api.onCaptureLocked(() => { locked = true; document.body.style.cursor = 'default'; });
+window.api.onCaptureReset(() => resetSelection());
 
 window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => {
     state.sourceId = sourceId;
@@ -127,7 +133,6 @@ window.addEventListener('mousemove', updateIgnoreMouse);
 
 window.addEventListener('mousedown', (e) => {
     if (state.isRecording) return;
-    if (locked) return; // another monitor is active; stay dark and inert
     if (e.target.closest('.toolbar')) return;
 
     if (state.selectionRect) {
@@ -146,7 +151,7 @@ window.addEventListener('mousedown', (e) => {
             return;
         }
     }
-    claimMonitorOnce();
+    window.api.claimCaptureMonitor(); // new selection → clear other monitors' selections
     state.isSelecting = true;
     document.body.classList.add('selecting');
     state.startX = e.clientX; state.startY = e.clientY;
@@ -160,8 +165,7 @@ window.addEventListener('mousedown', (e) => {
 
 btnFullscreen.addEventListener('click', () => {
     if (state.isRecording) return;
-    if (locked) return;
-    claimMonitorOnce();
+    window.api.claimCaptureMonitor();
     state.selectionRect = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
     selectionBox.style.left = '0px'; selectionBox.style.top = '0px';
     selectionBox.style.width = window.innerWidth + 'px'; selectionBox.style.height = window.innerHeight + 'px';
@@ -215,7 +219,6 @@ btnClose.addEventListener('click', () => {
 });
 
 async function startRecording() {
-    if (locked) return;
     if (!state.selectionRect || !state.sourceId) return;
     try {
         const sx = state.scaleX != null ? state.scaleX : state.dpr;

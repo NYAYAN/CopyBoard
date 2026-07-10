@@ -1,3 +1,9 @@
+# CopyBoard v2.8.1 Release Notes
+
+Hızlı Yapıştır kısayolu **Ctrl + Shift + V** olarak değiştirildi (önceki: Alt + X). Ayarlar → Hızlı Yapıştır'dan özelleştirilebilir.
+
+---
+
 # CopyBoard v2.8.0 Release Notes
 
 Öne çıkan yenilik **Hızlı Yapıştır** (Alt+X): panodan seçip odaktaki metin kutusuna anında yapıştırma. Ayrıca yüzen widget'ta kenar ve tıklama iyileştirmeleri.

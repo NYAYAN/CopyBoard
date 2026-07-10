@@ -6,8 +6,10 @@ const overlay = document.getElementById('overlay');
 let isSelecting = false;
 let startX = 0, startY = 0;
 let scaleX = 1, scaleY = 1;
-// One-shot: first selection on this monitor closes the other monitors' overlays.
+// First selection here locks the other monitors (they stay dark but inert). If this
+// monitor gets locked instead, it ignores selection.
 let monitorClaimed = false;
+let locked = false;
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -16,6 +18,9 @@ function resizeCanvas() {
 
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+
+// Selection started on another monitor → stay dark but inert.
+window.api.onCaptureLocked(() => { locked = true; document.body.style.cursor = 'default'; });
 
 // --- Capture & Initialize ---
 window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
@@ -60,6 +65,7 @@ function reset() {
 
 // --- Interaction Logic ---
 window.addEventListener('mousedown', (e) => {
+    if (locked) return; // another monitor is active; stay dark and inert
     if (!monitorClaimed) { monitorClaimed = true; window.api.claimCaptureMonitor(); }
     reset();
     isSelecting = true;

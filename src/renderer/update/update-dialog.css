@@ -229,6 +229,42 @@ body {
     margin-bottom: 4px;
 }
 
+.release-html-content hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 10px 0;
+}
+
+.release-html-content code {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: var(--text);
+}
+
+.release-html-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 10px;
+    font-size: 11px;
+}
+
+.release-html-content th,
+.release-html-content td {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: left;
+}
+
+.release-html-content th {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font-weight: 600;
+}
+
 .download-progress {
     margin-bottom: 16px;
     padding: 12px;

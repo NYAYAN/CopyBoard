@@ -13,6 +13,7 @@ import { elements } from './modules/dom.js';
     // 3. UI Setup from Settings
     elements.maxItemsInput.value = settings.maxItems;
     elements.quickPasteCountInput.value = settings.quickPasteCount;
+    if (settings.appVersion && elements.aboutVersion) elements.aboutVersion.textContent = `CopyBoard v${settings.appVersion}`;
     elements.autostartCheck.checked = settings.autoStart;
     elements.incognitoCheck.checked = settings.clipboardPaused || false;
     elements.widgetCheck.checked = settings.showWidget;

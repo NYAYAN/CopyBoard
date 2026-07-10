@@ -41,6 +41,12 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+// One-shot: first region selection on this monitor closes the other monitors' overlays.
+let monitorClaimed = false;
+function claimMonitorOnce() {
+    if (!monitorClaimed) { monitorClaimed = true; window.api.claimCaptureMonitor(); }
+}
+
 window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => {
     state.sourceId = sourceId;
     state.videoQuality = quality || 'high';
@@ -137,6 +143,7 @@ window.addEventListener('mousedown', (e) => {
             return;
         }
     }
+    claimMonitorOnce();
     state.isSelecting = true;
     document.body.classList.add('selecting');
     state.startX = e.clientX; state.startY = e.clientY;
@@ -150,6 +157,7 @@ window.addEventListener('mousedown', (e) => {
 
 btnFullscreen.addEventListener('click', () => {
     if (state.isRecording) return;
+    claimMonitorOnce();
     state.selectionRect = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
     selectionBox.style.left = '0px'; selectionBox.style.top = '0px';
     selectionBox.style.width = window.innerWidth + 'px'; selectionBox.style.height = window.innerHeight + 'px';

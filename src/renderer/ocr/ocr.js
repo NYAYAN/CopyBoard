@@ -6,6 +6,8 @@ const overlay = document.getElementById('overlay');
 let isSelecting = false;
 let startX = 0, startY = 0;
 let scaleX = 1, scaleY = 1;
+// One-shot: first selection on this monitor closes the other monitors' overlays.
+let monitorClaimed = false;
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -58,6 +60,7 @@ function reset() {
 
 // --- Interaction Logic ---
 window.addEventListener('mousedown', (e) => {
+    if (!monitorClaimed) { monitorClaimed = true; window.api.claimCaptureMonitor(); }
     reset();
     isSelecting = true;
     overlay.style.display = 'none';

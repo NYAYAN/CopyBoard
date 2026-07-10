@@ -32,6 +32,14 @@ function registerCaptureHandlers() {
         closeAllCaptureWindows();
     });
 
+    ipcMain.on('capture-claim-monitor', (e) => {
+        // The user started a selection on one monitor — close the OTHER monitors' overlays so
+        // a screenshot/OCR/video targets a single monitor (mirrors video's record-start, but
+        // fired at selection time). Single-monitor: no-op (nothing else to close).
+        const win = BrowserWindow.fromWebContents(e.sender);
+        if (win) closeAllCaptureWindows(win);
+    });
+
     ipcMain.on('snip-ready', (e) => {
         // Multi-monitor: each display's overlay readies itself — show/focus the sender.
         const win = BrowserWindow.fromWebContents(e.sender);

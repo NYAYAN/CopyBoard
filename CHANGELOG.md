@@ -1,3 +1,16 @@
+# CopyBoard v2.8.2 Release Notes
+
+Çoklu monitörde ekran yakalama artık "en son seçim kazanır" mantığıyla çalışıyor (bir ekranda seçip başka ekrana geçince önceki iptal olur), ekranlar daha hızlı kararıyor; yüzen widget ikonunun hover/leave'de kayması giderildi.
+
+## 🖥️ Ekran Yakalama (Çoklu Monitör)
+- Bir monitörde alan seçip başka monitörde seçim başlatınca önceki iptal olur; sadece en son seçilen alan kalır. Diğer ekranlar tam karanlık ve seçilebilir kalır.
+- Ekranların kararması hızlandırıldı (sınırlı eşzamanlı yakalama; bellek sıçraması yok).
+
+## 🎯 Widget
+- Ana ikonun hover/leave sırasında 1-2px kayması düzeltildi.
+
+---
+
 # CopyBoard v2.8.1 Release Notes
 
 Hızlı Yapıştır kısayolu **Ctrl + Shift + V** olarak değiştirildi (önceki: Alt + X). Ayarlar → Hızlı Yapıştır'dan özelleştirilebilir.

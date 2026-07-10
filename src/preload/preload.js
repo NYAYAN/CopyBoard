@@ -57,7 +57,7 @@ contextBridge.exposeInMainWorld('api', {
     closeSnipper: () => ipcRenderer.send('snip-close'),
     notifyReady: () => ipcRenderer.send('snip-ready'),
     claimCaptureMonitor: () => ipcRenderer.send('capture-claim-monitor'),
-    onCaptureLocked: (callback) => ipcRenderer.on('capture-locked', () => callback()),
+    onCaptureReset: (callback) => ipcRenderer.on('capture-reset', () => callback()),
     onShowToast: (callback) => ipcRenderer.on('display-toast', (_, message, type) => callback(message, type)),
     onResetView: (callback) => ipcRenderer.on('reset-view', callback),
     sendDebugLog: (msg) => ipcRenderer.send('debug-log', msg), // NEW DEBUG CHANNEL

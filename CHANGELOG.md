@@ -1,3 +1,13 @@
+# CopyBoard v2.8.4 Release Notes
+
+Ekran Görüntüsü Galerisi için düzeltmeler.
+
+## 🖼️ Galeri
+- Küçük resme **sağ tık** → Kopyala / Klasörde Göster / Sil menüsü.
+- Dosyası dışarıdan silinen ekran görüntüsünün ölü/tıklanmayan kaydı artık galeriden otomatik temizlenir (açılışta ve tıklama/kopyalama denemesinde).
+
+---
+
 # CopyBoard v2.8.3 Release Notes
 
 Ekran görüntüsü aracı büyük güncelleme aldı: galeri, büyüteç/renk seçici, hassas seçim ve hız iyileştirmeleri.

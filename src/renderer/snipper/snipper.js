@@ -594,6 +594,34 @@ textInput.addEventListener('keydown', (e) => {
     } else if (e.key === 'Escape') { e.stopPropagation(); textInputContainer.style.display = 'none'; textInput.value = ''; }
 });
 
+// Arrow-key fine-tuning: arrows move the selection 1px, Shift+arrows resize it 1px
+// (right/bottom edge), Ctrl multiplies the step by 10. Standard in snipping tools for
+// pixel-precise adjustment that's hard with the mouse.
+const ARROW_DELTAS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+function nudgeSelection(key, shiftKey, ctrlKey) {
+    const [dx0, dy0] = ARROW_DELTAS[key];
+    const step = ctrlKey ? 10 : 1;
+    const dx = dx0 * step, dy = dy0 * step;
+    const r = state.selectionRect;
+
+    if (shiftKey) {
+        r.w = Math.max(10, Math.min(r.w + dx, window.innerWidth - r.x));
+        r.h = Math.max(10, Math.min(r.h + dy, window.innerHeight - r.y));
+    } else {
+        r.x = Math.max(0, Math.min(r.x + dx, window.innerWidth - r.w));
+        r.y = Math.max(0, Math.min(r.y + dy, window.innerHeight - r.h));
+    }
+
+    selectionBox.style.left = r.x + 'px';
+    selectionBox.style.top = r.y + 'px';
+    selectionBox.style.width = r.w + 'px';
+    selectionBox.style.height = r.h + 'px';
+    drawOverlay(r.x, r.y, r.w, r.h);
+    updateDimensions(r.w, r.h);
+    showToolbar({ left: r.x, top: r.y, right: r.x + r.w, bottom: r.y + r.h });
+}
+
 document.addEventListener('keydown', (e) => {
     // While typing an annotation, leave undo/copy/close to the textarea (and its own
     // Enter/Escape handler); don't trigger canvas undo, image copy, or window close.
@@ -603,6 +631,15 @@ document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === 'c') {
         e.preventDefault(); // Prevent default copy which might fail if nothing focusable
         buttons['btn-copy']();
+    }
+    // Enter confirms: copy the current selection to the clipboard (same as the ✓/copy button).
+    if (e.key === 'Enter' && state.selectionRect) {
+        e.preventDefault();
+        buttons['btn-copy']();
+    }
+    if (state.selectionRect && ARROW_DELTAS[e.key]) {
+        e.preventDefault(); // keep arrows from scrolling/moving focus
+        nudgeSelection(e.key, e.shiftKey, e.ctrlKey);
     }
 });
 
@@ -633,4 +670,79 @@ colorToggle.addEventListener('click', (e) => {
     colorGroup.classList.toggle('expanded');
     colorToggle.classList.toggle('active');
 });
+
+// ── Loupe (pixel magnifier) ────────────────────────────────────────────────
+// Zoomed view of the pixels around the cursor + physical coordinates + the color
+// under the crosshair. Shown while picking/adjusting the region (before a selection
+// exists, while dragging one out, and while resizing); hidden once the selection is
+// settled so it never covers the toolbar/annotation phase.
+const LOUPE_SIZE = 120;   // on-screen loupe box (px)
+const LOUPE_ZOOM = 4;     // magnification (logical px)
+
+const loupe = document.createElement('div');
+loupe.style.cssText = 'position:fixed;width:' + LOUPE_SIZE + 'px;display:none;pointer-events:none;z-index:10000;'
+    + 'border:1px solid rgba(255,255,255,0.85);border-radius:10px;overflow:hidden;'
+    + 'box-shadow:0 4px 16px rgba(0,0,0,0.5);background:#111;';
+const loupeCanvas = document.createElement('canvas');
+loupeCanvas.width = LOUPE_SIZE;
+loupeCanvas.height = LOUPE_SIZE;
+const loupeCtx = loupeCanvas.getContext('2d', { willReadFrequently: true });
+const loupeLabel = document.createElement('div');
+loupeLabel.style.cssText = 'font:11px Consolas,monospace;color:#fff;background:rgba(0,0,0,0.78);'
+    + 'padding:3px 6px;text-align:center;letter-spacing:0.3px;white-space:nowrap;';
+loupe.appendChild(loupeCanvas);
+loupe.appendChild(loupeLabel);
+document.body.appendChild(loupe);
+
+function hideLoupe() { loupe.style.display = 'none'; }
+
+function updateLoupe(cx, cy) {
+    // Visible while choosing/adjusting the region; hidden after it settles.
+    const relevant = !state.selectionRect || state.isSelecting || state.isResizing;
+    if (!relevant || !document.body.classList.contains('ready')) { hideLoupe(); return; }
+
+    const sx = state.scaleX != null ? state.scaleX : state.dpr;
+    const sy = state.scaleY != null ? state.scaleY : state.dpr;
+    const srcLogical = LOUPE_SIZE / LOUPE_ZOOM; // logical px shown inside the loupe
+
+    loupeCtx.imageSmoothingEnabled = false;
+    loupeCtx.fillStyle = '#111';
+    loupeCtx.fillRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
+    loupeCtx.drawImage(
+        canvas,
+        cx * sx - (srcLogical / 2) * sx, cy * sy - (srcLogical / 2) * sy,
+        srcLogical * sx, srcLogical * sy,
+        0, 0, LOUPE_SIZE, LOUPE_SIZE
+    );
+
+    // Color under the cursor — sampled from the small loupe canvas (cheap readback).
+    let hex = '';
+    try {
+        const p = loupeCtx.getImageData(LOUPE_SIZE / 2, LOUPE_SIZE / 2, 1, 1).data;
+        hex = ' #' + [p[0], p[1], p[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+    } catch (e) { /* readback can fail on exotic GPUs; label just omits the color */ }
+
+    // Center crosshair
+    loupeCtx.strokeStyle = 'rgba(255,80,80,0.9)';
+    loupeCtx.lineWidth = 1;
+    loupeCtx.beginPath();
+    loupeCtx.moveTo(LOUPE_SIZE / 2 + 0.5, 0); loupeCtx.lineTo(LOUPE_SIZE / 2 + 0.5, LOUPE_SIZE);
+    loupeCtx.moveTo(0, LOUPE_SIZE / 2 + 0.5); loupeCtx.lineTo(LOUPE_SIZE, LOUPE_SIZE / 2 + 0.5);
+    loupeCtx.stroke();
+
+    loupeLabel.textContent = Math.round(cx * sx) + ', ' + Math.round(cy * sy) + hex;
+
+    // Offset from the cursor; flip to the other side near screen edges.
+    const OFF = 22, boxH = LOUPE_SIZE + 24;
+    let lx = cx + OFF;
+    let ly = cy + OFF;
+    if (lx + LOUPE_SIZE + 8 > window.innerWidth) lx = cx - OFF - LOUPE_SIZE;
+    if (ly + boxH + 8 > window.innerHeight) ly = cy - OFF - boxH;
+    loupe.style.left = lx + 'px';
+    loupe.style.top = ly + 'px';
+    loupe.style.display = 'block';
+}
+
+window.addEventListener('mousemove', (e) => updateLoupe(e.clientX, e.clientY), { passive: true });
+window.addEventListener('mouseup', () => { if (state.selectionRect) hideLoupe(); });
 

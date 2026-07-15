@@ -3,6 +3,7 @@ const { registerShortcutHandlers } = require('./ipc/shortcuts');
 const { registerClipboardHandlers } = require('./ipc/clipboard-handlers');
 const { registerWidgetHandlers } = require('./ipc/widget-handlers');
 const { registerCaptureHandlers } = require('./ipc/capture-handlers');
+const { registerScreenshotHandlers } = require('./ipc/screenshot-handlers');
 const { registerUpdateHandlers } = require('./ipc/update-handlers');
 
 function registerIpcHandlers() {
@@ -11,6 +12,7 @@ function registerIpcHandlers() {
     registerClipboardHandlers();
     registerWidgetHandlers();
     registerCaptureHandlers();
+    registerScreenshotHandlers();
     registerUpdateHandlers();
 }
 

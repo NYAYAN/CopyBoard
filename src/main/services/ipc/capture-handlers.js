@@ -5,6 +5,7 @@ const path = require('path');
 const { state, store } = require('../state');
 const { showToast, closeAllCaptureWindows } = require('../window-manager');
 const { addHistory } = require('../history-manager');
+const { addScreenshot } = require('../screenshot-library');
 
 // --- OCR worker (lazy + cached) ---
 // Creating a Tesseract worker loads ~10MB of eng+tur language data, so we keep
@@ -91,6 +92,8 @@ function registerCaptureHandlers() {
             // Use scaleFactor 1.0 — the renderer already handled DPI compensation.
             const nativeImg = nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
             clipboard.writeImage(nativeImg);
+            // Also keep it in the screenshot gallery (never let a gallery error break the copy).
+            try { addScreenshot(buffer); } catch (galleryErr) { console.error('Gallery save failed:', galleryErr); }
             showToast('Resim Kopyalandı.', 'success');
         } catch (err) {
             showToast('Kopyalama Hatası: ' + err.message, 'error');
@@ -114,7 +117,10 @@ function registerCaptureHandlers() {
 
         if (p) {
             try {
-                fs.writeFileSync(p, Buffer.from(d.split(',')[1], 'base64'));
+                const buffer = Buffer.from(d.split(',')[1], 'base64');
+                fs.writeFileSync(p, buffer);
+                // Also keep it in the screenshot gallery (never let a gallery error break the save).
+                try { addScreenshot(buffer); } catch (galleryErr) { console.error('Gallery save failed:', galleryErr); }
                 showToast('Resim Kaydedildi.', 'success');
             } catch (err) {
                 showToast('Kaydetme Hatası: ' + err.message, 'error');

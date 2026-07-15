@@ -126,10 +126,16 @@ export function setupEventListeners() {
         }
     });
 
-    // Settings / About
+    // Settings / About / Gallery — panels are mutually exclusive
+    const closeGalleryPanel = () => {
+        elements.galleryPanel.classList.add('hidden');
+        elements.galleryBtn.classList.remove('active');
+    };
+
     elements.settingsBtn.addEventListener('click', () => {
         elements.aboutPanel.classList.add('hidden');
         elements.aboutBtn.classList.remove('active');
+        closeGalleryPanel();
         elements.settingsPanel.classList.toggle('hidden');
         elements.settingsBtn.classList.toggle('active');
     });
@@ -137,8 +143,18 @@ export function setupEventListeners() {
     elements.aboutBtn.addEventListener('click', () => {
         elements.settingsPanel.classList.add('hidden');
         elements.settingsBtn.classList.remove('active');
+        closeGalleryPanel();
         elements.aboutPanel.classList.toggle('hidden');
         elements.aboutBtn.classList.toggle('active');
+    });
+
+    elements.galleryBtn.addEventListener('click', () => {
+        elements.settingsPanel.classList.add('hidden');
+        elements.settingsBtn.classList.remove('active');
+        elements.aboutPanel.classList.add('hidden');
+        elements.aboutBtn.classList.remove('active');
+        elements.galleryPanel.classList.toggle('hidden');
+        elements.galleryBtn.classList.toggle('active');
     });
 
     elements.updateBtn.addEventListener('click', () => {

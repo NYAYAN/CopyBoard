@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+        content="default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CopyBoard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,6 +26,14 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                         style="width: 16px; height: 16px;">
                         <path d="M12 4v16m8-8H4" />
+                    </svg>
+                </button>
+                <button id="gallery-btn" class="icon-btn" title="Ekran Görüntüleri" aria-label="Ekran Görüntüleri">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        style="width: 16px; height: 16px;">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
                     </svg>
                 </button>
                 <button id="about-btn" class="icon-btn" title="Hakkında" aria-label="Hakkında">
@@ -82,6 +90,23 @@
                 <h3 id="about-version">CopyBoard</h3>
                 <p><strong>Geliştirici:</strong> Nurullah YAYAN</p>
                 <p><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-1px;margin-right:4px"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>nurullah.yayan@gmail.com</p>
+            </div>
+        </div>
+
+        <div id="gallery-panel" class="settings-panel hidden">
+            <div id="gallery-grid" class="gallery-grid">
+                <!-- Thumbnails injected by modules/gallery.js -->
+            </div>
+            <div id="gallery-preview" class="gallery-preview hidden">
+                <img id="gallery-preview-img" alt="Ekran görüntüsü önizleme">
+                <div id="gallery-preview-meta" class="gallery-preview-meta"></div>
+                <div class="gallery-preview-actions">
+                    <button id="gallery-back-btn" class="modal-btn">← Geri</button>
+                    <button id="gallery-copy-btn" class="modal-btn"
+                        style="background: var(--accent); color: white;">Kopyala</button>
+                    <button id="gallery-folder-btn" class="modal-btn">Klasörde Göster</button>
+                    <button id="gallery-delete-btn" class="modal-btn danger">Sil</button>
+                </div>
             </div>
         </div>
 

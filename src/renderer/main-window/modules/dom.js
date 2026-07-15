@@ -6,6 +6,18 @@ export const elements = {
     addManualBtn: document.getElementById('add-manual-btn'),
     settingsPanel: document.getElementById('settings-panel'),
     aboutPanel: document.getElementById('about-panel'),
+
+    // Screenshot gallery
+    galleryBtn: document.getElementById('gallery-btn'),
+    galleryPanel: document.getElementById('gallery-panel'),
+    galleryGrid: document.getElementById('gallery-grid'),
+    galleryPreview: document.getElementById('gallery-preview'),
+    galleryPreviewImg: document.getElementById('gallery-preview-img'),
+    galleryPreviewMeta: document.getElementById('gallery-preview-meta'),
+    galleryBackBtn: document.getElementById('gallery-back-btn'),
+    galleryCopyBtn: document.getElementById('gallery-copy-btn'),
+    galleryFolderBtn: document.getElementById('gallery-folder-btn'),
+    galleryDeleteBtn: document.getElementById('gallery-delete-btn'),
     aboutVersion: document.getElementById('about-version'),
     maxItemsInput: document.getElementById('max-items'),
     quickPasteCountInput: document.getElementById('quickpaste-count'),

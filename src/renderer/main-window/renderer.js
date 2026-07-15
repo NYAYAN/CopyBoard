@@ -1,5 +1,6 @@
 import { initState, setupEventListeners, updateHistoryState, resetSearchState } from './modules/events.js';
 import { renderHistory } from './modules/history-renderer.js';
+import { initGallery } from './modules/gallery.js';
 import { elements } from './modules/dom.js';
 
 (async () => {
@@ -52,6 +53,7 @@ import { elements } from './modules/dom.js';
 
     // 5. Setup Listeners
     setupEventListeners();
+    initGallery();
 })();
 
 // IPC Event Listeners

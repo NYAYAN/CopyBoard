@@ -33,8 +33,12 @@ let blurTempCanvas = null;
 
 function saveState() {
     state.history.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
-    // Each entry is a full-canvas ImageData (~33MB at 4K); cap to bound peak memory
-    if (state.history.length > 10) state.history.shift();
+    // Each entry is a full-canvas RGBA snapshot (~8MB at 1080p, ~33MB at 4K, ~132MB at
+    // 8K), so cap the history by BYTES rather than a fixed count: up to 10 steps but at
+    // most ~256MB total, never fewer than 3 steps.
+    const bytesPerEntry = drawCanvas.width * drawCanvas.height * 4;
+    const maxEntries = Math.max(3, Math.min(10, Math.floor(268435456 / bytesPerEntry)));
+    while (state.history.length > maxEntries) state.history.shift();
 }
 
 function undo() {

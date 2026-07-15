@@ -26,11 +26,10 @@ const state = {
 // clear theirs (reset to full dim) so only the latest selection exists — see the
 // claimCaptureMonitor() call below and the onCaptureReset handler.
 
-// Blur perf: throttle the heavy recompute and reuse scratch canvases
+// Blur perf: throttle the recompute and reuse the scratch canvas
 let lastBlurTime = 0;
 let lastBlurX = 0, lastBlurY = 0; // last pointer pos so mouseup can commit the release rect
 let blurTempCanvas = null;
-let blurOutCanvas = null;
 
 function saveState() {
     state.history.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
@@ -436,64 +435,31 @@ function applyBlur(x, y, w, h) {
     const sy = state.scaleY != null ? state.scaleY : state.dpr;
     const cw = Math.round(w * sx);
     const ch = Math.round(h * sy);
-    if (!blurTempCanvas) blurTempCanvas = document.createElement('canvas');
-    const tempCanvas = blurTempCanvas;
-    tempCanvas.width = cw;
-    tempCanvas.height = ch;
-    const tempCtx = tempCanvas.getContext('2d');
+    if (cw < 1 || ch < 1) return;
 
-    tempCtx.drawImage(canvas, x * sx, y * sy, w * sx, h * sy, 0, 0, cw, ch);
-    tempCtx.drawImage(drawCanvas, x * sx, y * sy, w * sx, h * sy, 0, 0, cw, ch);
-
-    const imageData = tempCtx.getImageData(0, 0, cw, ch);
     const scale = (sx + sy) / 2;
     const pixelSize = Math.max(2, Math.floor(10 * scale));
 
-    const bw = cw;
-    const bh = ch;
+    // Pixelate via downscale→upscale: drawing the region into a canvas 1/pixelSize the
+    // size averages each block (GPU box filter), and drawing it back up with smoothing
+    // off re-expands the blocks. Same visual as the old per-pixel averaging loop, but
+    // it's two drawImage calls instead of a JS loop over every pixel (no readback).
+    const dw = Math.max(1, Math.round(cw / pixelSize));
+    const dh = Math.max(1, Math.round(ch / pixelSize));
+    if (!blurTempCanvas) blurTempCanvas = document.createElement('canvas');
+    const tempCanvas = blurTempCanvas;
+    tempCanvas.width = dw;
+    tempCanvas.height = dh;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.imageSmoothingEnabled = true; // downscale = average within each block
 
-    // Apply pixelation effect
-    for (let py = 0; py < bh; py += pixelSize) {
-        for (let px = 0; px < bw; px += pixelSize) {
-            let r = 0, g = 0, b = 0, a = 0, count = 0;
-
-            // Calculate average color in block
-            for (let dy = 0; dy < pixelSize && py + dy < bh; dy++) {
-                for (let dx = 0; dx < pixelSize && px + dx < bw; dx++) {
-                    const i = ((py + dy) * bw + (px + dx)) * 4;
-                    r += imageData.data[i];
-                    g += imageData.data[i + 1];
-                    b += imageData.data[i + 2];
-                    a += imageData.data[i + 3];
-                    count++;
-                }
-            }
-
-            r = Math.floor(r / count);
-            g = Math.floor(g / count);
-            b = Math.floor(b / count);
-            a = Math.floor(a / count);
-
-            // Fill block with average color
-            for (let dy = 0; dy < pixelSize && py + dy < bh; dy++) {
-                for (let dx = 0; dx < pixelSize && px + dx < bw; dx++) {
-                    const i = ((py + dy) * bw + (px + dx)) * 4;
-                    imageData.data[i] = r;
-                    imageData.data[i + 1] = g;
-                    imageData.data[i + 2] = b;
-                    imageData.data[i + 3] = a;
-                }
-            }
-        }
-    }
+    tempCtx.drawImage(canvas, x * sx, y * sy, cw, ch, 0, 0, dw, dh);
+    tempCtx.drawImage(drawCanvas, x * sx, y * sy, cw, ch, 0, 0, dw, dh);
 
     drawCtx.save();
     drawCtx.setTransform(1, 0, 0, 1, 0, 0);
-    if (!blurOutCanvas) blurOutCanvas = document.createElement('canvas');
-    const tempImg = blurOutCanvas;
-    tempImg.width = bw; tempImg.height = bh;
-    tempImg.getContext('2d').putImageData(imageData, 0, 0);
-    drawCtx.drawImage(tempImg, x * sx, y * sy);
+    drawCtx.imageSmoothingEnabled = false; // upscale = hard-edged blocks
+    drawCtx.drawImage(tempCanvas, 0, 0, dw, dh, x * sx, y * sy, cw, ch);
     drawCtx.restore();
 }
 

@@ -602,6 +602,16 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault(); // Prevent default copy which might fail if nothing focusable
         buttons['btn-copy']();
     }
+    // Plain C = color picker: copy the hex code under the loupe crosshair to the
+    // clipboard (it also lands in the CopyBoard history). Only while the loupe is
+    // visible, so it can't clash with Ctrl+C image copy during annotation.
+    if (!e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'c' && loupe.style.display === 'block' && loupeHex) {
+        e.preventDefault();
+        window.api.copyItem(loupeHex);
+        loupeFlashText = '✓ Kopyalandı ' + loupeHex;
+        loupeFlashUntil = Date.now() + 900;
+        loupeLabel.textContent = loupeFlashText;
+    }
     // Enter confirms: copy the current selection to the clipboard (same as the ✓/copy button).
     if (e.key === 'Enter' && state.selectionRect) {
         e.preventDefault();
@@ -660,9 +670,20 @@ const loupeCtx = loupeCanvas.getContext('2d', { willReadFrequently: true });
 const loupeLabel = document.createElement('div');
 loupeLabel.style.cssText = 'font:11px Consolas,monospace;color:#fff;background:rgba(0,0,0,0.78);'
     + 'padding:3px 6px;text-align:center;letter-spacing:0.3px;white-space:nowrap;';
+const loupeHint = document.createElement('div');
+loupeHint.style.cssText = 'font:9px Consolas,monospace;color:rgba(255,255,255,0.55);'
+    + 'background:rgba(0,0,0,0.78);padding:0 6px 3px;text-align:center;white-space:nowrap;';
+loupeHint.textContent = 'C: rengi kopyala';
 loupe.appendChild(loupeCanvas);
 loupe.appendChild(loupeLabel);
+loupe.appendChild(loupeHint);
 document.body.appendChild(loupe);
+
+// Color-picker state: the hex under the crosshair right now, and a short-lived
+// "copied" flash shown in the label after pressing C.
+let loupeHex = '';
+let loupeFlashText = '';
+let loupeFlashUntil = 0;
 
 function hideLoupe() { loupe.style.display = 'none'; }
 
@@ -691,6 +712,7 @@ function updateLoupe(cx, cy) {
         const p = loupeCtx.getImageData(LOUPE_SIZE / 2, LOUPE_SIZE / 2, 1, 1).data;
         hex = ' #' + [p[0], p[1], p[2]].map(v => v.toString(16).padStart(2, '0')).join('');
     } catch (e) { /* readback can fail on exotic GPUs; label just omits the color */ }
+    loupeHex = hex.trim();
 
     // Center crosshair
     loupeCtx.strokeStyle = 'rgba(255,80,80,0.9)';
@@ -700,7 +722,9 @@ function updateLoupe(cx, cy) {
     loupeCtx.moveTo(0, LOUPE_SIZE / 2 + 0.5); loupeCtx.lineTo(LOUPE_SIZE, LOUPE_SIZE / 2 + 0.5);
     loupeCtx.stroke();
 
-    loupeLabel.textContent = Math.round(cx * sx) + ', ' + Math.round(cy * sy) + hex;
+    loupeLabel.textContent = Date.now() < loupeFlashUntil
+        ? loupeFlashText
+        : Math.round(cx * sx) + ', ' + Math.round(cy * sy) + hex;
 
     // Offset from the cursor; flip to the other side near screen edges.
     const OFF = 22, boxH = LOUPE_SIZE + 24;

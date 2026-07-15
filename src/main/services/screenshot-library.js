@@ -73,4 +73,17 @@ function deleteScreenshot(id) {
     broadcastScreenshots();
 }
 
-module.exports = { addScreenshot, publicList, getScreenshotById, deleteScreenshot };
+// Drop index entries whose PNG file was deleted/moved outside the app, so their dead
+// thumbnails don't linger in the grid. Returns true if anything was pruned.
+function pruneMissing() {
+    const items = listScreenshots();
+    const kept = items.filter(s => { try { return fs.existsSync(s.file); } catch (e) { return false; } });
+    if (kept.length !== items.length) {
+        store.set('screenshots', kept);
+        broadcastScreenshots();
+        return true;
+    }
+    return false;
+}
+
+module.exports = { addScreenshot, publicList, getScreenshotById, deleteScreenshot, pruneMissing };

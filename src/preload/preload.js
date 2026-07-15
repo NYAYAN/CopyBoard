@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('api', {
     copyScreenshot: (id) => ipcRenderer.send('copy-screenshot', id),
     deleteScreenshot: (id) => ipcRenderer.send('delete-screenshot', id),
     showScreenshotFile: (id) => ipcRenderer.send('show-screenshot-file', id),
+    showScreenshotMenu: (id) => ipcRenderer.send('screenshot-context-menu', id),
     onScreenshotsUpdated: (callback) => ipcRenderer.on('screenshots-updated', (_, list) => callback(list)),
 
     // Quick-paste picker

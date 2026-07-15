@@ -55,7 +55,7 @@ function resetSelection() {
 }
 window.api.onCaptureReset(() => resetSelection());
 
-window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => {
+window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => {
     state.sourceId = sourceId;
     state.videoQuality = quality || 'high';
     if (qualitySelect) qualitySelect.value = state.videoQuality;
@@ -77,26 +77,34 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Use thumbnail for initial preview frame
-    if (dataUrl && dataUrl.length > 100) {
+    // Auto-place a default 500x500 box ONLY on a single monitor. With multiple monitors,
+    // leave every overlay empty (dimmed + "select area") so the user draws the region on
+    // the ONE monitor they want — a default box on every screen makes it unclear which
+    // monitor records.
+    const finish = () => {
+        if (!multiMonitor) applyDefaultSize();
+        window.api.notifyReady();
+    };
+
+    // Binary PNG buffer from main — decode via ImageBitmap (no base64/string round-trip).
+    if (imageData && imageData.byteLength) {
+        createImageBitmap(new Blob([imageData], { type: 'image/png' })).then((bmp) => {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+            if (bmp.close) bmp.close();
+            finish();
+        }).catch(() => finish());
+    } else if (typeof imageData === 'string' && imageData.length > 100) {
         const img = new Image();
         img.onload = () => {
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            // Auto-place a default 500x500 box ONLY on a single monitor. With multiple monitors,
-            // leave every overlay empty (dimmed + "select area") so the user draws the region on
-            // the ONE monitor they want — a default box on every screen makes it unclear which
-            // monitor records.
-            if (!multiMonitor) applyDefaultSize();
-            window.api.notifyReady();
+            finish();
         };
-        img.src = dataUrl;
+        img.src = imageData;
     } else {
-        // Fallback for initial frame if thumbnail fails
-        setTimeout(() => {
-            if (!multiMonitor) applyDefaultSize();
-            window.api.notifyReady();
-        }, 50);
+        // Fallback for initial frame if the capture failed
+        setTimeout(finish, 50);
     }
 });
 

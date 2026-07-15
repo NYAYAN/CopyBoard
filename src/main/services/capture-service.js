@@ -85,7 +85,9 @@ async function startCapture(mode) {
                     if (!source) return null;
                     return {
                         // toPNG() for lossless quality — toDataURL() may lose color fidelity.
-                        dataUrl: 'data:image/png;base64,' + source.thumbnail.toPNG().toString('base64'),
+                        // Sent as a raw Buffer: IPC structured-clones it as binary, avoiding
+                        // the old base64 data-URL round-trip (+33% size, string copy, decode).
+                        pngBuffer: source.thumbnail.toPNG(),
                         sourceId: source.id,
                         captureWidth,
                         captureHeight
@@ -110,7 +112,7 @@ async function startCapture(mode) {
                         // Screenshot + THIS monitor's sourceId (video getUserMedia records
                         // this monitor). Crop is emitted at native pixels and written via
                         // nativeImage scaleFactor 1.0, so paste size stays monitor-independent.
-                        win.webContents.send('capture-screen', cap.dataUrl, mode, cap.sourceId, state.videoQuality, cap.captureWidth, cap.captureHeight, multiMonitor);
+                        win.webContents.send('capture-screen', cap.pngBuffer, mode, cap.sourceId, state.videoQuality, cap.captureWidth, cap.captureHeight, multiMonitor);
                     }
                 });
             });

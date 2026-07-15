@@ -21,7 +21,7 @@ resizeCanvas();
 window.api.onCaptureReset(() => reset());
 
 // --- Capture & Initialize ---
-window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
+window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, captureHeight) => {
     const logicalW = window.innerWidth;
     const logicalH = window.innerHeight;
     const physW = captureWidth || logicalW;
@@ -37,20 +37,30 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     reset();
 
-    if (dataUrl && dataUrl.length > 100) {
+    const finish = () => {
+        overlay.style.display = 'block';
+        document.body.classList.add('ready');
+        window.api.notifyReady();
+    };
+
+    // Binary PNG buffer from main — decode via ImageBitmap (no base64/string round-trip).
+    if (imageData && imageData.byteLength) {
+        createImageBitmap(new Blob([imageData], { type: 'image/png' })).then((bmp) => {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+            if (bmp.close) bmp.close();
+            finish();
+        }).catch(() => finish());
+    } else if (typeof imageData === 'string' && imageData.length > 100) {
         const img = new Image();
         img.onload = () => {
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            overlay.style.display = 'block';
-            document.body.classList.add('ready');
-            window.api.notifyReady();
+            finish();
         };
-        img.src = dataUrl;
+        img.src = imageData;
     } else {
-        overlay.style.display = 'block';
-        document.body.classList.add('ready');
-        setTimeout(() => window.api.notifyReady(), 50);
+        setTimeout(finish, 50);
     }
 });
 

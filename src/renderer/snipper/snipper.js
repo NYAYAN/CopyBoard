@@ -126,7 +126,7 @@ ctx.imageSmoothingEnabled = false;
 drawCtx.imageSmoothingEnabled = false;
 
 // --- Capture & Initialize Screen ---
-window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, captureHeight) => {
+window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, captureHeight) => {
     const logicalW = window.innerWidth;
     const logicalH = window.innerHeight;
 
@@ -156,24 +156,33 @@ window.api.onCaptureScreen((dataUrl, mode, sourceId, quality, captureWidth, capt
     clearOverlay();
     resetUI();
 
-    // Use the high-res PNG screenshot from main process (desktopCapturer thumbnail)
-    if (dataUrl && dataUrl.length > 100) {
-        const img = new Image();
-        img.onload = () => {
-            // Draw at native resolution — pixel-perfect like Snipping Tool
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            drawOverlay(0, 0, logicalW, logicalH);
-            document.body.classList.add('ready');
-            window.api.notifyReady();
-        };
-        img.src = dataUrl;
-    } else {
-        // Thumbnail failed and no stream available. This shouldn't happen with our new capture-service.
+    const finish = () => {
         drawOverlay(0, 0, logicalW, logicalH);
         document.body.classList.add('ready');
-        setTimeout(() => window.api.notifyReady(), 50);
+        window.api.notifyReady();
+    };
+
+    // Binary PNG buffer from main — decode via ImageBitmap (no base64/string round-trip).
+    if (imageData && imageData.byteLength) {
+        createImageBitmap(new Blob([imageData], { type: 'image/png' })).then((bmp) => {
+            // Draw at native resolution — pixel-perfect like Snipping Tool
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+            if (bmp.close) bmp.close();
+            finish();
+        }).catch(() => finish()); // decode failed → dim-only overlay
+    } else if (typeof imageData === 'string' && imageData.length > 100) {
+        // Legacy data-URL path, kept as a fallback.
+        const img = new Image();
+        img.onload = () => {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            finish();
+        };
+        img.src = imageData;
+    } else {
+        // Capture failed entirely. This shouldn't happen with the current capture-service.
+        setTimeout(finish, 50);
     }
 });
 

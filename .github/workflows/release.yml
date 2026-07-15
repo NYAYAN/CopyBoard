@@ -14,6 +14,12 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     strategy:
+      # Run the platform builds one at a time: two parallel electron-builder
+      # --publish always jobs race to find an existing draft for the tag and
+      # can each create their OWN draft release (duplicate v2.8.3 drafts, one
+      # with the win assets, one with mac). Sequential jobs make the second
+      # build find and append to the first build's draft.
+      max-parallel: 1
       matrix:
         os: [windows-latest, macos-latest]
 

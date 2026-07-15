@@ -44,6 +44,10 @@ export function renderGallery(list) {
         item.appendChild(img);
         item.appendChild(time);
         item.addEventListener('click', () => openPreview(shot));
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            window.api.showScreenshotMenu(shot.id);
+        });
         grid.appendChild(item);
     });
 }

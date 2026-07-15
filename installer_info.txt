@@ -1,6 +1,6 @@
-﻿CopyBoard v2.6.3 - Sürüm Notları
+﻿CopyBoard
 
-Gelişmiş Pano Yöneticisi ve OCR Aracı
+Gelişmiş Pano Yöneticisi, Ekran Yakalama ve OCR Aracı
 
 CopyBoard, günlük iş akışınızı hızlandırmak için tasarlanmış kapsamlı bir üretkenlik aracıdır.
 
@@ -25,7 +25,8 @@ DETAYLI ÖZELLİKLER:
 5. Ekran Alıntısı Aracı (Snipping Tool):
    - Ekranın istediğiniz bir bölümünün görüntüsünü alabilirsiniz.
    - Alınan görüntü üzerinde çizim yapabilir (Ok, Kalem, Şekiller, Blur/Bulanıklaştırma) ve metin ekleyebilirsiniz.
-   - Görüntüyü panoya kopyalamak için butonları kullanabilir veya doğrudan "Ctrl + C" yapabilirsiniz.
+   - Görüntüyü panoya kopyalamak için butonları kullanabilir veya doğrudan "Ctrl + C" / "Enter" yapabilirsiniz.
+   - Büyüteç ile piksel hassasiyetinde seçim yapabilir, ok tuşlarıyla ince ayar yapabilir, "C" tuşuyla imlecin altındaki renk kodunu kopyalayabilirsiniz.
 
 6. Video Ekran Kaydı:
    - İster tam ekran, isterseniz de sadece belirlediğiniz özel bir alanın videosunu çekebilirsiniz.
@@ -39,11 +40,20 @@ DETAYLI ÖZELLİKLER:
    - Masaüstünde her an elinizin altında duran, dilediğiniz köşeye yaslanabilen yüzen araç.
    - Pano, Ekran Yakalama, OCR ve Video Kaydı araçlarına tek tıkla erişim sağlar.
 
+9. Hızlı Yapıştır (Quick Paste):
+   - Herhangi bir metin kutusundayken kısayola basın; imlecinizin yanında son kopyaladıklarınız açılır.
+   - Bir öğeye tıklayın, tam o an bulunduğunuz alana anında yapışır.
+
+10. Ekran Görüntüsü Galerisi:
+   - Kopyaladığınız veya kaydettiğiniz ekran görüntüleri otomatik saklanır (son 30 adet).
+   - Ana penceredeki galeri butonundan önceki görüntülerinize ulaşabilir; kopyalayabilir, klasörde gösterebilir veya silebilirsiniz.
+
 KISAYOLLAR (Varsayılan):
 - Alt + V: Pano Listesi
-- Alt + 2: Metin Oku (OCR)
-- Alt + 8: Video Kaydı
+- Ctrl + Shift + V: Hızlı Yapıştır
 - Alt + 9: Ekran Görüntüsü
+- Alt + 8: Video Kaydı
+- Alt + 2: Metin Oku (OCR)
 
 Geliştirici: Nurullah YAYAN
 İletişim: nurullah.yayan@gmail.com

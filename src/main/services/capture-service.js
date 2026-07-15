@@ -1,6 +1,6 @@
 const { desktopCapturer, screen, systemPreferences, dialog, shell } = require('electron');
 const { state } = require('./state');
-const { createCapture, showToast } = require('./window-manager');
+const { createCapture, showToast, closeAllCaptureWindows } = require('./window-manager');
 
 async function startCapture(mode) {
     try {
@@ -46,13 +46,25 @@ async function startCapture(mode) {
         // monitor" size upscales-then-downscales lower-res screens — e.g. a 1080p laptop next to
         // a 4K monitor came out blurry. Calling getSources() once per display, sized to that
         // display, keeps every monitor pixel-sharp (native quality like Snipping Tool).
+        // Open every display's overlay window IMMEDIATELY (hidden while its HTML loads) so
+        // window creation + page load run in PARALLEL with the screen captures below — the
+        // dim appears as soon as both are ready instead of after capture-then-load in series.
+        // Overlays only become visible after they receive their screenshot ('snip-ready'),
+        // and hidden windows are never included in desktopCapturer output, so they can't
+        // contaminate the captured images.
+        const wins = displays.map(display => createCapture(mode, display));
+        const winReady = wins.map(win => new Promise(resolve => {
+            win.webContents.once('did-finish-load', () => resolve(true));
+            win.once('closed', () => resolve(false)); // e.g. ESC pressed while still loading
+        }));
+
         // Capture displays with BOUNDED concurrency: parallel enough that the dim appears
         // fast, but capped so peak memory stays ~O(cap) native thumbnails instead of O(N^2)
         // when several high-DPI monitors are captured at once (each getSources returns one
         // thumbnail PER screen). The common 1-2 monitor case is still fully parallel. Each
         // display is captured at ITS OWN native size for pixel-sharpness.
         const CAPTURE_CONCURRENCY = 2;
-        const captures = [];
+        let createdAny = false;
         for (let start = 0; start < displays.length; start += CAPTURE_CONCURRENCY) {
             const batch = displays.slice(start, start + CAPTURE_CONCURRENCY);
             const batchResults = await Promise.all(batch.map(async (display, bi) => {
@@ -72,7 +84,6 @@ async function startCapture(mode) {
                     if (!source) source = sources[i] || sources[0];
                     if (!source) return null;
                     return {
-                        display,
                         // toPNG() for lossless quality — toDataURL() may lose color fidelity.
                         dataUrl: 'data:image/png;base64,' + source.thumbnail.toPNG().toString('base64'),
                         sourceId: source.id,
@@ -84,25 +95,29 @@ async function startCapture(mode) {
                     return null;
                 }
             }));
-            captures.push(...batchResults);
-        }
 
-        let createdAny = false;
-        for (const cap of captures) {
-            if (!cap) continue;
-            const win = createCapture(mode, cap.display);
-            win.webContents.on('did-finish-load', () => {
-                if (!win.isDestroyed()) {
-                    // Screenshot data URL + THIS monitor's sourceId (video getUserMedia records
-                    // this monitor). Crop is emitted at native pixels and written via nativeImage
-                    // scaleFactor 1.0, so paste size stays monitor-independent.
-                    win.webContents.send('capture-screen', cap.dataUrl, mode, cap.sourceId, state.videoQuality, cap.captureWidth, cap.captureHeight, multiMonitor);
+            // Dispatch this batch: send each screenshot to its (possibly still-loading)
+            // window as soon as BOTH are ready; close the windows of failed captures.
+            batchResults.forEach((cap, bi) => {
+                const win = wins[start + bi];
+                if (!cap) {
+                    if (win && !win.isDestroyed()) win.close();
+                    return;
                 }
+                createdAny = true;
+                winReady[start + bi].then((loaded) => {
+                    if (loaded && !win.isDestroyed()) {
+                        // Screenshot + THIS monitor's sourceId (video getUserMedia records
+                        // this monitor). Crop is emitted at native pixels and written via
+                        // nativeImage scaleFactor 1.0, so paste size stays monitor-independent.
+                        win.webContents.send('capture-screen', cap.dataUrl, mode, cap.sourceId, state.videoQuality, cap.captureWidth, cap.captureHeight, multiMonitor);
+                    }
+                });
             });
-            createdAny = true;
         }
 
         if (!createdAny) {
+            closeAllCaptureWindows();
             throw new Error('Ekran kaynakları alınamadı');
         }
 

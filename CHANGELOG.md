@@ -1,3 +1,18 @@
+# CopyBoard v2.8.5 Release Notes
+
+Kısayol ve Hızlı Yapıştır düzeltmeleri.
+
+## ⚡ Hızlı Yapıştır
+- Hızlı Yapıştır kısayolu (Ctrl+Shift+V) başka bir uygulamaca kullanılıyorsa kayıt sessizce başarısız oluyor ve pencere hiç açılmıyordu; artık başlangıçta her kısayolun kayıt sonucu denetleniyor ve paste kısayolu kaydedilemezse açıklayıcı bir uyarı gösteriliyor.
+- Tepsi (tray) menüsüne **"Hızlı Yapıştır"** eklendi — kısayol hangi sebeple olursa olsun (çakışma, RDP/uç nokta politikası, rezerve kombinasyon) çalışmasa bile pencere her zaman buradan açılabilir.
+
+## ⌨️ Kısayollar
+- Cmd/Ctrl + {C, V, X, A, Z} gibi sistem Kopyala/Kes/Yapıştır tuşları genel kısayol olarak çalışamaz (öndeki uygulama yakalar ya da sistem kopyalaması bozulur); bu kombinasyonlar artık reddediliyor ve kullanıcı Alt/Shift eklemeye yönlendiriliyor — özellikle macOS'ta ekran görüntüsü için Cmd+C denemesini giderir.
+- Daha önce kaydedilmiş geçersiz (rezerve) bir kısayol açılışta varsayılana döndürülür; böylece hem kısayol hem de Ayarlar ekranı düzelir.
+- Başlangıç kaydı artık her kısayol için ayrı ayrı yapılıyor; biri başarısız olsa bile diğerleri etkilenmiyor.
+
+---
+
 # CopyBoard v2.8.4 Release Notes
 
 Ekran Görüntüsü Galerisi için düzeltmeler.

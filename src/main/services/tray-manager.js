@@ -1,7 +1,7 @@
 const { Tray, Menu, app } = require('electron');
 const path = require('path');
 const { state } = require('./state');
-const { showMain, createCapture } = require('./window-manager');
+const { showMain, createCapture, toggleQuickPaste } = require('./window-manager');
 
 function initTray() {
     // Correct path relative to src/main/services
@@ -21,6 +21,9 @@ function initTray() {
 
     const contextMenu = Menu.buildFromTemplate([
         { label: 'Göster', click: showMain },
+        // Always-available way to open the picker even when its global hotkey is
+        // claimed/blocked (another clipboard app, RDP/endpoint policy, reserved combo).
+        { label: 'Hızlı Yapıştır', click: () => toggleQuickPaste() },
         { type: 'separator' },
         { label: 'Ekran Görüntüsü Al', click: () => require('./capture-service').startCapture('draw') },
         { label: 'Metin Oku (OCR)', click: () => require('./capture-service').startCapture('ocr') },

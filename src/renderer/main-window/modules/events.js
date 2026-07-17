@@ -246,6 +246,23 @@ function setupShortcutInput(element, callback) {
 
         keys.push(code.toUpperCase());
 
+        // A lone Cmd/Ctrl + a clipboard/editing key (Cmd+C, Ctrl+V, …) can't work as a
+        // GLOBAL shortcut: the focused app consumes the keystroke, and binding it would
+        // hijack system Copy/Cut/Paste. Reject inline, keep the previous binding, and
+        // hint that adding Alt/Shift makes it valid. The main process enforces the same
+        // rule; this just gives instant feedback in the settings dialog.
+        const mods = keys.slice(0, -1);
+        const lastKey = keys[keys.length - 1];
+        const hasCmdCtrl = mods.some(k => k === 'CommandOrControl' || k === 'Ctrl' || k === 'Control');
+        const hasAlt = mods.includes('Alt');
+        const hasShift = mods.includes('Shift');
+        if (hasCmdCtrl && !hasAlt && !hasShift && ['C', 'V', 'X', 'A', 'Z'].includes(lastKey)) {
+            const prev = element.value;
+            element.value = 'Alt veya Shift ekleyin';
+            setTimeout(() => { element.value = prev; }, 1400);
+            return;
+        }
+
         const displayKeys = keys.map(k => {
             if (k === 'CommandOrControl') return isMac ? 'Cmd' : 'Ctrl';
             if (k === 'Control') return 'Ctrl';

@@ -11,6 +11,8 @@ const timerElement = document.getElementById('timer');
 const instruction = document.querySelector('.instruction');
 const qualitySelect = document.getElementById('quality-select');
 const qualityLabel = document.getElementById('quality-label');
+const btnMic = document.getElementById('btn-mic');
+const btnSystemAudio = document.getElementById('btn-system-audio');
 
 const state = {
     isSelecting: false, isMoving: false, isResizing: false,
@@ -18,6 +20,8 @@ const state = {
     startX: 0, startY: 0, dragOffX: 0, dragOffY: 0,
     mediaRecorder: null, recordedChunks: [], startTime: 0, timerInterval: null,
     sourceId: null, isRecording: false, videoQuality: 'high', lastIgnoreState: null,
+    audioMicOn: false, audioSystemOn: false,
+    micStream: null, sysStream: null, audioContext: null,
     dpr: window.devicePixelRatio || 1,
     captureWidth: null,
     captureHeight: null,
@@ -121,6 +125,115 @@ if (qualitySelect) {
         state.videoQuality = e.target.value;
         window.api.setVideoQuality(state.videoQuality);
     });
+}
+
+// --- Audio toggles (microphone + system/computer audio) ---
+function updateAudioButtons() {
+    if (btnMic) {
+        btnMic.classList.toggle('active', !!state.audioMicOn);
+        btnMic.setAttribute('aria-pressed', state.audioMicOn ? 'true' : 'false');
+    }
+    if (btnSystemAudio) {
+        btnSystemAudio.classList.toggle('active', !!state.audioSystemOn);
+        btnSystemAudio.setAttribute('aria-pressed', state.audioSystemOn ? 'true' : 'false');
+    }
+}
+
+// Restore the last-used audio choices so the toolbar remembers them across captures.
+if (window.api.getAudioSettings) {
+    window.api.getAudioSettings().then((s) => {
+        state.audioMicOn = !!(s && s.mic);
+        state.audioSystemOn = !!(s && s.system);
+        updateAudioButtons();
+    }).catch(() => { });
+}
+
+if (btnMic) {
+    btnMic.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.isRecording) return; // audio sources are locked in once recording starts
+        state.audioMicOn = !state.audioMicOn;
+        updateAudioButtons();
+        if (window.api.setAudioMic) window.api.setAudioMic(state.audioMicOn);
+    });
+}
+
+if (btnSystemAudio) {
+    btnSystemAudio.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.isRecording) return;
+        state.audioSystemOn = !state.audioSystemOn;
+        updateAudioButtons();
+        if (window.api.setAudioSystem) window.api.setAudioSystem(state.audioSystemOn);
+    });
+}
+
+// Acquire a microphone audio track. On macOS this first ensures TCC permission so a denial
+// surfaces clearly instead of throwing a cryptic getUserMedia error.
+async function getMicTrack() {
+    if (window.api.platform === 'darwin' && window.api.ensureMicPermission) {
+        const granted = await window.api.ensureMicPermission();
+        if (!granted) {
+            throw new Error('Mikrofon izni verilmedi. Sistem Ayarları > Gizlilik ve Güvenlik > Mikrofon.');
+        }
+    }
+    const s = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    state.micStream = s;
+    return s.getAudioTracks()[0] || null;
+}
+
+// Acquire a system/computer audio (loopback) track.
+//  - Windows: Chromium's desktop-loopback trick. Requesting desktop audio REQUIRES a desktop
+//    video request in the same call; we keep the audio track and immediately drop the video.
+//  - macOS/Linux: getDisplayMedia, fulfilled by the main process with audio:'loopback'.
+async function getSystemAudioTrack() {
+    let s;
+    if (window.api.platform === 'win32') {
+        s = await navigator.mediaDevices.getUserMedia({
+            audio: { mandatory: { chromeMediaSource: 'desktop' } },
+            video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: state.sourceId } }
+        });
+    } else {
+        s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    }
+    s.getVideoTracks().forEach(t => t.stop()); // discard the throwaway video track
+    state.sysStream = s;
+    return s.getAudioTracks()[0] || null;
+}
+
+function systemAudioUnavailableMsg(err) {
+    const detail = err && err.message ? ' (' + err.message + ')' : '';
+    if (window.api.platform === 'darwin') {
+        return 'Sistem sesi kaydedilemedi. macOS\'ta bilgisayar sesini kaydetmek için BlackHole gibi bir sanal ses aygıtı gerekebilir.' + detail;
+    }
+    return 'Sistem sesi alınamadı.' + detail;
+}
+
+// MediaRecorder encodes only ONE audio track, so when both mic and system audio are on we
+// mix them into a single track with Web Audio. With a single source we return it untouched
+// (no AudioContext needed). Returns null when there is no audio at all.
+function mixAudioTracks(tracks) {
+    if (!tracks || tracks.length === 0) return null;
+    if (tracks.length === 1) return tracks[0];
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    state.audioContext = ctx;
+    if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) { } }
+    const dest = ctx.createMediaStreamDestination();
+    tracks.forEach((t) => {
+        try { ctx.createMediaStreamSource(new MediaStream([t])).connect(dest); }
+        catch (e) { console.error('Audio mix source failed:', e); }
+    });
+    return dest.stream.getAudioTracks()[0] || null;
+}
+
+function stopAudioCapture() {
+    try { if (state.micStream) state.micStream.getTracks().forEach(t => t.stop()); } catch (e) { }
+    try { if (state.sysStream) state.sysStream.getTracks().forEach(t => t.stop()); } catch (e) { }
+    try { if (state.audioContext) state.audioContext.close(); } catch (e) { }
+    state.micStream = state.sysStream = state.audioContext = null;
 }
 
 function updateIgnoreMouse(e) {
@@ -274,24 +387,57 @@ async function startRecording() {
         // Optimized bitrates: high enough for quality, low enough for steady encoding
         const bitrate = state.videoQuality === 'ultra' ? 50000000 : (state.videoQuality === 'high' ? 25000000 : (state.videoQuality === 'medium' ? 10000000 : 5000000));
 
+        // Acquire audio BEFORE recording starts so a failure is non-fatal: we warn and keep
+        // recording video (+ whatever audio succeeded) instead of losing the whole capture.
+        const audioTracks = [];
+        const audioWarnings = [];
+        if (state.audioMicOn) {
+            try {
+                const micTrack = await getMicTrack();
+                if (micTrack) audioTracks.push(micTrack);
+                else audioWarnings.push('Mikrofon sesi alınamadı.');
+            } catch (err) {
+                audioWarnings.push('Mikrofon sesi alınamadı: ' + (err && err.message ? err.message : err));
+            }
+        }
+        if (state.audioSystemOn) {
+            try {
+                const sysTrack = await getSystemAudioTrack();
+                if (sysTrack) audioTracks.push(sysTrack);
+                else audioWarnings.push(systemAudioUnavailableMsg());
+            } catch (err) {
+                audioWarnings.push(systemAudioUnavailableMsg(err));
+            }
+        }
+        if (audioWarnings.length) alert(audioWarnings.join('\n'));
+
+        // Combine the cropped-canvas video track with the (optional) mixed audio track.
+        const mixedAudioTrack = mixAudioTracks(audioTracks);
+        const captureStream = cropCanvas.captureStream(fps);
+        const recordStream = new MediaStream(captureStream.getVideoTracks());
+        if (mixedAudioTrack) recordStream.addTrack(mixedAudioTrack);
+        const hasAudio = !!mixedAudioTrack;
+
+        const audioCodec = hasAudio ? ',opus' : '';
         let options = { mimeType: 'video/webm', videoBitsPerSecond: bitrate };
         try {
-            // Prefer standard VP9 for high quality / efficiency
-            if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
-                options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: bitrate };
-            } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp8')) {
-                options = { mimeType: 'video/webm; codecs=vp8', videoBitsPerSecond: bitrate };
+            // Prefer standard VP9 for high quality / efficiency (add Opus when we have audio)
+            if (MediaRecorder.isTypeSupported(`video/webm; codecs=vp9${audioCodec}`)) {
+                options = { mimeType: `video/webm; codecs=vp9${audioCodec}`, videoBitsPerSecond: bitrate };
+            } else if (MediaRecorder.isTypeSupported(`video/webm; codecs=vp8${audioCodec}`)) {
+                options = { mimeType: `video/webm; codecs=vp8${audioCodec}`, videoBitsPerSecond: bitrate };
             }
         } catch (e) { console.error('Option selection failed', e); }
+        if (hasAudio) options.audioBitsPerSecond = 128000;
 
-        if (window.api.sendDebugLog) window.api.sendDebugLog(`Starting recording: ${finalW}x${finalH} @ ${fps}fps, ${bitrate/1000000}Mbps, Mime: ${options.mimeType}`);
-        
-        state.mediaRecorder = new MediaRecorder(cropCanvas.captureStream(fps), options);
+        if (window.api.sendDebugLog) window.api.sendDebugLog(`Starting recording: ${finalW}x${finalH} @ ${fps}fps, ${bitrate/1000000}Mbps, audio: ${hasAudio ? audioTracks.length + ' src' : 'none'}, Mime: ${options.mimeType}`);
+
+        state.mediaRecorder = new MediaRecorder(recordStream, options);
 
         state.mediaRecorder.ondataavailable = async (e) => {
             if (e.data.size > 0) window.api.recordChunk(await e.data.arrayBuffer());
         };
-        state.mediaRecorder.onstop = () => { window.api.recordStop(); };
+        state.mediaRecorder.onstop = () => { stopAudioCapture(); window.api.recordStop(); };
 
         const drawLoop = () => {
             if (state.isRecording) {
@@ -320,6 +466,8 @@ async function startRecording() {
         if (btnResetSize) btnResetSize.classList.add('hidden');
         if (qualitySelect) qualitySelect.classList.add('hidden');
         if (qualityLabel) qualityLabel.classList.add('hidden');
+        if (btnMic) btnMic.classList.add('hidden');
+        if (btnSystemAudio) btnSystemAudio.classList.add('hidden');
         btnStop.classList.remove('hidden');
         timerElement.classList.remove('hidden');
         selectionBox.classList.add('recording-border');
@@ -346,6 +494,7 @@ async function startRecording() {
         // run after a successful setup, so the Record button is still visible here.
         state.isRecording = false;
         state.mediaRecorder = null;
+        stopAudioCapture();
         alert('Kayıt başlatılamadı: ' + (e && e.message ? e.message : e));
     }
 }

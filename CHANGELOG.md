@@ -1,3 +1,15 @@
+# CopyBoard v2.8.6 Release Notes
+
+Ekran kaydına ses ekleme.
+
+## 🎬 Ekran Kaydında Ses (yeni)
+- Kayıt araç çubuğuna **🎤 Mikrofon** ve **🔊 Sistem Sesi (bilgisayar sesi)** aç/kapa düğmeleri eklendi; ikisi birlikte açıldığında tek ses kanalında mikslenir.
+- Kapalı kaynağın ikonunda çapraz çizgi gösterilir (susturulmuş göstergesi); seçim sonraki kayıtlar için hatırlanır.
+- Windows'ta mikrofon ve sistem sesi doğrudan çalışır. macOS'ta mikrofon desteklenir; sistem sesi işletim sisteminin desteklediği sürümlerde kaydedilir, aksi halde sanal ses aygıtı (ör. BlackHole) öneren bir uyarı gösterilir.
+- Bir ses kaynağı alınamazsa kayıt sessizce iptal olmaz: uyarı verilir ve video (+ alınabilen ses) ile devam eder.
+
+---
+
 # CopyBoard v2.8.5 Release Notes
 
 Kısayol ve Hızlı Yapıştır düzeltmeleri.

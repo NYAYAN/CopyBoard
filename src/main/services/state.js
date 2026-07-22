@@ -57,6 +57,8 @@ const state = {
     autoStart: store.get('autoStart', true),
     clipboardPaused: store.get('clipboardPaused', false),
     videoQuality: store.get('videoQuality', 'high'),
+    audioMic: store.get('audioMic', false),
+    audioSystem: store.get('audioSystem', false),
     shortcuts: {
         list: store.get('globalShortcut', 'Alt+V'),
         draw: store.get('globalShortcutImage', 'Alt+9'),

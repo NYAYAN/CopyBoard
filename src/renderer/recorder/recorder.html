@@ -29,6 +29,25 @@
                 <option value="ultra">Ultra (60fps / Yüksek Netlik)</option>
             </select>
             <div class="divider"></div>
+            <button class="tool-btn audio-toggle" id="btn-mic" title="Mikrofon Sesini Kaydet" aria-pressed="false">
+                <svg viewBox="0 0 24 24">
+                    <rect x="9" y="2" width="6" height="12" rx="3" />
+                    <path d="M5 11a7 7 0 0 0 14 0" stroke-linecap="round" />
+                    <line x1="12" y1="18" x2="12" y2="22" stroke-linecap="round" />
+                    <line x1="8" y1="22" x2="16" y2="22" stroke-linecap="round" />
+                    <line class="mute-slash" x1="4" y1="4" x2="20" y2="20" stroke-linecap="round" />
+                </svg>
+            </button>
+            <button class="tool-btn audio-toggle" id="btn-system-audio" title="Sistem Sesini (Bilgisayar Sesi) Kaydet"
+                aria-pressed="false">
+                <svg viewBox="0 0 24 24">
+                    <path d="M4 9v6h4l5 4V5L8 9H4z" stroke-linejoin="round" />
+                    <path d="M16 8.5a4 4 0 0 1 0 7" stroke-linecap="round" />
+                    <path d="M18.5 6a8 8 0 0 1 0 12" stroke-linecap="round" />
+                    <line class="mute-slash" x1="4" y1="4" x2="20" y2="20" stroke-linecap="round" />
+                </svg>
+            </button>
+            <div class="divider"></div>
             <button class="tool-btn" id="btn-fullscreen" title="Tam Ekran Seç">
                 <svg viewBox="0 0 24 24">
                     <path

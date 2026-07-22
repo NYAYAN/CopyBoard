@@ -1,8 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+    platform: process.platform,
     getHistory: () => ipcRenderer.invoke('get-history'),
     getSettings: () => ipcRenderer.invoke('get-settings'),
+    getAudioSettings: () => ipcRenderer.invoke('get-audio-settings'),
+    ensureMicPermission: () => ipcRenderer.invoke('ensure-mic-permission'),
     setMaxItems: (count) => ipcRenderer.send('set-max-items', count),
     setQuickPasteCount: (count) => ipcRenderer.send('set-quickpaste-count', count),
     setShortcut: (shortcut) => ipcRenderer.send('set-shortcut', shortcut),
@@ -26,6 +29,8 @@ contextBridge.exposeInMainWorld('api', {
     setAutoStart: (val) => ipcRenderer.send('set-autostart', val),
     setClipboardPaused: (val) => ipcRenderer.send('set-clipboard-paused', val),
     setVideoQuality: (val) => ipcRenderer.send('set-video-quality', val),
+    setAudioMic: (val) => ipcRenderer.send('set-audio-mic', val),
+    setAudioSystem: (val) => ipcRenderer.send('set-audio-system', val),
     setShowWidget: (show) => ipcRenderer.send('set-show-widget', show),
     setWidgetTransparent: (val) => ipcRenderer.send('set-widget-transparent', val),
     setWidgetColor: (val) => ipcRenderer.send('set-widget-color', val),

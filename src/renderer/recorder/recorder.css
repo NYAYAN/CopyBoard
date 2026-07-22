@@ -194,6 +194,28 @@ body.is-recording #selection-box {
     color: var(--danger);
 }
 
+/* Audio toggles: highlighted (accent) while enabled so the recording state is obvious. */
+.tool-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.tool-btn.active:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* "Off" indicator: a diagonal slash across the icon while the source is disabled (default),
+   removed the moment it is enabled (.active) — so muted vs. recording reads at a glance. */
+.audio-toggle .mute-slash {
+    stroke-width: 2.25;
+}
+
+.audio-toggle.active .mute-slash {
+    display: none;
+}
+
 /* Primary action: red record dot stands out among the neutral tools */
 #btn-record {
     color: var(--danger);

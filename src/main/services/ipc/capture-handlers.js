@@ -1,4 +1,4 @@
-const { ipcMain, clipboard, dialog, BrowserWindow, app, nativeImage } = require('electron');
+const { ipcMain, clipboard, dialog, BrowserWindow, app, nativeImage, systemPreferences } = require('electron');
 const fs = require('fs');
 const path = require('path');
 // Tesseract will be lazy-loaded in the OCR handler to speed up startup
@@ -26,6 +26,26 @@ function getOcrWorker() {
 // Screenshot / OCR / video-recording IPC.
 function registerCaptureHandlers() {
     ipcMain.on('set-video-quality', (e, v) => { state.videoQuality = v; store.set('videoQuality', v); });
+
+    // Recorder audio toggles (microphone + system/computer audio). Persisted so the
+    // recorder toolbar remembers the last choice across captures/sessions.
+    ipcMain.on('set-audio-mic', (e, v) => { state.audioMic = !!v; store.set('audioMic', state.audioMic); });
+    ipcMain.on('set-audio-system', (e, v) => { state.audioSystem = !!v; store.set('audioSystem', state.audioSystem); });
+    ipcMain.handle('get-audio-settings', () => ({ mic: !!state.audioMic, system: !!state.audioSystem }));
+
+    // macOS: microphone access is gated by TCC. Prompt (or report current status) before the
+    // renderer calls getUserMedia so a denial surfaces as a clear message instead of a silent
+    // failure. On other platforms getUserMedia handles its own permission, so report granted.
+    ipcMain.handle('ensure-mic-permission', async () => {
+        if (process.platform !== 'darwin') return true;
+        try {
+            if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return true;
+            return await systemPreferences.askForMediaAccess('microphone');
+        } catch (err) {
+            console.error('Mic permission request failed:', err);
+            return false;
+        }
+    });
 
     ipcMain.on('snip-close', () => {
         // Cancel/close from any monitor tears down the whole capture (every overlay). The

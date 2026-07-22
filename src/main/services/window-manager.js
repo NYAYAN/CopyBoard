@@ -1,4 +1,4 @@
-const { BrowserWindow, screen, app, dialog, globalShortcut } = require('electron');
+const { BrowserWindow, screen, app, dialog, globalShortcut, desktopCapturer } = require('electron');
 const path = require('path');
 const { state, store } = require('./state');
 const { warmPasteHelper } = require('./paste-service');
@@ -79,6 +79,22 @@ function createCapture(type = 'draw', display = null) {
     // need this.
     if (type === 'video') {
         try { win.setContentProtection(true); } catch (e) { console.error('setContentProtection failed:', e); }
+
+        // macOS system-audio capture. Chromium's getUserMedia desktop-loopback trick (used on
+        // Windows) is unavailable on macOS, so the recorder falls back to getDisplayMedia there.
+        // This handler fulfils that request with a screen source + loopback audio; the renderer
+        // discards the video track and keeps only the audio. Loopback audio works only on
+        // supported macOS versions — if unavailable the stream has no audio track and the
+        // recorder warns the user (about needing a virtual audio device) and records without it.
+        if (process.platform === 'darwin') {
+            try {
+                win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
+                    desktopCapturer.getSources({ types: ['screen'] })
+                        .then(sources => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
+                        .catch(err => { console.error('DisplayMedia source failed:', err); callback({}); });
+                }, { useSystemPicker: false });
+            } catch (e) { console.error('setDisplayMediaRequestHandler failed:', e); }
+        }
     }
 
     // Hide Widget during capture

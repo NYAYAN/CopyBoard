@@ -1,3 +1,19 @@
+# CopyBoard v2.8.7 Release Notes
+
+macOS'ta Hızlı Yapıştır artık gerçekten yapıştırıyor.
+
+## ⚡ Hızlı Yapıştır (macOS)
+- Hızlı Yapıştır'dan bir öğe seçildiğinde macOS'ta yapıştırma hiç gerçekleşmiyordu: panel açılıyor, öğe panoya kopyalanıyor, ama odaktaki metin alanına bir şey yazılmıyordu. Sebebi, tuş vuruşu gönderen kodun yalnızca Windows için yazılmış olmasıydı (`sendPasteKeystroke` macOS'ta hiçbir şey yapmadan dönüyordu). Artık macOS'ta da `Cmd+V` gönderiliyor.
+- Panel açılırken o an önde olan uygulama hatırlanıyor ve yapıştırmadan hemen önce tekrar öne alınıyor; panele tıklamanın odağı kaydırdığı durumlarda seçilen öğe yanlış yere gitmiyor.
+- Erişilebilirlik (Accessibility) izni yoksa sistem izin penceresi uygulama tarafından açılıyor — kullanıcının Ayarlar içinde ilgili paneli elle bulması gerekmiyor. İstem oturum başına yalnızca bir kez gösteriliyor.
+- İzin verilmemişse veya yapıştırma başarısız olursa artık sessiz kalınmıyor: eksik iznin türünü (Erişilebilirlik / Otomasyon) belirten bir uyarı gösteriliyor ve öğenin panoya kopyalandığı, `Cmd+V` ile elle yapıştırılabileceği bildiriliyor.
+- Bilinen davranış: macOS verilen Erişilebilirlik iznini zaten çalışan bir uygulamaya uygulamaz; izni verdikten sonra CopyBoard'un bir kez yeniden başlatılması gerekir.
+
+## 🖥️ Windows
+- Bu sürümde Windows tarafındaki yapıştırma davranışı değişmedi.
+
+---
+
 # CopyBoard v2.8.6 Release Notes
 
 Ekran kaydına ses ekleme.

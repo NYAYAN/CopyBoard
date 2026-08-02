@@ -1,6 +1,6 @@
 {
   "name": "copyboard",
-  "version": "2.8.6",
+  "version": "2.8.7",
   "description": "Gelişmiş Pano Yöneticisi ve OCR Aracı",
   "main": "src/main/main.js",
   "repository": {
@@ -41,7 +41,8 @@
       "category": "public.app-category.utilities",
       "identity": null,
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "CopyBoard, ekran kaydınıza mikrofon sesinizi eklemek için mikrofona erişim ister."
+        "NSMicrophoneUsageDescription": "CopyBoard, ekran kaydınıza mikrofon sesinizi eklemek için mikrofona erişim ister.",
+        "NSAppleEventsUsageDescription": "CopyBoard, hızlı yapıştırma sırasında seçtiğiniz öğeyi odaktaki uygulamaya yapıştırmak için Cmd+V tuş vuruşunu gönderir."
       }
     },
     "dmg": {

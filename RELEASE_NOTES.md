@@ -1,21 +1,24 @@
-# CopyBoard v2.8.6 - Ekran Kaydında Ses 🎬🔊
+# CopyBoard v2.8.7 - macOS'ta Hızlı Yapıştır Düzeltmesi ⌨️🍎
 
-Bu sürüm, ekran kaydına ses ekleme özelliğini getiriyor.
+Bu sürüm, macOS'ta Hızlı Yapıştır'ın seçilen öğeyi metin alanına yapıştırmamasını gideriyor.
 
-## 🎤 Mikrofon ve 🔊 Sistem Sesi
-- Kayıt araç çubuğuna iki yeni aç/kapa düğmesi eklendi: **Mikrofon** (kendi sesiniz) ve **Sistem Sesi** (bilgisayardan çıkan ses — müzik, video, uygulama sesleri).
-- İkisini birlikte açabilirsiniz; anlatımınız ve uygulama sesi tek kayıtta birleştirilir (tek ses kanalında mikslenir).
-- Bir kaynak **kapalıyken ikonunun üzerinde çapraz çizgi** görünür, böylece neyin kaydedildiği bir bakışta anlaşılır. Seçiminiz bir sonraki kayıt için hatırlanır.
+## ⚡ Hızlı Yapıştır artık macOS'ta da yapıştırıyor
+- Şimdiye kadar macOS'ta Hızlı Yapıştır panelinden bir öğe seçtiğinizde öğe **panoya kopyalanıyor ama odaktaki metin alanına yazılmıyordu**. Tuş vuruşunu gönderen bölüm yalnızca Windows için yazılmıştı; macOS tarafı hiç uygulanmamıştı. Artık macOS'ta da yapıştırma gerçekleşiyor.
+- Panel açılırken **önde olan uygulama hatırlanıyor** ve yapıştırma anında yeniden öne alınıyor. Böylece panele tıklamanın odağı kaydırdığı durumlarda seçtiğiniz metin yanlış pencereye gitmiyor.
 
-## 🖥️ Platform Desteği
-- **Windows:** Mikrofon ve sistem sesi doğrudan çalışır; ek kurulum gerekmez.
-- **macOS:** Mikrofon ilk kullanımda izin isteyerek çalışır. Sistem sesi, işletim sisteminin desteklediği sürümlerde kaydedilir; desteklenmiyorsa BlackHole gibi bir sanal ses aygıtı öneren bir uyarı gösterilir ve kayıt video ile sürer.
+## 🔐 İzin akışı elle uğraştırmıyor
+- macOS'ta başka bir uygulamaya tuş vuruşu göndermek **Erişilebilirlik** izni gerektirir (Windows'ta böyle bir gereksinim yoktur). CopyBoard bu izni artık **kendisi istiyor**: sistemin "Open System Settings" düğmeli penceresi açılıyor, Ayarlar içinde doğru paneli aramanız gerekmiyor. İstem oturum başına yalnızca bir kez gösteriliyor.
+- **İzni verdikten sonra CopyBoard'u kapatıp yeniden açın.** macOS, verilen izni zaten çalışmakta olan bir uygulamaya uygulamaz; bu adım atlanırsa izin verilmiş görünse bile yapıştırma çalışmaz.
 
-## 🛡️ Güvenli Davranış
-- Ses kaynağı alınamazsa (izin reddi, aygıt yok vb.) kayıt sessizce başarısız olmaz: açıklayıcı bir uyarı gösterilir ve kayıt video (ve alınabilen ses) ile devam eder — çekiminizi kaybetmezsiniz.
+## 🛡️ Sessiz başarısızlık yok
+- İzin verilmemişse ya da yapıştırma herhangi bir sebeple başarısız olursa artık hiçbir şey olmamış gibi davranılmıyor: hangi iznin eksik olduğunu (**Erişilebilirlik** veya **Otomasyon**) belirten bir uyarı gösteriliyor.
+- Her durumda seçtiğiniz öğe panoya kopyalanmış oluyor, yani en kötü ihtimalle `Cmd+V` ile elle yapıştırabilirsiniz.
+
+## 🖥️ Windows
+- Windows tarafındaki yapıştırma davranışı bu sürümde değişmedi.
 
 ## 📦 Kurulum & Güncelleme
-1. CopyBoard-Setup-2.8.6.exe dosyasını indirip kurun; veya
+1. CopyBoard-Setup-2.8.7.exe (Windows) veya CopyBoard-2.8.7.dmg (macOS) dosyasını indirip kurun; veya
 2. Açık uygulamada otomatik güncelleme bildirimiyle geçin.
 
 ---

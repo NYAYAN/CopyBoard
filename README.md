@@ -1,8 +1,8 @@
-# CopyBoard v2.8.6
+# CopyBoard v2.8.7
 
 > **Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR (Resimden Yazıya Çevirme) Uygulaması**
 
-![Version](https://img.shields.io/badge/version-2.8.6-blue)
+![Version](https://img.shields.io/badge/version-2.8.7-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-ISC-green)
 
@@ -81,6 +81,13 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 > sudo xattr -rd com.apple.quarantine /Applications/CopyBoard.app
 > ```
 > *Komutu girdikten sonra şifrenizi girmeniz gerekebilir.*
+
+> **⌨️ macOS'te Hızlı Yapıştır İzni:**
+> Hızlı Yapıştır'ın seçtiğiniz öğeyi odaktaki metin alanına **otomatik yapıştırabilmesi** için macOS'un
+> **Erişilebilirlik** iznine ihtiyacı vardır (Windows'ta böyle bir izin gerekmez). İlk kullanımda CopyBoard
+> bu izni sizden kendisi ister — "Open System Settings" düğmesine basıp CopyBoard'u açmanız yeterli.
+> **İzni verdikten sonra CopyBoard'u kapatıp yeniden açın**; macOS verilen izni zaten çalışmakta olan bir
+> uygulamaya uygulamaz. İzin verilmezse öğe yine de panoya kopyalanır, `Cmd+V` ile elle yapıştırabilirsiniz.
 
 ---
 

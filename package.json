@@ -19,6 +19,7 @@
   "build": {
     "appId": "com.nurullahyayan.copyboard",
     "productName": "CopyBoard",
+    "afterPack": "scripts/mac-adhoc-sign.js",
     "publish": [
       {
         "provider": "github",

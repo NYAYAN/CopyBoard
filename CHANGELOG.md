@@ -9,8 +9,14 @@ macOS'ta Hızlı Yapıştır artık gerçekten yapıştırıyor.
 - İzin verilmemişse veya yapıştırma başarısız olursa artık sessiz kalınmıyor: eksik iznin türünü (Erişilebilirlik / Otomasyon) belirten bir uyarı gösteriliyor ve öğenin panoya kopyalandığı, `Cmd+V` ile elle yapıştırılabileceği bildiriliyor.
 - Bilinen davranış: macOS verilen Erişilebilirlik iznini zaten çalışan bir uygulamaya uygulamaz; izni verdikten sonra CopyBoard'un bir kez yeniden başlatılması gerekir.
 
+## 🔏 macOS Kod İmzası
+- macOS uygulaması şimdiye kadar hiç yeniden imzalanmıyordu: `identity: null` olduğu için electron-builder imzalamayı tamamen atlıyor ve paket, stok Electron ikilisinin ad-hoc imzasını taşıyordu. Sonuç olarak uygulamanın kod kimliği `Identifier=Electron` görünüyor, CDHash'i makinedeki diğer imzasız Electron uygulamalarıyla aynı oluyor ve uygulama kodu (`app.asar`) imza kapsamına hiç girmiyordu.
+- Build'e `afterPack` adımı eklendi (`scripts/mac-adhoc-sign.js`): paket, gerçek bundle kimliğiyle ad-hoc yeniden imzalanıyor (`Identifier=com.nurullahyayan.copyboard`, helper'lar kendi alt kimlikleriyle). Bu, macOS izinlerinin (Erişilebilirlik/Otomasyon) doğru uygulamaya bağlanması için gerekli; sertifika ya da Apple hesabı gerektirmiyor.
+- **Bu sürüme geçen macOS kullanıcıları Erişilebilirlik iznini bir kez yeniden vermek zorunda:** uygulamanın kod kimliği değiştiği için macOS eski izni tanımaz. Ayarlar → Gizlilik ve Güvenlik → Erişilebilirlik listesinde eski "CopyBoard" satırı varsa `−` ile kaldırın; yeni izin ilk Hızlı Yapıştır kullanımında istenecektir.
+- Bu bir Developer ID imzası **değildir**. Ad-hoc imzada takım kimliği bulunmadığı için Gatekeeper uygulamayı hâlâ "doğrulanmamış geliştirici" sayar ve kod her değiştiğinde CDHash değişeceğinden izinler her sürümde yeniden istenir. Kalıcı çözüm Developer ID + notarization.
+
 ## 🖥️ Windows
-- Bu sürümde Windows tarafındaki yapıştırma davranışı değişmedi.
+- Bu sürümde Windows tarafındaki yapıştırma davranışı ve imzalama akışı değişmedi.
 
 ---
 

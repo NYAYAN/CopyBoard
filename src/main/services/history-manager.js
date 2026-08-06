@@ -97,17 +97,25 @@ function reorderFavorites(newFavorites) {
     broadcast();
 }
 
-// Windows password managers / private-mode browsers mark sensitive clipboard
-// content with sentinel formats so it stays out of clipboard history. Detect via
-// clipboard.has() (NOT availableFormats, which never lists these). Fails safe: on
-// any error we return false and capture as normal, so an unsupported build simply
-// loses the extra protection rather than breaking capture.
+// Password managers / private-mode browsers mark sensitive clipboard content with
+// sentinel formats so it stays out of clipboard history — Windows and macOS each
+// have their own convention (macOS: the nspasteboard.org de-facto standard;
+// Transient covers "will be overwritten shortly" data like autofill staging).
+// Detect via clipboard.has() (NOT availableFormats, which never lists these).
+// Fails safe: on any error we return false and capture as normal, so an
+// unsupported build simply loses the extra protection rather than breaking capture.
 function isConcealedClipboard(clipboard) {
-    if (process.platform !== 'win32') return false;
     try {
-        return clipboard.has('Clipboard Viewer Ignore')
-            || clipboard.has('ExcludeClipboardContentFromMonitorProcessing')
-            || clipboard.has('CanIncludeInClipboardHistory');
+        if (process.platform === 'win32') {
+            return clipboard.has('Clipboard Viewer Ignore')
+                || clipboard.has('ExcludeClipboardContentFromMonitorProcessing')
+                || clipboard.has('CanIncludeInClipboardHistory');
+        }
+        if (process.platform === 'darwin') {
+            return clipboard.has('org.nspasteboard.ConcealedType')
+                || clipboard.has('org.nspasteboard.TransientType');
+        }
+        return false;
     } catch (e) {
         return false;
     }

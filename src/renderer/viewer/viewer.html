@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ekran Görüntüsü</title>
+    <link rel="stylesheet" href="viewer.css">
+</head>
+
+<body>
+    <div class="toolbar">
+        <div class="title" id="viewer-title">Ekran Görüntüsü</div>
+        <div class="toolbar-actions">
+            <button id="copy-btn" class="tb-btn" title="Panoya Kopyala">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Kopyala
+            </button>
+            <button id="folder-btn" class="tb-btn" title="Klasörde Göster">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+                Klasör
+            </button>
+            <button id="close-btn" class="tb-btn close" title="Kapat (Esc)" aria-label="Kapat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+    </div>
+    <div class="stage" id="viewer-stage">
+        <img id="viewer-img" alt="Ekran görüntüsü">
+    </div>
+    <button id="nav-prev" class="nav-btn prev" title="Önceki (←)" aria-label="Önceki">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+        </svg>
+    </button>
+    <button id="nav-next" class="nav-btn next" title="Sonraki (→)" aria-label="Sonraki">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M9 18l6-6-6-6" />
+        </svg>
+    </button>
+    <div class="strip" id="viewer-strip"></div>
+    <script src="viewer.js"></script>
+</body>
+
+</html>

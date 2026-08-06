@@ -1,5 +1,6 @@
-const { ipcMain, clipboard, nativeImage, shell, Menu, BrowserWindow } = require('electron');
+const { ipcMain, clipboard, nativeImage, shell, Menu, BrowserWindow, screen } = require('electron');
 const fs = require('fs');
+const path = require('path');
 const { showToast } = require('../window-manager');
 const { publicList, getScreenshotById, deleteScreenshot, pruneMissing } = require('../screenshot-library');
 
@@ -16,6 +17,117 @@ function shotOrPrune(id) {
         return null;
     }
     return shot;
+}
+
+// Full-size PNG as a data URL (the sandboxed renderers can't read arbitrary file
+// paths, and their CSP only allows 'self' + data: images).
+function shotDataUrl(id) {
+    const shot = shotOrPrune(id);
+    if (!shot) return null;
+    try {
+        return { shot, dataUrl: 'data:image/png;base64,' + fs.readFileSync(shot.file).toString('base64') };
+    } catch (err) {
+        deleteScreenshot(id); // vanished between the existence check and the read
+        return null;
+    }
+}
+
+// ── Large viewer ──────────────────────────────────────────────────────────────
+// A dedicated resizable window sized to the screenshot (capped to the display's
+// work area). The in-panel preview is confined to the 350px main window, which is
+// no way to actually inspect a full-resolution capture.
+let viewerWindow = null;
+let viewerPayload = null; // latest requested image — sent on did-finish-load
+
+// Payload for one shot, with its position in the gallery ("3 / 26") so the viewer
+// can show where the ←/→ navigation currently is.
+function viewerPayloadFor(id) {
+    const r = shotDataUrl(id);
+    if (!r) return null;
+    const list = publicList();
+    const idx = list.findIndex(s => s.id === r.shot.id);
+    return {
+        id: r.shot.id, dataUrl: r.dataUrl,
+        w: r.shot.w, h: r.shot.h, timestamp: r.shot.timestamp,
+        pos: idx + 1, total: list.length
+    };
+}
+
+// Thumbnails for the viewer's bottom filmstrip (click to switch image).
+const stripList = () => publicList().map(s => ({ id: s.id, thumb: s.thumb }));
+
+// Push the current strip + image to the viewer. Callers guard against the first
+// load still being in flight (did-finish-load delivers the state then) — the check
+// can NOT live here: isLoading() may still report true inside did-finish-load
+// itself, which would drop the initial image.
+function sendViewerState() {
+    if (!viewerWindow || viewerWindow.isDestroyed()) return;
+    viewerWindow.webContents.send('viewer-list', stripList());
+    if (viewerPayload) viewerWindow.webContents.send('viewer-image', viewerPayload);
+}
+
+function openViewer(id) {
+    const payload = viewerPayloadFor(id);
+    if (!payload) return;
+
+    const CHROME_H = 44 + 64; // toolbar row + bottom thumbnail strip
+    const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+    // Fit the image (never upscale), keep room for the chrome, center on screen.
+    const scale = Math.min(1, (wa.width * 0.85) / payload.w, (wa.height * 0.85 - CHROME_H) / payload.h);
+    const width = Math.max(480, Math.round(payload.w * scale));
+    const height = Math.max(320, Math.round(payload.h * scale) + CHROME_H);
+    const bounds = {
+        x: Math.round(wa.x + (wa.width - width) / 2),
+        y: Math.round(wa.y + (wa.height - height) / 2),
+        width, height
+    };
+
+    viewerPayload = payload;
+
+    if (viewerWindow && !viewerWindow.isDestroyed()) {
+        viewerWindow.setBounds(bounds);
+        // While the first load is in flight, skip — did-finish-load sends the
+        // latest viewerPayload anyway.
+        if (!viewerWindow.webContents.isLoading()) sendViewerState();
+        viewerWindow.show();
+        viewerWindow.focus();
+        return;
+    }
+
+    viewerWindow = new BrowserWindow({
+        ...bounds,
+        minWidth: 480,
+        minHeight: 320,
+        frame: false,
+        backgroundColor: '#1c1c1e',
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, '../../../preload/preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+        }
+    });
+
+    viewerWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    viewerWindow.loadFile(path.join(__dirname, '../../../renderer/viewer/viewer.html'));
+    viewerWindow.webContents.on('did-finish-load', () => {
+        if (viewerWindow && !viewerWindow.isDestroyed() && viewerPayload) {
+            sendViewerState();
+            viewerWindow.show();
+        }
+    });
+    viewerWindow.on('closed', () => { viewerWindow = null; viewerPayload = null; });
+}
+
+// Swap the displayed shot WITHOUT touching the window bounds — used by the ←/→
+// keys and filmstrip clicks, so the window stays where the user put it.
+function viewerShow(id) {
+    if (!viewerWindow || viewerWindow.isDestroyed()) return;
+    const payload = viewerPayloadFor(id);
+    if (!payload) return;
+    viewerPayload = payload;
+    if (!viewerWindow.webContents.isLoading()) sendViewerState();
 }
 
 function copyShot(id) {
@@ -46,28 +158,35 @@ function registerScreenshotHandlers() {
     // Prune stale entries whenever the grid is (re)loaded.
     ipcMain.handle('get-screenshots', () => { pruneMissing(); return publicList(); });
 
-    // Full-size image for the preview pane, as a data URL (the sandboxed renderer can't
-    // read arbitrary file paths, and the CSP only allows 'self' + data: images).
-    ipcMain.handle('get-screenshot-full', (e, id) => {
-        const shot = shotOrPrune(id);
-        if (!shot) return null;
-        try {
-            return 'data:image/png;base64,' + fs.readFileSync(shot.file).toString('base64');
-        } catch (err) {
-            deleteScreenshot(id); // vanished between the existence check and the read
-            return null;
-        }
-    });
-
     ipcMain.on('copy-screenshot', (e, id) => copyShot(id));
     ipcMain.on('delete-screenshot', (e, id) => removeShot(id));
     ipcMain.on('show-screenshot-file', (e, id) => revealShot(id));
+
+    // Large viewer window (opened from the gallery preview or the context menu).
+    ipcMain.on('open-screenshot-viewer', (e, id) => openViewer(id));
+    ipcMain.on('viewer-close', () => {
+        if (viewerWindow && !viewerWindow.isDestroyed()) viewerWindow.close();
+    });
+
+    // ←/→ inside the viewer: step through the gallery (newest-first order, no wrap).
+    ipcMain.on('viewer-nav', (e, dir) => {
+        if (!viewerPayload) return;
+        const list = publicList();
+        const idx = list.findIndex(s => s.id === viewerPayload.id);
+        if (idx === -1) return;
+        const target = list[idx + (dir === 'next' ? 1 : -1)];
+        if (target) viewerShow(target.id);
+    });
+
+    // Filmstrip click: jump straight to a shot.
+    ipcMain.on('viewer-select', (e, id) => viewerShow(id));
 
     // Right-click a thumbnail: native context menu with the same actions as the preview.
     ipcMain.on('screenshot-context-menu', (e, id) => {
         if (!getScreenshotById(id)) return;
         const win = BrowserWindow.fromWebContents(e.sender);
         const menu = Menu.buildFromTemplate([
+            { label: 'Büyük Görüntüle', click: () => openViewer(id) },
             { label: 'Kopyala', click: () => copyShot(id) },
             { label: 'Klasörde Göster', click: () => revealShot(id) },
             { type: 'separator' },

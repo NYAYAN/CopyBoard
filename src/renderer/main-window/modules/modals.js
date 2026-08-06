@@ -1,5 +1,4 @@
 import { elements } from './dom.js';
-import { closeGalleryPreview } from './gallery.js';
 
 export function showModal(modal) {
     modal.classList.remove('hidden');
@@ -17,7 +16,6 @@ export function resetView() {
     elements.settingsBtn.classList.remove('active');
     elements.aboutBtn.classList.remove('active');
     elements.galleryBtn.classList.remove('active');
-    closeGalleryPreview();
 
     hideModal(elements.addItemModal);
     hideModal(elements.noteModal);

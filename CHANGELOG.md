@@ -1,3 +1,35 @@
+# CopyBoard v2.9.0 Release Notes
+
+Galeri yenilendi: büyük görüntüleyici penceresi geldi; macOS düzeltmeleri, çevrimdışı OCR ve video kaydı iyileştirmeleri.
+
+## 🖼️ Büyük Görüntüleyici (yeni)
+- Ekran görüntüleri artık ekrana göre boyutlanan, yeniden boyutlandırılabilir ayrı bir pencerede açılıyor: **←/→** ile gezinme, fareyle beliren yan oklar, altta tıklanabilir **filmstrip** (aktif kare vurgulu), başlıkta boyut • tarih • "3 / 25" konumu.
+- Pencereden büyük görsellerde tıkla → gerçek boyut (kaydırılabilir), tekrar tıkla → sığdır. Araç çubuğunda Kopyala / Klasörde Göster; **Esc** kapatır.
+
+## 🖼️ Galeri
+- Küçük panel-içi önizleme kaldırıldı; her işlem ızgarada: kareye **tıkla → kopyala** (geçmiş satırlarıyla aynı jest, yeşil çerçeve + toast geri bildirimi).
+- Her karenin köşesinde dikey işlem sütunu: **Büyüt / Kopyala / Klasörde Göster / Sil**; sağ tık menüsüne **Büyük Görüntüle** eklendi.
+- Görünüm değiştirici: **tek sütun** (büyük kareler) / **iki sütun**; tercih kalıcı.
+
+## 🍎 macOS
+- Kısayolla açılan ana pencere artık bulunduğunuz masaüstünde (Space) açılıyor; macOS sizi pencerenin eski masaüstüne ışınlamıyor.
+- Parola yöneticilerinin gizli işaretlediği pano içerikleri (nspasteboard Concealed/Transient) Mac'te de geçmişe alınmıyor (Windows'taki korumanın eşleniği).
+- Tepsi ikonu Retina ekranlarda artık net (trayIcon@2x paketleniyor).
+- Toast bildirimleri imlecin olduğu ekranda çıkıyor ve tam ekran (fullscreen Space) uygulamaların üzerinde de görünüyor.
+
+## 🔤 OCR
+- eng/tur dil dosyaları uygulamayla paketleniyor (extraResources → tessdata): ilk taramada ~10MB CDN indirmesi yok, OCR çevrimdışı da çalışıyor.
+
+## 🎬 Video Kaydı
+- Chunk yazımı dosyayı her seferinde açıp kapatan senkron yazımdan tek WriteStream'e taşındı; kaydetme diyalogları asenkron — diyalog açıkken uygulama (pano izleyici dahil) donmuyor.
+- Son video parçasının diske record-stop'tan önce ulaşması garanti edildi (uzun kayıtlarda son saniyenin kırpılabildiği yarış giderildi).
+
+## ⌨️ Kısayol Ayarları
+- Ok tuşları, noktalama ve numpad tuşları doğru Electron adlarıyla kaydediliyor (ör. Alt+↑); desteklenmeyen tuşlar net mesajla reddediliyor.
+- Modifiersız tek tuş bağlanamıyor (yalnız "A" tuşu tüm sistemde A harfini gasp ederdi; F-tuşları istisna).
+
+---
+
 # CopyBoard v2.8.7 Release Notes
 
 macOS'ta Hızlı Yapıştır artık gerçekten yapıştırıyor.

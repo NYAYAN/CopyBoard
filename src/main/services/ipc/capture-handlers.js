@@ -16,11 +16,40 @@ function getOcrWorker() {
     if (ocrWorker) return Promise.resolve(ocrWorker);
     if (!ocrWorkerPromise) {
         const Tesseract = require('tesseract.js');
-        ocrWorkerPromise = Tesseract.createWorker('eng+tur', 1, { load_system_dawg: '0', load_freq_dawg: '0' })
+        // eng/tur language data ships with the app (extraResources → resources/tessdata;
+        // the repo root in dev), so OCR works offline instead of pulling ~10MB from the
+        // CDN on first scan. gzip:false — the bundled files are plain .traineddata.
+        // cacheMethod 'none' — we read straight from langPath, so a cache copy would be
+        // pure duplication (and the install dir may not even be writable).
+        const langPath = app.isPackaged
+            ? path.join(process.resourcesPath, 'tessdata')
+            : app.getAppPath();
+        ocrWorkerPromise = Tesseract.createWorker('eng+tur', 1, {
+            langPath, gzip: false, cacheMethod: 'none',
+            load_system_dawg: '0', load_freq_dawg: '0'
+        })
             .then(w => { ocrWorker = w; return w; })
             .catch(err => { ocrWorkerPromise = null; throw err; });
     }
     return ocrWorkerPromise;
+}
+
+// Recording chunks stream to disk through ONE WriteStream — the old
+// fs.appendFileSync-per-chunk reopened the file and blocked the main process
+// (every window + the clipboard watcher) on each write.
+let videoWriteStream = null;
+
+// Close the stream and invoke cb exactly once, whether it flushes cleanly,
+// errors (disk full), or was never open. record-stop must not read the temp
+// file before this completes.
+function endVideoStream(cb) {
+    const s = videoWriteStream;
+    videoWriteStream = null;
+    if (!s || s.destroyed) { cb(); return; }
+    let done = false;
+    const finish = () => { if (!done) { done = true; cb(); } };
+    s.on('error', finish);
+    try { s.end(finish); } catch (e) { console.error('Video stream end failed:', e); finish(); }
 }
 
 // Screenshot / OCR / video-recording IPC.
@@ -122,18 +151,28 @@ function registerCaptureHandlers() {
         }
     });
 
-    ipcMain.on('snip-save-image', (e, d) => {
+    ipcMain.on('snip-save-image', async (e, d) => {
         let win = BrowserWindow.fromWebContents(e.sender);
         if (!win && state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;
 
         const parent = process.platform === 'darwin' ? null : win;
         if (process.platform === 'darwin' && win && !win.isDestroyed()) win.setAlwaysOnTop(false);
 
-        const p = dialog.showSaveDialogSync(parent, {
-            title: 'Kaydet',
-            defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`),
-            filters: [{ name: 'Images', extensions: ['png'] }]
-        });
+        // Async dialog — the sync variant froze the whole main process while open.
+        let p = null;
+        try {
+            const opts = {
+                title: 'Kaydet',
+                defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`),
+                filters: [{ name: 'Images', extensions: ['png'] }]
+            };
+            const result = parent && !parent.isDestroyed()
+                ? await dialog.showSaveDialog(parent, opts)
+                : await dialog.showSaveDialog(opts);
+            if (!result.canceled && result.filePath) p = result.filePath;
+        } catch (dialogErr) {
+            console.error('Save dialog failed:', dialogErr);
+        }
 
         if (p) {
             try {
@@ -154,13 +193,18 @@ function registerCaptureHandlers() {
 
     ipcMain.on('record-start', (e) => {
         state.tempVideoPath = path.join(app.getPath('temp'), `temp_video_${Date.now()}.webm`);
+        endVideoStream(() => { }); // paranoia: a leftover stream from an aborted run
+        videoWriteStream = fs.createWriteStream(state.tempVideoPath);
+        videoWriteStream.on('error', (err) => console.error('Video temp write failed:', err));
         // Recording started on one monitor — close the overlays on the OTHER monitors and
         // remember the recording window so record-stop targets the right one.
         const win = BrowserWindow.fromWebContents(e.sender);
         if (win) state.recorderWindow = win;
         closeAllCaptureWindows(win);
     });
-    ipcMain.on('record-chunk', (e, arrayBuffer) => { if (state.tempVideoPath) fs.appendFileSync(state.tempVideoPath, Buffer.from(arrayBuffer)); });
+    ipcMain.on('record-chunk', (e, arrayBuffer) => {
+        if (videoWriteStream && !videoWriteStream.destroyed) videoWriteStream.write(Buffer.from(arrayBuffer));
+    });
 
     ipcMain.on('record-stop', (e) => {
         try {
@@ -172,42 +216,45 @@ function registerCaptureHandlers() {
 
             // Small delay to ensure window is hidden
             setTimeout(() => {
-                try {
-                    const p = dialog.showSaveDialogSync(null, {
-                        title: 'Videoyu Kaydet',
-                        defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`),
-                        filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }]
-                    });
+                endVideoStream(async () => {
+                    try {
+                        // Async dialog: the sync variant froze the whole main process
+                        // (clipboard watcher, toasts, tray) for as long as it stayed open.
+                        const { canceled, filePath } = await dialog.showSaveDialog({
+                            title: 'Videoyu Kaydet',
+                            defaultPath: path.join(app.getPath('videos'), `kayit_${Date.now()}.webm`),
+                            filters: [{ name: 'Videos', extensions: ['webm', 'mp4'] }]
+                        });
 
-                    if (p) {
-                        if (fs.existsSync(state.tempVideoPath) && fs.statSync(state.tempVideoPath).size > 0) {
-                            fs.copyFileSync(state.tempVideoPath, p);
-                            showToast('Video Kaydedildi.', 'success');
-                            try { fs.unlinkSync(state.tempVideoPath); } catch (err) { console.error('Temp deletion failed:', err); }
+                        if (!canceled && filePath) {
+                            if (state.tempVideoPath && fs.existsSync(state.tempVideoPath) && fs.statSync(state.tempVideoPath).size > 0) {
+                                await fs.promises.copyFile(state.tempVideoPath, filePath);
+                                showToast('Video Kaydedildi.', 'success');
+                                try { fs.unlinkSync(state.tempVideoPath); } catch (err) { console.error('Temp deletion failed:', err); }
+                            } else {
+                                showToast('Hata: Video verisi alınamadı. Kayıt başarısız.', 'error');
+                            }
                         } else {
-                            showToast('Hata: Video verisi alınamadı. Kayıt başarısız.', 'error');
+                            // Cancelled - Add temp path to history
+                            if (state.tempVideoPath && fs.existsSync(state.tempVideoPath)) {
+                                clipboard.writeText(state.tempVideoPath); // Copy to system clipboard for Windows/Mac
+                                addHistory(state.tempVideoPath);
+                                showToast('Kayıt iptal edildi. Dosya yolu panoya kopyalandı.', 'info');
+                            }
                         }
-                    } else {
-                        // Cancelled - Add temp path to history
-                        if (state.tempVideoPath && fs.existsSync(state.tempVideoPath)) {
-                            clipboard.writeText(state.tempVideoPath); // Copy to system clipboard for Windows/Mac
-                            addHistory(state.tempVideoPath);
-                            showToast('Kayıt iptal edildi. Dosya yolu panoya kopyalandı.', 'info');
-                            // Optionally open the folder?
-                            // require('electron').shell.showItemInFolder(state.tempVideoPath);
-                        }
+                    } catch (dialogErr) {
+                        console.error('Save Dialog Error:', dialogErr);
+                        showToast('Kaydetme Penceresi Hatası', 'error');
+                    } finally {
+                        state.tempVideoPath = null;
+                        if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
                     }
-                } catch (dialogErr) {
-                    console.error('Save Dialog Error:', dialogErr);
-                    showToast('Kaydetme Penceresi Hatası', 'error');
-                } finally {
-                    state.tempVideoPath = null;
-                    if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
-                }
+                });
             }, 100);
 
         } catch (err) {
             console.error('Record Stop Error:', err);
+            endVideoStream(() => { });
             if (state.recorderWindow && !state.recorderWindow.isDestroyed()) state.recorderWindow.close();
         }
     });

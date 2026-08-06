@@ -367,6 +367,47 @@ input[type="checkbox"] {
     pointer-events: none;
 }
 
+/* Corner action column on each grid thumbnail: large viewer, copy, folder, delete
+   — the full detail-view action set without leaving the grid. Sized to fit the
+   90px-tall thumbnails (4 × 20px + gaps). */
+.gallery-item-actions {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.gallery-item-actions button {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    cursor: pointer;
+    padding: 0;
+    transition: background var(--transition), transform var(--transition);
+}
+
+.gallery-item-actions button:hover {
+    background: var(--accent);
+    transform: scale(1.1);
+}
+
+.gallery-item-actions button.act-del:hover {
+    background: #e5534b;
+}
+
+.gallery-item-actions button svg {
+    width: 12px;
+    height: 12px;
+}
+
 .gallery-empty {
     grid-column: 1 / -1;
     text-align: center;
@@ -376,35 +417,58 @@ input[type="checkbox"] {
     padding: 24px 8px;
 }
 
-.gallery-preview {
+/* Plain click on a thumbnail copies it — brief green flash as feedback. */
+.gallery-item.copied {
+    border-color: #3fb950;
+}
+
+/* Layout switcher above the grid: single-column or two-column. */
+.gallery-toolbar {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    justify-content: flex-end;
+    margin-bottom: 8px;
 }
 
-.gallery-preview img {
-    width: 100%;
-    max-height: 300px;
-    object-fit: contain;
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+.gallery-layout-toggle {
+    display: flex;
+    gap: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 2px;
 }
 
-.gallery-preview-meta {
-    text-align: center;
+.gallery-layout-toggle button {
+    width: 26px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
     color: var(--text-secondary);
-    font-size: 0.68rem;
+    cursor: pointer;
+    padding: 0;
+    transition: background var(--transition), color var(--transition);
 }
 
-.gallery-preview-actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
+.gallery-layout-toggle button.active {
+    background: var(--accent);
+    color: #fff;
 }
 
-.gallery-preview-actions .modal-btn {
-    flex: 1 1 45%;
+.gallery-layout-toggle button svg {
+    width: 13px;
+    height: 13px;
+}
+
+/* Single-column view: one large thumbnail per row. */
+.gallery-grid.single {
+    grid-template-columns: 1fr;
+}
+
+.gallery-grid.single .gallery-item img {
+    height: 160px;
 }
 
 /* History List */

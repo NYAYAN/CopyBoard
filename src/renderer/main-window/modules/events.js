@@ -220,8 +220,39 @@ export function setupEventListeners() {
     });
 }
 
+// e.code → Electron accelerator key name. Returns null for keys Electron can't
+// register, so the UI can say so instead of sending an invalid accelerator that
+// fails with a misleading "another app owns it" toast (e.g. ArrowUp must be "Up",
+// Comma must be ",").
+const CODE_TO_ACCELERATOR = {
+    Space: 'Space', Tab: 'Tab', Enter: 'Enter', NumpadEnter: 'Enter',
+    Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert',
+    Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+    ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+    Comma: ',', Period: '.', Slash: '/', Backslash: '\\', Semicolon: ';',
+    Quote: "'", BracketLeft: '[', BracketRight: ']', Backquote: '`',
+    Minus: '-', Equal: '=',
+    NumpadAdd: 'numadd', NumpadSubtract: 'numsub', NumpadMultiply: 'nummult',
+    NumpadDivide: 'numdiv', NumpadDecimal: 'numdec'
+};
+
+function acceleratorKeyFromCode(code) {
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+    if (/^Digit\d$/.test(code)) return code.slice(5);
+    if (/^Numpad\d$/.test(code)) return 'num' + code.slice(6);
+    if (/^F([1-9]|1\d|2[0-4])$/.test(code)) return code;
+    return CODE_TO_ACCELERATOR[code] || null;
+}
+
 function setupShortcutInput(element, callback) {
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+    // Briefly show a hint in the input, then restore the current binding.
+    const flashHint = (msg) => {
+        const prev = element.value;
+        element.value = msg;
+        setTimeout(() => { element.value = prev; }, 1400);
+    };
 
     element.addEventListener('keydown', (e) => {
         e.preventDefault();
@@ -238,13 +269,24 @@ function setupShortcutInput(element, callback) {
         if (e.altKey) keys.push('Alt');
         if (e.shiftKey) keys.push('Shift');
 
-        let code = e.code;
-        if (code.startsWith('Key')) code = code.slice(3);
-        if (code.startsWith('Digit')) code = code.slice(5);
-
         if (['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'].includes(e.code)) return;
 
-        keys.push(code.toUpperCase());
+        const key = acceleratorKeyFromCode(e.code);
+        if (!key) {
+            flashHint('Bu tuş kısayol olarak kullanılamaz');
+            return;
+        }
+
+        // A modifier-less global accelerator would hijack plain typing everywhere
+        // (binding bare "A" steals the letter A from every app). Function keys are
+        // the standard standalone exception.
+        const isFKey = /^F([1-9]|1\d|2[0-4])$/.test(key);
+        if (keys.length === 0 && !isFKey) {
+            flashHint('Ctrl, Alt veya Shift ile birlikte kullanın');
+            return;
+        }
+
+        keys.push(key);
 
         // A lone Cmd/Ctrl + a clipboard/editing key (Cmd+C, Ctrl+V, …) can't work as a
         // GLOBAL shortcut: the focused app consumes the keystroke, and binding it would
@@ -257,9 +299,7 @@ function setupShortcutInput(element, callback) {
         const hasAlt = mods.includes('Alt');
         const hasShift = mods.includes('Shift');
         if (hasCmdCtrl && !hasAlt && !hasShift && ['C', 'V', 'X', 'A', 'Z'].includes(lastKey)) {
-            const prev = element.value;
-            element.value = 'Alt veya Shift ekleyin';
-            setTimeout(() => { element.value = prev; }, 1400);
+            flashHint('Alt veya Shift ekleyin');
             return;
         }
 

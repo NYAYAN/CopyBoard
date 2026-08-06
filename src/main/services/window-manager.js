@@ -24,6 +24,7 @@ function createMainWindow() {
         vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
         visualEffectState: 'active',
         backgroundColor: '#2c2c2e',
+        fullscreenable: false,
         webPreferences: {
             preload: path.join(__dirname, '../../preload/preload.js'),
             nodeIntegration: false,
@@ -31,6 +32,12 @@ function createMainWindow() {
             sandbox: true
         }
     });
+
+    // macOS Spaces: without this the window belongs to the Space it was last shown on,
+    // so the global shortcut yanks the user over to that desktop instead of opening the
+    // popup on the current one. Joining all workspaces (like the widget and quick-paste
+    // windows) makes it appear wherever the user is.
+    state.mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
     state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http')) require('electron').shell.openExternal(url);
@@ -161,10 +168,11 @@ function showToast(message, type = 'info') {
         if (state.toastWindow && !state.toastWindow.isDestroyed()) {
             state.toastWindow.destroy();
         }
-        const display = screen.getPrimaryDisplay();
-        const { width } = display.workAreaSize;
+        // Feedback belongs on the display the user is working on (cursor), not
+        // always the primary one.
+        const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
         state.toastWindow = new BrowserWindow({
-            width: 320, height: 100, x: width - 370, y: 50,
+            width: 320, height: 100, x: wa.x + wa.width - 370, y: wa.y + 50,
             frame: false, transparent: true, alwaysOnTop: true,
             skipTaskbar: true, resizable: false, show: false,
             webPreferences: {
@@ -175,6 +183,11 @@ function showToast(message, type = 'info') {
             }
         });
         state.toastWindow.setAlwaysOnTop(true, 'screen-saver');
+        // macOS: also show over fullscreen Spaces (the toast is inactive + click-through,
+        // so it can't disturb the fullscreen app). skipTransformProcessType because the
+        // dock is already hidden (UIElement) and toasts are recreated per message — the
+        // default process-type transform would flash windows on every toast.
+        state.toastWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
         state.toastWindow.loadFile(path.join(__dirname, '../../renderer/toast/toast.html'));
         state.toastWindow.once('ready-to-show', () => {
             if (state.toastWindow && !state.toastWindow.isDestroyed()) {

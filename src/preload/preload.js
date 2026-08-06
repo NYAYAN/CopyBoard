@@ -53,12 +53,19 @@ contextBridge.exposeInMainWorld('api', {
 
     // Screenshot gallery
     getScreenshots: () => ipcRenderer.invoke('get-screenshots'),
-    getScreenshotFull: (id) => ipcRenderer.invoke('get-screenshot-full', id),
     copyScreenshot: (id) => ipcRenderer.send('copy-screenshot', id),
     deleteScreenshot: (id) => ipcRenderer.send('delete-screenshot', id),
     showScreenshotFile: (id) => ipcRenderer.send('show-screenshot-file', id),
     showScreenshotMenu: (id) => ipcRenderer.send('screenshot-context-menu', id),
     onScreenshotsUpdated: (callback) => ipcRenderer.on('screenshots-updated', (_, list) => callback(list)),
+
+    // Large screenshot viewer window
+    openScreenshotViewer: (id) => ipcRenderer.send('open-screenshot-viewer', id),
+    onViewerImage: (callback) => ipcRenderer.on('viewer-image', (_, data) => callback(data)),
+    onViewerList: (callback) => ipcRenderer.on('viewer-list', (_, list) => callback(list)),
+    viewerNav: (dir) => ipcRenderer.send('viewer-nav', dir),
+    viewerSelect: (id) => ipcRenderer.send('viewer-select', id),
+    viewerClose: () => ipcRenderer.send('viewer-close'),
 
     // Quick-paste picker
     quickPastePick: (text) => ipcRenderer.send('quickpaste-pick', text),

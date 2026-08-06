@@ -434,10 +434,25 @@ async function startRecording() {
 
         state.mediaRecorder = new MediaRecorder(recordStream, options);
 
-        state.mediaRecorder.ondataavailable = async (e) => {
-            if (e.data.size > 0) window.api.recordChunk(await e.data.arrayBuffer());
+        // blob→ArrayBuffer is async, so a bare `await` in ondataavailable could let the
+        // FINAL chunk's IPC slip out after record-stop. Queue every read and have onstop
+        // await the queue — IPC from one renderer is FIFO, so once all recordChunk sends
+        // are issued, recordStop is guaranteed to arrive after them.
+        const pendingChunks = [];
+        state.mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+                pendingChunks.push(
+                    e.data.arrayBuffer()
+                        .then(buf => window.api.recordChunk(buf))
+                        .catch(err => console.error('Chunk read failed:', err))
+                );
+            }
         };
-        state.mediaRecorder.onstop = () => { stopAudioCapture(); window.api.recordStop(); };
+        state.mediaRecorder.onstop = async () => {
+            stopAudioCapture();
+            try { await Promise.all(pendingChunks); } catch (err) { }
+            window.api.recordStop();
+        };
 
         const drawLoop = () => {
             if (state.isRecording) {

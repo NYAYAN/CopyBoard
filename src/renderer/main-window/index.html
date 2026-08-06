@@ -94,19 +94,28 @@
         </div>
 
         <div id="gallery-panel" class="settings-panel hidden">
+            <div class="gallery-toolbar">
+                <div class="gallery-layout-toggle">
+                    <button id="gallery-layout-1" title="Tek sütun" aria-label="Tek sütun">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="7" rx="1.5" />
+                            <rect x="3" y="14" width="18" height="7" rx="1.5" />
+                        </svg>
+                    </button>
+                    <button id="gallery-layout-2" title="İki sütun" aria-label="İki sütun">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="8" height="7" rx="1.5" />
+                            <rect x="13" y="4" width="8" height="7" rx="1.5" />
+                            <rect x="3" y="14" width="8" height="7" rx="1.5" />
+                            <rect x="13" y="14" width="8" height="7" rx="1.5" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
             <div id="gallery-grid" class="gallery-grid">
                 <!-- Thumbnails injected by modules/gallery.js -->
-            </div>
-            <div id="gallery-preview" class="gallery-preview hidden">
-                <img id="gallery-preview-img" alt="Ekran görüntüsü önizleme">
-                <div id="gallery-preview-meta" class="gallery-preview-meta"></div>
-                <div class="gallery-preview-actions">
-                    <button id="gallery-back-btn" class="modal-btn">← Geri</button>
-                    <button id="gallery-copy-btn" class="modal-btn"
-                        style="background: var(--accent); color: white;">Kopyala</button>
-                    <button id="gallery-folder-btn" class="modal-btn">Klasörde Göster</button>
-                    <button id="gallery-delete-btn" class="modal-btn danger">Sil</button>
-                </div>
             </div>
         </div>
 

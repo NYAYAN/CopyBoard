@@ -1,6 +1,6 @@
 {
   "name": "copyboard",
-  "version": "2.8.7",
+  "version": "2.9.0",
   "description": "Gelişmiş Pano Yöneticisi ve OCR Aracı",
   "main": "src/main/main.js",
   "repository": {
@@ -63,9 +63,20 @@
       "icon.png",
       "icon.ico",
       "trayIcon.png",
+      "trayIcon@2x.png",
       "!**/*.map",
       "!**/*.idb",
       "!**/*.pdb"
+    ],
+    "extraResources": [
+      {
+        "from": "eng.traineddata",
+        "to": "tessdata/eng.traineddata"
+      },
+      {
+        "from": "tur.traineddata",
+        "to": "tessdata/tur.traineddata"
+      }
     ]
   },
   "devDependencies": {

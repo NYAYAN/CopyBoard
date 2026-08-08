@@ -82,28 +82,6 @@ export function setupEventListeners() {
     elements.minimizeBtn.addEventListener('click', () => window.api.closeWindow());
     window.addEventListener('focus', () => { if (document.activeElement) document.activeElement.blur(); });
 
-    // Modals
-    elements.addManualBtn.addEventListener('click', () => {
-        showModal(elements.addItemModal);
-        elements.manualTextInput.value = '';
-        elements.manualTextInput.focus();
-    });
-    elements.cancelAddBtn.addEventListener('click', () => hideModal(elements.addItemModal));
-    elements.confirmAddBtn.addEventListener('click', () => {
-        const text = elements.manualTextInput.value.trim();
-        if (text) {
-            window.api.addManualItem(text);
-            hideModal(elements.addItemModal);
-        }
-    });
-    // Ctrl/Cmd+Enter confirms; plain Enter stays a newline (multi-line textarea).
-    elements.manualTextInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            elements.confirmAddBtn.click();
-        }
-    });
-
     // Note Modal
     elements.closeNoteBtn.addEventListener('click', closeNoteModal);
     elements.editNoteBtn.addEventListener('click', () => showNoteEditMode(elements.noteInput.value));
@@ -155,6 +133,22 @@ export function setupEventListeners() {
         elements.aboutBtn.classList.remove('active');
         elements.galleryPanel.classList.toggle('hidden');
         elements.galleryBtn.classList.toggle('active');
+    });
+
+    // Header "Geçmiş" button (replaces the removed manual-add "+"): closes whichever
+    // panel is open (gallery/settings/about) and returns to the history list on the
+    // Tümü tab — the mirror of the gallery button.
+    elements.historyBtn.addEventListener('click', () => {
+        elements.settingsPanel.classList.add('hidden');
+        elements.settingsBtn.classList.remove('active');
+        elements.aboutPanel.classList.add('hidden');
+        elements.aboutBtn.classList.remove('active');
+        closeGalleryPanel();
+        if (state.activeTab !== 'all') {
+            elements.tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === 'all'));
+            state.activeTab = 'all';
+            renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
+        }
     });
 
     elements.updateBtn.addEventListener('click', () => {

@@ -529,11 +529,17 @@ input[type="checkbox"] {
     padding: 0 2px;
 }
 
+/* Single-line rows: content text ellipsizes on one line with the timestamp inline at
+   the right. Full content appears in the custom hover tooltip (500ms) instead — far
+   less text in the DOM and no multi-line wrap layout per row. */
 .history-content {
     flex: 1;
     overflow: hidden;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
     padding-right: 0;
 }
 
@@ -542,19 +548,45 @@ input[type="checkbox"] {
 }
 
 .history-text {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
     overflow: hidden;
-    word-break: break-all;
+    text-overflow: ellipsis;
     line-height: 1.35;
 }
 
 .history-meta {
     font-size: 0.65rem;
     color: #9a9aae;
-    margin-top: 1px;
+    flex-shrink: 0;
+}
+
+/* Hover tooltip (shared singleton; see history-renderer.js): full-ish content shown
+   after the cursor rests 500ms on a row — built lazily, never stored per row. */
+.history-tooltip {
+    position: fixed;
+    max-width: 300px;
+    max-height: 260px;
+    overflow: hidden;
+    background: rgba(24, 24, 27, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #e6e6ec;
+    white-space: pre-wrap;
+    word-break: break-word;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.history-tooltip.visible {
+    opacity: 1;
 }
 
 .history-actions {

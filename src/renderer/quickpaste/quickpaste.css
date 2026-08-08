@@ -110,13 +110,37 @@ body {
     cursor: pointer;
     font-size: 13px;
     line-height: 1.4;
-    word-break: break-word;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
+    /* Single line + ellipsis: the full content lives in the 500ms hover tooltip. */
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
     transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+/* Hover tooltip (shared singleton; built lazily after 500ms — see quickpaste.js) */
+.qp-tooltip {
+    position: fixed;
+    max-width: 276px;
+    max-height: 200px;
+    overflow: hidden;
+    background: rgba(24, 24, 27, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 9px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #e6e6ec;
+    white-space: pre-wrap;
+    word-break: break-word;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.qp-tooltip.visible {
+    opacity: 1;
 }
 
 .qp-item:hover {

@@ -11,6 +11,48 @@ const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-
 // modules can read window globals freely; this keeps the 4 overlapping icons in one place.
 const { ICONS: SHARED_ICONS, matchesSearch } = window.CopyBoardShared;
 
+// DISPLAY-only caps: a copied item can be hundreds of KB, and pushing that whole string
+// into the DOM per row makes renders crawl. Rows are single-line ellipsized, so ~300
+// chars covers any realistic width; the rest shows in the hover tooltip. Copy/search
+// always use the full in-memory item.content — only what lands in the DOM is clipped.
+const PREVIEW_CHARS = 300;
+const TOOLTIP_CHARS = 500;
+const TOOLTIP_DELAY_MS = 500;
+const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
+
+// Shared hover tooltip — ONE element for the whole list, its content built only after
+// the cursor rests on a row for 500ms. Cheaper than per-row title attributes and shows
+// far more of the item than the native tooltip would.
+const tooltip = document.createElement('div');
+tooltip.className = 'history-tooltip';
+document.body.appendChild(tooltip);
+let tooltipTimer = null;
+
+function hideTooltip() {
+    if (tooltipTimer) { clearTimeout(tooltipTimer); tooltipTimer = null; }
+    tooltip.classList.remove('visible');
+}
+
+function scheduleTooltip(content, row) {
+    if (tooltipTimer) clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(() => {
+        tooltipTimer = null;
+        tooltip.textContent = clip(content, TOOLTIP_CHARS);
+        const r = row.getBoundingClientRect();
+        // Below the row; flip above when there's no room. Measure AFTER setting text.
+        tooltip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 308)) + 'px';
+        tooltip.style.top = '0px';
+        tooltip.classList.add('visible');
+        const th = tooltip.offsetHeight;
+        const below = r.bottom + 8;
+        tooltip.style.top = (below + th > window.innerHeight - 8 ? Math.max(8, r.top - th - 8) : below) + 'px';
+    }, TOOLTIP_DELAY_MS);
+}
+
+// The list rebuilds (innerHTML='') on every render — never leave a tooltip orbiting a
+// row that no longer exists. Same for scrolling under the cursor.
+document.addEventListener('scroll', hideTooltip, { capture: true, passive: true });
+
 // Monochrome inline SVGs (stroke=currentColor) matching the header icon set, so row
 // actions render consistently across OSes and don't reflow on state swaps (fixed box).
 // The 4 shared icons come from SHARED_ICONS; check/noteAdd/noteEdit are main-window-only.
@@ -22,6 +64,7 @@ const ICONS = {
 };
 
 export function renderHistory(history, favorites, activeTab, query = '') {
+    hideTooltip(); // rows are about to be torn down
     elements.listElement.innerHTML = '';
 
     let items = activeTab === 'favorites' ? favorites : history;
@@ -50,7 +93,9 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         const domItem = document.createElement('div');
         domItem.className = 'history-item';
         domItem.setAttribute('data-list-index', index);
-        domItem.title = itemContent;
+        domItem.addEventListener('mouseenter', () => scheduleTooltip(itemContent, domItem));
+        domItem.addEventListener('mouseleave', hideTooltip);
+        domItem.addEventListener('mousedown', hideTooltip);
 
         // Drag handles for favorites (reordering)
         if (activeTab === 'favorites') {
@@ -74,7 +119,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
 
         const textSpan = document.createElement('span');
         textSpan.className = 'history-text';
-        textSpan.textContent = itemContent;
+        textSpan.textContent = clip(itemContent, PREVIEW_CHARS);
 
         const metaSpan = document.createElement('small');
         metaSpan.className = 'history-meta';

@@ -14,6 +14,12 @@ function showMain() {
         );
         state.mainWindow.show();
         state.mainWindow.focus();
+        // History pushes skip hidden windows (see history-manager broadcast), so the list
+        // may be stale from before the window was hidden — refresh it now that it's visible.
+        state.mainWindow.webContents.send('update-history', {
+            history: state.history,
+            favorites: state.favorites
+        });
     }
 }
 
@@ -163,16 +169,32 @@ function closeAllCaptureWindows(exceptWin = null) {
     });
 }
 
+// The toast window is created ONCE and reused: every toast used to destroy the old
+// window and spawn a fresh BrowserWindow — a whole renderer process (~100-300ms of
+// CPU) per notification. Now it hides on finish and is repositioned + reshown here.
+// Feedback belongs on the display the user is working on (cursor), not always the
+// primary one — recomputed per toast since the cursor moves between displays.
+function positionToastWindow() {
+    const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+    state.toastWindow.setBounds({ x: wa.x + wa.width - 370, y: wa.y + 50, width: 320, height: 100 });
+}
+
 function showToast(message, type = 'info') {
     try {
         if (state.toastWindow && !state.toastWindow.isDestroyed()) {
-            state.toastWindow.destroy();
+            if (state.toastReady) {
+                positionToastWindow();
+                state.toastWindow.showInactive();
+                state.toastWindow.webContents.send('display-toast', message, type);
+            } else {
+                state.pendingToast = [message, type]; // still loading — delivered on ready
+            }
+            return;
         }
-        // Feedback belongs on the display the user is working on (cursor), not
-        // always the primary one.
-        const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+        state.toastReady = false;
+        state.pendingToast = [message, type];
         state.toastWindow = new BrowserWindow({
-            width: 320, height: 100, x: wa.x + wa.width - 370, y: wa.y + 50,
+            width: 320, height: 100,
             frame: false, transparent: true, alwaysOnTop: true,
             skipTaskbar: true, resizable: false, show: false,
             webPreferences: {
@@ -184,18 +206,23 @@ function showToast(message, type = 'info') {
         });
         state.toastWindow.setAlwaysOnTop(true, 'screen-saver');
         // macOS: also show over fullscreen Spaces (the toast is inactive + click-through,
-        // so it can't disturb the fullscreen app). skipTransformProcessType because the
-        // dock is already hidden (UIElement) and toasts are recreated per message — the
-        // default process-type transform would flash windows on every toast.
+        // so it can't disturb the fullscreen app). skipTransformProcessType keeps the
+        // default process-type transform from flashing windows when the toast appears.
         state.toastWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+        state.toastWindow.setIgnoreMouseEvents(true);
+        state.toastWindow.on('closed', () => { state.toastWindow = null; state.toastReady = false; });
         state.toastWindow.loadFile(path.join(__dirname, '../../renderer/toast/toast.html'));
         state.toastWindow.once('ready-to-show', () => {
-            if (state.toastWindow && !state.toastWindow.isDestroyed()) {
+            if (!state.toastWindow || state.toastWindow.isDestroyed()) return;
+            state.toastReady = true;
+            const pending = state.pendingToast; // latest wins if several queued during load
+            state.pendingToast = null;
+            if (pending) {
+                positionToastWindow();
                 state.toastWindow.showInactive();
-                state.toastWindow.webContents.send('display-toast', message, type);
+                state.toastWindow.webContents.send('display-toast', pending[0], pending[1]);
             }
         });
-        state.toastWindow.setIgnoreMouseEvents(true);
     } catch (e) { console.error('Toast Error:', e); }
 }
 
@@ -260,7 +287,10 @@ function createWidgetWindow() {
         }
     });
 
-    // Periodic alwaysOnTop refresh to prevent other windows from covering widget
+    // Periodic alwaysOnTop refresh to prevent other windows from covering widget.
+    // 10s is enough: this is only a safety net — topmost is also re-asserted on 'show'
+    // and after every bounds change, so the interval rarely does real work. (Was 3s,
+    // which kept waking the process for nothing.)
     state._widgetTopInterval = setInterval(() => {
         if (state.widgetWindow && !state.widgetWindow.isDestroyed() && state.widgetWindow.isVisible()) {
             // Unconditionally re-assert to stay ahead of other topmost windows
@@ -270,7 +300,7 @@ function createWidgetWindow() {
             clearInterval(state._widgetTopInterval);
             state._widgetTopInterval = null;
         }
-    }, 3000);
+    }, 10000);
 
     state.widgetWindow.on('closed', () => {
         if (state._widgetTopInterval) {

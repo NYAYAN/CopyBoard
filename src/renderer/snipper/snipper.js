@@ -31,6 +31,30 @@ let lastBlurTime = 0;
 let lastBlurX = 0, lastBlurY = 0; // last pointer pos so mouseup can commit the release rect
 let blurTempCanvas = null;
 
+// The decoded capture is kept for the lifetime of the overlay so the screen layer can be
+// repainted at any time. Assigning canvas.width/height WIPES a canvas, and this window is
+// transparent: once the screenshot was wiped the live desktop showed through, so the snip
+// looked perfectly normal right up until the copy pasted as a black rectangle.
+let screenBitmap = null;
+let screenPainted = false;
+
+// Paint the retained capture into the screen layer at its native resolution.
+function paintScreen() {
+    if (!screenBitmap) return false;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(screenBitmap, 0, 0, canvas.width, canvas.height);
+    screenPainted = true;
+    return true;
+}
+
+// Dim + selection hole for the current selection (full dim when there is none).
+function repaintOverlay() {
+    const r = state.selectionRect;
+    if (r) drawOverlay(r.x, r.y, r.w, r.h);
+    else drawOverlay(0, 0, window.innerWidth, window.innerHeight);
+}
+
 function saveState() {
     state.history.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
     // Each entry is a full-canvas RGBA snapshot (~8MB at 1080p, ~33MB at 4K, ~132MB at
@@ -53,6 +77,23 @@ function resizeCanvas() {
     const h = window.innerHeight;
     const dpr = window.devicePixelRatio || 1;
     state.dpr = dpr;
+
+    if (screenBitmap) {
+        // A capture is loaded: the canvases stay at the capture's physical resolution and
+        // only get restretched. Reassigning width/height here would wipe the screenshot AND
+        // the user's annotations and invalidate every undo snapshot — all of it invisible
+        // behind a transparent overlay, and only noticed once the copy pastes as black.
+        [canvas, drawCanvas, overlayCanvas].forEach(c => {
+            c.style.width = w + 'px';
+            c.style.height = h + 'px';
+        });
+        state.scaleX = canvas.width / w;
+        state.scaleY = canvas.height / h;
+        initDrawCtx();
+        repaintOverlay();
+        return;
+    }
+
     if (state.scaleX == null) state.scaleX = dpr;
     if (state.scaleY == null) state.scaleY = dpr;
 
@@ -153,6 +194,9 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
     state.scaleY = physH / logicalH;
     state.dpr = window.devicePixelRatio || 1;
 
+    screenBitmap = null;
+    screenPainted = false;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
     initDrawCtx(); // Ensure context properties are set after canvas.width/height resets them
@@ -165,27 +209,39 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
         window.api.notifyReady();
     };
 
+    // An empty screen layer is invisible behind a transparent overlay — the live desktop
+    // shows through, the user annotates and copies as usual, and the failure only surfaces
+    // as a black rectangle in whatever they paste into. So an unusable screenshot must never
+    // open the overlay. Self-heal: ask main to re-capture and re-send (this handler re-runs
+    // with the fresh data). The window is still hidden at this point, so the retry is
+    // invisible; main gives up after a few rounds with a toast + teardown.
+    const fail = (reason) => {
+        window.api.sendDebugLog('Snipper: capture unusable (' + reason + ') — requesting re-capture');
+        window.api.retryCapture();
+    };
+
     // Binary PNG buffer from main — decode via ImageBitmap (no base64/string round-trip).
     if (imageData && imageData.byteLength) {
         createImageBitmap(new Blob([imageData], { type: 'image/png' })).then((bmp) => {
-            // Draw at native resolution — pixel-perfect like Snipping Tool
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-            if (bmp.close) bmp.close();
+            // Draw at native resolution — pixel-perfect like Snipping Tool. The bitmap is
+            // kept (not closed) so resizeCanvas/getFinalImage can repaint from it.
+            screenBitmap = bmp;
+            paintScreen();
             finish();
-        }).catch(() => finish()); // decode failed → dim-only overlay
+        }).catch((err) => fail('çözümlenemedi: ' + ((err && err.message) || 'bilinmeyen hata')));
     } else if (typeof imageData === 'string' && imageData.length > 100) {
         // Legacy data-URL path, kept as a fallback.
         const img = new Image();
         img.onload = () => {
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            screenBitmap = img;
+            paintScreen();
             finish();
         };
+        img.onerror = () => fail('görüntü yüklenemedi');
         img.src = imageData;
     } else {
         // Capture failed entirely. This shouldn't happen with the current capture-service.
-        setTimeout(finish, 50);
+        fail('boş görüntü verisi');
     }
 });
 
@@ -477,8 +533,22 @@ document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', 
     if (!isActive) b.classList.add('active');
 }));
 
+// The screen layer is always opaque (it's a screenshot), so an all-transparent crop means
+// the capture never made it onto the canvas. macOS pastes that as a solid black rectangle,
+// so it must never reach the clipboard.
+function isBlankCrop(tctx, w, h) {
+    try {
+        const pts = [[w >> 1, h >> 1], [0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]];
+        return pts.every(([x, y]) => tctx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data[3] === 0);
+    } catch (e) {
+        return false; // readback can fail on exotic GPUs — don't block the copy over it
+    }
+}
+
 function getFinalImage() {
     if (!state.selectionRect) return null;
+    // Repaint from the retained capture if anything cleared the screen layer since it landed.
+    if (!screenPainted) paintScreen();
     const sx = state.scaleX != null ? state.scaleX : state.dpr;
     const sy = state.scaleY != null ? state.scaleY : state.dpr;
     const r = state.selectionRect;
@@ -498,6 +568,10 @@ function getFinalImage() {
 
     tctx.drawImage(canvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, cropW, cropH);
     tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, cropW, cropH);
+
+    if (isBlankCrop(tctx, cropW, cropH)) {
+        throw new Error('Seçilen alanda ekran görüntüsü yok — kopyalansaydı siyah yapışırdı. ESC ile kapatıp tekrar deneyin.');
+    }
 
     return tc.toDataURL('image/png');
 }
@@ -538,7 +612,7 @@ function safeGetImage() {
         }
         return img;
     } catch (e) {
-        alert('Image generation failed: ' + e.message);
+        alert('Resim oluşturulamadı: ' + e.message);
         return null;
     }
 }

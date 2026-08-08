@@ -3,7 +3,7 @@ export const elements = {
     settingsBtn: document.getElementById('settings-btn'),
     aboutBtn: document.getElementById('about-btn'),
     updateBtn: document.getElementById('update-btn'),
-    addManualBtn: document.getElementById('add-manual-btn'),
+    historyBtn: document.getElementById('history-btn'),
     settingsPanel: document.getElementById('settings-panel'),
     aboutPanel: document.getElementById('about-panel'),
 
@@ -27,10 +27,6 @@ export const elements = {
     confirmClearBtn: document.getElementById('confirm-clear-btn'),
     cancelClearBtn: document.getElementById('cancel-clear-btn'),
     minimizeBtn: document.getElementById('minimize-btn'),
-    addItemModal: document.getElementById('add-item-modal'),
-    manualTextInput: document.getElementById('manual-text-input'),
-    confirmAddBtn: document.getElementById('confirm-add-btn'),
-    cancelAddBtn: document.getElementById('cancel-add-btn'),
 
     // Note Modal
     noteModal: document.getElementById('note-modal'),

@@ -5,7 +5,7 @@ const { disposePasteHelper } = require('./services/paste-service');
 const { initTray } = require('./services/tray-manager');
 const { registerIpcHandlers } = require('./services/ipc-handlers');
 const { initAutoUpdater, checkForUpdatesSilently } = require('./services/update-manager');
-const { startClipboardWatcher } = require('./services/history-manager');
+const { startClipboardWatcher, flushHistorySave } = require('./services/history-manager');
 
 // Hot Reload handled externally or disabled
 
@@ -56,8 +56,12 @@ if (!gotTheLock) {
     // Start Clipboard Watcher
     let clipInterval = startClipboardWatcher(clipboard);
 
-    // Pause the 1s clipboard poll while the machine is asleep or locked (saves wakeups/battery)
-    const pausePoll = () => { if (clipInterval) { clearInterval(clipInterval); clipInterval = null; } };
+    // Pause the 1s clipboard poll while the machine is asleep or locked (saves wakeups/battery).
+    // Also flush the debounced history write — sleep can outlive its 500ms window.
+    const pausePoll = () => {
+        if (clipInterval) { clearInterval(clipInterval); clipInterval = null; }
+        flushHistorySave();
+    };
     const resumePoll = () => { if (!clipInterval) clipInterval = startClipboardWatcher(clipboard); };
     powerMonitor.on('suspend', pausePoll);
     powerMonitor.on('lock-screen', pausePoll);
@@ -110,6 +114,7 @@ if (!gotTheLock) {
 
     app.on('before-quit', () => {
       clearInterval(clipInterval);
+      flushHistorySave(); // persist any copy still inside the 500ms debounce window
       disposePasteHelper();
       if (state.tray && !state.tray.isDestroyed()) state.tray.destroy();
     });

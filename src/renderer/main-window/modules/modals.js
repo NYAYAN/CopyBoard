@@ -17,7 +17,6 @@ export function resetView() {
     elements.aboutBtn.classList.remove('active');
     elements.galleryBtn.classList.remove('active');
 
-    hideModal(elements.addItemModal);
     hideModal(elements.noteModal);
     hideModal(elements.confirmModal);
 }

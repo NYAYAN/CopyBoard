@@ -17,7 +17,6 @@ contextBridge.exposeInMainWorld('api', {
     deleteHistoryItem: (id) => ipcRenderer.send('delete-history-item', id),
     addToFavorites: (item) => ipcRenderer.send('add-to-favorites', item),
     removeFromFavorites: (id) => ipcRenderer.send('remove-from-favorites', id),
-    addManualItem: (content) => ipcRenderer.send('add-manual-item', content),
     setItemNote: (id, note) => ipcRenderer.send('set-item-note', id, note),
     reorderHistory: (history) => ipcRenderer.send('reorder-history', history),
     reorderFavorites: (favorites) => ipcRenderer.send('reorder-favorites', favorites),
@@ -25,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
     closeWindow: () => ipcRenderer.send('close-window'),
     minimizeWindow: () => ipcRenderer.send('minimize-window'),
     toastFinished: () => ipcRenderer.send('toast-finished'),
+    toastResize: (height) => ipcRenderer.send('toast-resize', height), // fit the window to the message
     openExternal: (url) => ipcRenderer.send('open-url', url),
     setAutoStart: (val) => ipcRenderer.send('set-autostart', val),
     setClipboardPaused: (val) => ipcRenderer.send('set-clipboard-paused', val),
@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('api', {
     recordStop: () => ipcRenderer.send('record-stop'),
     closeSnipper: () => ipcRenderer.send('snip-close'),
     notifyReady: () => ipcRenderer.send('snip-ready'),
+    retryCapture: () => ipcRenderer.send('capture-retry'), // unusable screenshot → ask main to re-capture
     claimCaptureMonitor: () => ipcRenderer.send('capture-claim-monitor'),
     onCaptureReset: (callback) => ipcRenderer.on('capture-reset', () => callback()),
     onShowToast: (callback) => ipcRenderer.on('display-toast', (_, message, type) => callback(message, type)),

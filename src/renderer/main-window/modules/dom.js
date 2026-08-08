@@ -11,6 +11,8 @@ export const elements = {
     galleryBtn: document.getElementById('gallery-btn'),
     galleryPanel: document.getElementById('gallery-panel'),
     galleryGrid: document.getElementById('gallery-grid'),
+    galleryFolderBtn: document.getElementById('gallery-folder-btn'),
+    galleryViewBtn: document.getElementById('gallery-view-btn'),
     galleryLayout1: document.getElementById('gallery-layout-1'),
     galleryLayout2: document.getElementById('gallery-layout-2'),
     aboutVersion: document.getElementById('about-version'),
@@ -19,8 +21,26 @@ export const elements = {
     shortcutInput: document.getElementById('shortcut-input'),
     imageShortcutInput: document.getElementById('image-shortcut-input'),
     ocrShortcutInput: document.getElementById('ocr-shortcut-input'),
+    colorShortcutInput: document.getElementById('color-shortcut-input'),
     videoShortcutInput: document.getElementById('video-shortcut-input'),
     pasteShortcutInput: document.getElementById('paste-shortcut-input'),
+    // Per-shortcut on/off switches (keyed by the same name the main process uses)
+    shortcutToggles: {
+        list: document.getElementById('shortcut-enabled'),
+        draw: document.getElementById('image-shortcut-enabled'),
+        ocr: document.getElementById('ocr-shortcut-enabled'),
+        color: document.getElementById('color-shortcut-enabled'),
+        video: document.getElementById('video-shortcut-enabled'),
+        paste: document.getElementById('paste-shortcut-enabled')
+    },
+    shortcutInputsByKey: {
+        list: document.getElementById('shortcut-input'),
+        draw: document.getElementById('image-shortcut-input'),
+        ocr: document.getElementById('ocr-shortcut-input'),
+        color: document.getElementById('color-shortcut-input'),
+        video: document.getElementById('video-shortcut-input'),
+        paste: document.getElementById('paste-shortcut-input')
+    },
     videoQualitySelect: document.getElementById('video-quality'),
     clearBtn: document.getElementById('clear-history-btn'),
     confirmModal: document.getElementById('confirm-modal'),

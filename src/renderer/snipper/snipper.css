@@ -15,6 +15,14 @@ body.ready {
 
 /* overlay is now rendered on draw-canvas via JS — no separate DOM element needed */
 
+/* Colour-pick mode is a pure eyedropper: no selection box, no toolbar, no text input —
+   the loupe is the whole UI and a single click copies the hex under the crosshair. */
+body.color-mode #selection-box,
+body.color-mode .toolbar,
+body.color-mode #text-input-container {
+    display: none !important;
+}
+
 
 
 #screen-canvas {

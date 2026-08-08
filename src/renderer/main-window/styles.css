@@ -248,6 +248,19 @@ input[type="checkbox"]:focus-visible {
     font-size: 0.75rem;
 }
 
+/* Shortcut row: the binding plus its own on/off switch. A disabled shortcut keeps its
+   value (so turning it back on restores it) but is greyed out and not editable. */
+.shortcut-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.shortcut-row .shortcut-input.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
 /* Inputs */
 input[type="number"],
 .shortcut-input,
@@ -284,6 +297,48 @@ input[type="checkbox"] {
     width: 16px;
     height: 16px;
     cursor: pointer;
+}
+
+/* Settings toggles are rendered as sliding switches. Purely visual: the elements stay
+   real checkboxes, so .checked / change events / labels keep working untouched. The
+   type selector above is more specific than a bare class, hence input[...]. */
+.settings-panel input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex-shrink: 0;
+    width: 34px;
+    height: 20px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.settings-panel input[type="checkbox"]::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #f2f2f7;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    transition: transform var(--transition);
+}
+
+.settings-panel input[type="checkbox"]:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.settings-panel input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.settings-panel input[type="checkbox"]:checked::after {
+    transform: translateX(14px);
 }
 
 .danger-btn {
@@ -425,11 +480,13 @@ input[type="checkbox"] {
 /* Layout switcher above the grid: single-column or two-column. */
 .gallery-toolbar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between; /* actions on the left, layout toggle on the right */
+    align-items: center;
     margin-bottom: 8px;
 }
 
-.gallery-layout-toggle {
+.gallery-layout-toggle,
+.gallery-actions-group {
     display: flex;
     gap: 2px;
     background: rgba(255, 255, 255, 0.06);
@@ -437,7 +494,20 @@ input[type="checkbox"] {
     padding: 2px;
 }
 
-.gallery-layout-toggle button {
+/* Gallery-wide actions (open the folder, view the newest large). Greyed out and inert
+   while the gallery is empty — there'd be nothing to open. */
+.gallery-actions-group button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.gallery-actions-group button:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
+
+.gallery-layout-toggle button,
+.gallery-actions-group button {
     width: 26px;
     height: 22px;
     display: flex;
@@ -457,7 +527,8 @@ input[type="checkbox"] {
     color: #fff;
 }
 
-.gallery-layout-toggle button svg {
+.gallery-layout-toggle button svg,
+.gallery-actions-group button svg {
     width: 13px;
     height: 13px;
 }
@@ -562,9 +633,10 @@ input[type="checkbox"] {
     flex-shrink: 0;
 }
 
-/* Hover tooltip (shared singleton; see history-renderer.js): full-ish content shown
-   after the cursor rests 500ms on a row — built lazily, never stored per row. */
-.history-tooltip {
+/* Shared in-page tooltip (see modules/tooltip.js). Replaces native title tooltips, which
+   are drawn in their own OS window at normal level and therefore end up BEHIND this
+   always-on-top window — invisible. Also used for the 500ms row content preview. */
+.app-tooltip {
     position: fixed;
     max-width: 300px;
     max-height: 260px;
@@ -585,7 +657,7 @@ input[type="checkbox"] {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
-.history-tooltip.visible {
+.app-tooltip.visible {
     opacity: 1;
 }
 

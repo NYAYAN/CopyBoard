@@ -5,8 +5,8 @@ const { startCapture } = require('../capture-service');
 
 // Defaults mirror state.js — used to recover a binding whose persisted value can
 // never work as a global accelerator (see sanitizePersistedShortcuts).
-const DEFAULTS = { list: 'Alt+V', draw: 'Alt+9', video: 'Alt+8', ocr: 'Alt+2', paste: 'CommandOrControl+Shift+V' };
-const STORE_KEYS = { list: 'globalShortcut', draw: 'globalShortcutImage', video: 'globalShortcutVideo', ocr: 'globalShortcutOcr', paste: 'globalShortcutPaste' };
+const DEFAULTS = { list: 'Alt+V', draw: 'Alt+9', video: 'Alt+8', ocr: 'Alt+2', color: 'Alt+3', paste: 'CommandOrControl+Shift+V' };
+const STORE_KEYS = { list: 'globalShortcut', draw: 'globalShortcutImage', video: 'globalShortcutVideo', ocr: 'globalShortcutOcr', color: 'globalShortcutColor', paste: 'globalShortcutPaste' };
 
 // Keys that are the OS/app universal editing shortcuts. Bound as a GLOBAL
 // accelerator with ONLY Cmd/Ctrl, these are worse than useless: the focused app
@@ -88,7 +88,43 @@ function toDisplay(accel) {
         .join(' + ');
 }
 
+const isEnabled = (key) => state.shortcuts.enabled[key] !== false;
+
 function registerShortcutHandlers() {
+    const actionFor = (k) => {
+        if (k === 'list') return showMain;
+        if (k === 'draw') return () => startCapture('draw');
+        if (k === 'video') return () => startCapture('video');
+        if (k === 'ocr') return () => startCapture('ocr');
+        if (k === 'color') return () => startCapture('color');
+        if (k === 'paste') return toggleQuickPaste;
+        return null;
+    };
+
+    // Turning a shortcut off frees the accelerator for other apps without losing it here;
+    // turning it back on re-registers the same binding.
+    function setShortcutEnabled(key, enabled) {
+        const action = actionFor(key);
+        const accel = state.shortcuts[key];
+        if (!action || !accel) return;
+
+        state.shortcuts.enabled[key] = !!enabled;
+        store.set('shortcutsEnabled', state.shortcuts.enabled);
+
+        if (enabled) {
+            if (!tryRegister(accel, action, key)) {
+                state.shortcuts.enabled[key] = false;
+                store.set('shortcutsEnabled', state.shortcuts.enabled);
+                showToast(`"${toDisplay(accel)}" kaydedilemedi — başka bir uygulama kullanıyor olabilir.`, 'error');
+            }
+        } else {
+            try { globalShortcut.unregister(accel); } catch (e) { }
+            liveShortcuts.delete(accel); // keep suspend/resume from resurrecting it
+        }
+        // The tray menu only advertises (and honours, while open) shortcuts that are on.
+        try { require('../tray-manager').rebuildTrayMenu(); } catch (e) { console.error('rebuildTrayMenu failed:', e); }
+    }
+
     function updateShortcut(key, shortcut, storeKey) {
         if (!isAsciiShortcut(shortcut)) {
             showToast('Geçersiz Kısayol - Sadece ASCII karakterler kullanın', 'error');
@@ -108,19 +144,20 @@ function registerShortcutHandlers() {
         }
 
         const prevShortcut = state.shortcuts[key];
-        const actionFor = (k) => {
-            if (k === 'list') return showMain;
-            if (k === 'draw') return () => startCapture('draw');
-            if (k === 'video') return () => startCapture('video');
-            if (k === 'ocr') return () => startCapture('ocr');
-            if (k === 'paste') return toggleQuickPaste;
-            return null;
-        };
         const action = actionFor(key);
         if (!action) return;
 
         // Free the previous accelerator before claiming the new one.
         try { globalShortcut.unregister(prevShortcut); } catch (e) { }
+
+        // A switched-off shortcut is only stored, never registered.
+        if (!isEnabled(key)) {
+            state.shortcuts[key] = shortcut;
+            store.set(storeKey, shortcut);
+            liveShortcuts.delete(prevShortcut);
+            try { require('../tray-manager').rebuildTrayMenu(); } catch (e) { console.error('rebuildTrayMenu failed:', e); }
+            return;
+        }
 
         let ok = false;
         try { ok = globalShortcut.register(shortcut, action); } catch (e) { ok = false; }
@@ -130,6 +167,9 @@ function registerShortcutHandlers() {
             store.set(storeKey, shortcut);
             liveShortcuts.delete(prevShortcut);
             liveShortcuts.set(shortcut, action); // keep suspend/resume in sync
+            // The tray menu shows these as accelerators AND relies on them to work while
+            // it's open, so it has to follow the new binding.
+            try { require('../tray-manager').rebuildTrayMenu(); } catch (e) { console.error('rebuildTrayMenu failed:', e); }
         } else {
             // register() returns false (without throwing) when the accelerator is already
             // claimed by the OS or another app. Don't persist a dead shortcut: warn the user
@@ -176,18 +216,24 @@ function registerShortcutHandlers() {
 
     // Initial Registration
     const resetFrom = sanitizePersistedShortcuts();
-    const { list, draw, video, ocr, paste } = state.shortcuts;
-    tryRegister(list, showMain, 'list');
-    tryRegister(draw, () => startCapture('draw'), 'draw');
-    tryRegister(video, () => startCapture('video'), 'video');
-    tryRegister(ocr, () => startCapture('ocr'), 'ocr');
-    const pasteOk = tryRegister(paste, toggleQuickPaste, 'paste');
+    const { list, draw, video, ocr, color, paste } = state.shortcuts;
+    // Only switched-on shortcuts are claimed from the OS.
+    if (isEnabled('list')) tryRegister(list, showMain, 'list');
+    if (isEnabled('draw')) tryRegister(draw, () => startCapture('draw'), 'draw');
+    if (isEnabled('video')) tryRegister(video, () => startCapture('video'), 'video');
+    if (isEnabled('ocr')) tryRegister(ocr, () => startCapture('ocr'), 'ocr');
+    if (isEnabled('color')) tryRegister(color, () => startCapture('color'), 'color');
+    const pasteOk = !isEnabled('paste') || tryRegister(paste, toggleQuickPaste, 'paste');
+
+    // initTray() runs BEFORE this, so a binding sanitizePersistedShortcuts() just reset
+    // would leave a stale accelerator on the menu — rebuild it against the final state.
+    try { require('../tray-manager').rebuildTrayMenu(); } catch (e) { console.error('rebuildTrayMenu failed:', e); }
 
     // Deferred, one-shot startup feedback (a toast needs a beat after launch to be seen).
     // Without this, a claimed Quick-Paste hotkey is the silent "it just doesn't open on
     // some computers" mystery — the Tray ▸ Hızlı Yapıştır entry is the always-available
     // fallback either way.
-    if (paste && !pasteOk) {
+    if (paste && isEnabled('paste') && !pasteOk) {
         setTimeout(() => showToast(
             `Hızlı Yapıştır kısayolu (${toDisplay(paste)}) kaydedilemedi — başka bir uygulama kullanıyor olabilir. Tepsi (tray) menüsünden açabilir veya Ayarlar'dan değiştirebilirsiniz.`,
             'warning'
@@ -203,6 +249,8 @@ function registerShortcutHandlers() {
     ipcMain.on('set-image-shortcut', (e, s) => updateShortcut('draw', s, 'globalShortcutImage'));
     ipcMain.on('set-video-shortcut', (e, s) => updateShortcut('video', s, 'globalShortcutVideo'));
     ipcMain.on('set-ocr-shortcut', (e, s) => updateShortcut('ocr', s, 'globalShortcutOcr'));
+    ipcMain.on('set-color-shortcut', (e, s) => updateShortcut('color', s, 'globalShortcutColor'));
+    ipcMain.on('set-shortcut-enabled', (e, key, enabled) => setShortcutEnabled(key, enabled));
     ipcMain.on('set-paste-shortcut', (e, s) => updateShortcut('paste', s, 'globalShortcutPaste'));
 }
 

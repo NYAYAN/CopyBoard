@@ -25,8 +25,16 @@ function fmtTime(iso) {
     }
 }
 
+// Newest screenshot in the grid — the target for the toolbar's "Büyük Görüntüle",
+// which has no per-item selection to work from.
+let newestId = null;
+
 export function renderGallery(list) {
     const shots = list || [];
+    newestId = shots.length ? shots[0].id : null;
+    // Gallery-wide actions are pointless with an empty gallery.
+    if (elements.galleryViewBtn) elements.galleryViewBtn.disabled = !newestId;
+    if (elements.galleryFolderBtn) elements.galleryFolderBtn.disabled = !newestId;
     const grid = elements.galleryGrid;
     grid.innerHTML = '';
 
@@ -101,6 +109,12 @@ export function initGallery() {
     let saved = 2;
     try { saved = parseInt(localStorage.getItem('galleryLayout'), 10) || 2; } catch (e) { }
     applyLayout(saved);
+
+    // Toolbar (left): whole-gallery actions, mirroring two of the per-item ones.
+    elements.galleryFolderBtn.addEventListener('click', () => window.api.openScreenshotFolder());
+    elements.galleryViewBtn.addEventListener('click', () => {
+        if (newestId) window.api.openScreenshotViewer(newestId);
+    });
 
     window.api.onScreenshotsUpdated((list) => renderGallery(list));
     window.api.getScreenshots().then(renderGallery);

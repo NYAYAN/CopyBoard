@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('api', {
     setImageShortcut: (shortcut) => ipcRenderer.send('set-image-shortcut', shortcut),
     setVideoShortcut: (shortcut) => ipcRenderer.send('set-video-shortcut', shortcut),
     setOcrShortcut: (shortcut) => ipcRenderer.send('set-ocr-shortcut', shortcut),
+    setColorShortcut: (shortcut) => ipcRenderer.send('set-color-shortcut', shortcut),
+    setShortcutEnabled: (key, enabled) => ipcRenderer.send('set-shortcut-enabled', key, enabled),
     setPasteShortcut: (shortcut) => ipcRenderer.send('set-paste-shortcut', shortcut),
     copyItem: (text) => ipcRenderer.send('copy-item', text),
     deleteHistoryItem: (id) => ipcRenderer.send('delete-history-item', id),
@@ -43,6 +45,7 @@ contextBridge.exposeInMainWorld('api', {
     onCaptureScreen: (callback) => ipcRenderer.on('capture-screen', (_, data, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor) => callback(data, mode, sourceId, quality, captureWidth, captureHeight, multiMonitor)),
     sendOCR: (dataUrl) => ipcRenderer.send('ocr-process', dataUrl),
     sendCopyImage: (dataUrl) => ipcRenderer.send('snip-copy-v2', dataUrl), // RENAMED due to channel blocking
+    sendCopyColor: (hex) => ipcRenderer.send('snip-copy-color', hex),
     sendSaveImage: (dataUrl) => ipcRenderer.send('snip-save-image', dataUrl),
 
     // Widget
@@ -56,6 +59,7 @@ contextBridge.exposeInMainWorld('api', {
     copyScreenshot: (id) => ipcRenderer.send('copy-screenshot', id),
     deleteScreenshot: (id) => ipcRenderer.send('delete-screenshot', id),
     showScreenshotFile: (id) => ipcRenderer.send('show-screenshot-file', id),
+    openScreenshotFolder: () => ipcRenderer.send('open-screenshot-folder'),
     showScreenshotMenu: (id) => ipcRenderer.send('screenshot-context-menu', id),
     onScreenshotsUpdated: (callback) => ipcRenderer.on('screenshots-updated', (_, list) => callback(list)),
 

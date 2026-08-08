@@ -49,10 +49,26 @@ function paintScreen() {
 }
 
 // Dim + selection hole for the current selection (full dim when there is none).
+// Colour-pick mode never dims: the whole point is judging the real colour on screen,
+// and a 50% black wash would show the user something other than what they're copying.
 function repaintOverlay() {
+    if (state.colorMode) { clearOverlay(); return; }
     const r = state.selectionRect;
     if (r) drawOverlay(r.x, r.y, r.w, r.h);
     else drawOverlay(0, 0, window.innerWidth, window.innerHeight);
+}
+
+// Hex of the captured pixel under a logical (CSS) point, read straight from the
+// screenshot layer so it's the true colour — not the magnified loupe copy.
+function sampleHexAt(cx, cy) {
+    const sx = state.scaleX != null ? state.scaleX : state.dpr;
+    const sy = state.scaleY != null ? state.scaleY : state.dpr;
+    try {
+        const d = ctx.getImageData(Math.round(cx * sx), Math.round(cy * sy), 1, 1).data;
+        return '#' + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+        return ''; // readback can fail on exotic GPUs
+    }
 }
 
 function saveState() {
@@ -196,6 +212,11 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
 
     screenBitmap = null;
     screenPainted = false;
+    // 'color' reuses this overlay as a pure eyedropper: no dim, no selection, no toolbar —
+    // click anywhere to copy that pixel's hex.
+    state.colorMode = (mode === 'color');
+    document.body.classList.toggle('color-mode', state.colorMode);
+    if (loupeHint) loupeHint.textContent = state.colorMode ? 'Tıkla: rengi kopyala' : 'C: rengi kopyala';
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -204,7 +225,7 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
     resetUI();
 
     const finish = () => {
-        drawOverlay(0, 0, logicalW, logicalH);
+        repaintOverlay();
         document.body.classList.add('ready');
         window.api.notifyReady();
     };
@@ -254,7 +275,7 @@ function resetUI() {
     selectionBox.style.display = toolbar.style.display = textInputContainer.style.display = 'none';
     selectionBox.classList.add('hidden');
     // Show full-screen dim when no selection is active
-    drawOverlay(0, 0, window.innerWidth, window.innerHeight);
+    repaintOverlay(); // full dim, or nothing at all in colour-pick mode
     document.body.classList.remove('drawing', 'selecting');
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
 }
@@ -272,6 +293,16 @@ function updateDimensions(w, h) {
 }
 
 window.addEventListener('mousedown', (e) => {
+    // Colour-pick mode: one click anywhere copies that pixel and ends the capture. Sampled
+    // from the screenshot layer at click time, so it doesn't depend on the loupe having
+    // been updated by a prior mousemove.
+    if (state.colorMode) {
+        e.preventDefault();
+        const hex = sampleHexAt(e.clientX, e.clientY);
+        if (hex) window.api.sendCopyColor(hex);
+        else window.api.closeSnipper();
+        return;
+    }
     if (e.target.closest('.toolbar')) return;
     if (e.target.closest('#text-input-container')) {
         if (e.target === textDragHandle) {
@@ -762,8 +793,9 @@ let loupeFlashUntil = 0;
 function hideLoupe() { loupe.style.display = 'none'; }
 
 function updateLoupe(cx, cy) {
-    // Visible while choosing/adjusting the region; hidden after it settles.
-    const relevant = !state.selectionRect || state.isSelecting || state.isResizing;
+    // Visible while choosing/adjusting the region; hidden after it settles. In colour-pick
+    // mode it IS the tool, so it stays up the whole time.
+    const relevant = state.colorMode || !state.selectionRect || state.isSelecting || state.isResizing;
     if (!relevant || !document.body.classList.contains('ready')) { hideLoupe(); return; }
 
     const sx = state.scaleX != null ? state.scaleX : state.dpr;
@@ -780,13 +812,10 @@ function updateLoupe(cx, cy) {
         0, 0, LOUPE_SIZE, LOUPE_SIZE
     );
 
-    // Color under the cursor — sampled from the small loupe canvas (cheap readback).
-    let hex = '';
-    try {
-        const p = loupeCtx.getImageData(LOUPE_SIZE / 2, LOUPE_SIZE / 2, 1, 1).data;
-        hex = ' #' + [p[0], p[1], p[2]].map(v => v.toString(16).padStart(2, '0')).join('');
-    } catch (e) { /* readback can fail on exotic GPUs; label just omits the color */ }
-    loupeHex = hex.trim();
+    // Colour under the crosshair, read from the screenshot layer — the same source the
+    // click copies from, so the label can never disagree with what lands on the clipboard.
+    loupeHex = sampleHexAt(cx, cy);
+    const hex = loupeHex ? ' ' + loupeHex : '';
 
     // Center crosshair
     loupeCtx.strokeStyle = 'rgba(255,80,80,0.9)';

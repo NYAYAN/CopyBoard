@@ -51,6 +51,14 @@ export function updateHistoryState(data) {
     renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
 }
 
+// Grey out (and lock) a shortcut input when its switch is off.
+export function applyShortcutEnabled(key, enabled) {
+    const input = elements.shortcutInputsByKey[key];
+    if (input) input.classList.toggle('disabled', !enabled);
+    const toggle = elements.shortcutToggles[key];
+    if (toggle) toggle.checked = !!enabled;
+}
+
 export function setupEventListeners() {
 
     // Tabs
@@ -182,6 +190,17 @@ export function setupEventListeners() {
     setupShortcutInput(elements.shortcutInput, (s) => window.api.setShortcut(s));
     setupShortcutInput(elements.imageShortcutInput, (s) => window.api.setImageShortcut(s));
     setupShortcutInput(elements.ocrShortcutInput, (s) => window.api.setOcrShortcut(s));
+    setupShortcutInput(elements.colorShortcutInput, (s) => window.api.setColorShortcut(s));
+
+    // Per-shortcut on/off. The binding itself is kept when switched off (main process
+    // just drops the OS registration), so the input keeps showing it — greyed out.
+    Object.entries(elements.shortcutToggles).forEach(([key, toggle]) => {
+        if (!toggle) return;
+        toggle.addEventListener('change', (e) => {
+            window.api.setShortcutEnabled(key, e.target.checked);
+            applyShortcutEnabled(key, e.target.checked);
+        });
+    });
     setupShortcutInput(elements.videoShortcutInput, (s) => window.api.setVideoShortcut(s));
     setupShortcutInput(elements.pasteShortcutInput, (s) => window.api.setPasteShortcut(s));
 

@@ -3,6 +3,12 @@ const path = require('path');
 const { state, store } = require('./state');
 const { warmPasteHelper } = require('./paste-service');
 
+// A window shown from the tray can get a 'blur' microseconds later, while macOS is still
+// handing focus back to the app that was active before the click — the blur handler would
+// hide it again and "Göster" looked like it did nothing. Blurs this soon after a
+// deliberate show are ignored.
+const SHOW_SETTLE_MS = 600;
+
 function showMain() {
     if (state.mainWindow && !state.mainWindow.isDestroyed()) {
         const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -12,7 +18,13 @@ function showMain() {
             display.workArea.x + width - 380,
             display.workArea.y + height - 560
         );
+        state.mainWindowShownAt = Date.now();
         state.mainWindow.show();
+        // The dock is hidden (accessory app), so show()+focus() alone doesn't necessarily
+        // make CopyBoard the active app and the fresh window can lose focus at once.
+        if (process.platform === 'darwin') {
+            try { app.focus({ steal: true }); } catch (e) { console.error('app.focus failed:', e); }
+        }
         state.mainWindow.focus();
         // History pushes skip hidden windows (see history-manager broadcast), so the list
         // may be stale from before the window was hidden — refresh it now that it's visible.
@@ -52,11 +64,28 @@ function createMainWindow() {
 
     state.mainWindow.loadFile(path.join(__dirname, '../../renderer/main-window/index.html'));
     state.mainWindow.on('blur', () => {
-        if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-            state.mainWindow.webContents.send('reset-view');
-            state.mainWindow.hide();
-        }
+        if (!state.mainWindow || state.mainWindow.isDestroyed()) return;
+        if (Date.now() - (state.mainWindowShownAt || 0) < SHOW_SETTLE_MS) return; // focus still settling
+        state.mainWindowHiddenAt = Date.now();
+        state.mainWindow.webContents.send('reset-view');
+        state.mainWindow.hide();
     });
+}
+
+// Tray click = open/close. The window hides itself on blur, so by the time the click
+// event arrives it has usually ALREADY been hidden by that very click — re-showing it
+// then would make the tray icon unusable as a close button. A hide that just happened is
+// therefore treated as "this click closed it".
+function toggleMain() {
+    const win = state.mainWindow;
+    if (!win || win.isDestroyed()) return;
+    if (win.isVisible()) {
+        state.mainWindowHiddenAt = Date.now();
+        win.hide();
+        return;
+    }
+    if (Date.now() - (state.mainWindowHiddenAt || 0) < 400) return;
+    showMain();
 }
 
 function createCapture(type = 'draw', display = null) {
@@ -679,6 +708,7 @@ function hideQuickPaste() {
 
 module.exports = {
     showMain,
+    toggleMain,
     createMainWindow,
     createCapture,
     showToast,

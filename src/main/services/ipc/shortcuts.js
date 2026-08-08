@@ -18,6 +18,37 @@ const STORE_KEYS = { list: 'globalShortcut', draw: 'globalShortcutImage', video:
 const RESERVED_KEYS = ['C', 'V', 'X', 'A', 'Z'];
 const CMD_CTRL_MODS = ['commandorcontrol', 'cmdorctrl', 'command', 'cmd', 'control', 'ctrl', 'super', 'meta'];
 
+// Live registrations (accelerator → handler) so they can be dropped and restored while a
+// native menu is open. A macOS NSMenu runs a MODAL event-tracking loop: the main process
+// stops servicing globalShortcut callbacks for as long as it's up, so every hotkey pressed
+// meanwhile is QUEUED and then fires all at once the moment the menu closes — the user
+// sees nothing happen, then a burst of screenshots/OCR/recordings. Unregistering makes
+// such a press a genuine no-op instead.
+const liveShortcuts = new Map();
+let shortcutsSuspended = false;
+let resumeWatchdog = null;
+
+function suspendShortcuts() {
+    if (shortcutsSuspended) return;
+    shortcutsSuspended = true;
+    for (const accel of liveShortcuts.keys()) {
+        try { globalShortcut.unregister(accel); } catch (e) { }
+    }
+    // Never leave the app hotkey-less if the menu's close event goes missing.
+    clearTimeout(resumeWatchdog);
+    resumeWatchdog = setTimeout(resumeShortcuts, 60000);
+}
+
+function resumeShortcuts() {
+    if (!shortcutsSuspended) return;
+    shortcutsSuspended = false;
+    clearTimeout(resumeWatchdog);
+    resumeWatchdog = null;
+    for (const [accel, action] of liveShortcuts) {
+        try { globalShortcut.register(accel, action); } catch (e) { }
+    }
+}
+
 function parseAccelerator(s) {
     const parts = String(s).split('+').map(p => p.trim()).filter(Boolean);
     const key = (parts[parts.length - 1] || '').toUpperCase();
@@ -97,6 +128,8 @@ function registerShortcutHandlers() {
         if (ok) {
             state.shortcuts[key] = shortcut;
             store.set(storeKey, shortcut);
+            liveShortcuts.delete(prevShortcut);
+            liveShortcuts.set(shortcut, action); // keep suspend/resume in sync
         } else {
             // register() returns false (without throwing) when the accelerator is already
             // claimed by the OS or another app. Don't persist a dead shortcut: warn the user
@@ -133,7 +166,9 @@ function registerShortcutHandlers() {
         }
         let ok = false;
         try { ok = globalShortcut.register(accel, action); } catch (e) { ok = false; }
-        if (!ok) {
+        if (ok) {
+            liveShortcuts.set(accel, action); // so suspend/resume can restore it verbatim
+        } else {
             console.warn(`[shortcut] "${accel}" (${label}) could not be registered — likely claimed by another app or reserved by the OS`);
         }
         return ok;
@@ -171,4 +206,4 @@ function registerShortcutHandlers() {
     ipcMain.on('set-paste-shortcut', (e, s) => updateShortcut('paste', s, 'globalShortcutPaste'));
 }
 
-module.exports = { registerShortcutHandlers };
+module.exports = { registerShortcutHandlers, suspendShortcuts, resumeShortcuts };

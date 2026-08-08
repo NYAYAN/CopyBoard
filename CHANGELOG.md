@@ -1,3 +1,19 @@
+# CopyBoard v2.9.2 Release Notes
+
+macOS menü çubuğu (tepsi) simgesi düzeltmeleri.
+
+## 🍎 Tepsi simgesi artık pencereyi açıyor
+- macOS'ta simgeye **sol tıklamak menüyü açıyordu**; `setContextMenu()` bağlandığında AppKit sol tıklamayı menüye ayırıyor ve koddaki `tray.on('click', showMain)` hiç çalışmıyordu. Artık **sol tık pencereyi açıp kapatıyor**, menü (Göster / Hızlı Yapıştır / Ekran Görüntüsü / OCR / Video / Çıkış) **sağ tıkta**. Windows/Linux davranışı değişmedi.
+- Açık pencerede simgeye tıklayınca kapanıyor: pencere zaten `blur` ile gizlendiği için tıklama olayı geldiğinde kapanmış oluyordu ve saf bir "görünürse gizle" mantığı onu hemen yeniden açardı; yeni yeni gizlenmiş bir pencere artık "bu tıklama kapattı" sayılıyor.
+
+## 🚫 "Göster" bazen hiçbir şey yapmıyordu
+- Tepsiden gösterilen pencere, macOS odağı önceki uygulamaya geri verirken **anında `blur` alıp kendini tekrar gizleyebiliyordu** — tıklama boşa gitmiş gibi görünüyordu. Kasıtlı bir gösterimden hemen sonraki blur artık yok sayılıyor (600 ms), ayrıca dock gizli (accessory) uygulama olduğu için macOS'ta `app.focus({steal:true})` ile uygulama gerçekten öne alınıyor.
+
+## ⌨️ Menü açıkken basılan kısayollar birikip topluca patlamıyor
+- macOS'ta yerel menü **modal bir olay döngüsü** çalıştırır: menü açıkken ana süreç `globalShortcut` geri çağrılarını işlemez, basılan her kısayol **kuyruğa girer** ve menü kapanınca hepsi birden tetiklenirdi (arka arkaya ekran görüntüsü/OCR/kayıt). Menü açılırken kısayol kayıtları bırakılıyor, kapanınca geri alınıyor: basış artık gerçekten yok sayılıyor. Kapanış olayı hiç gelmezse 60 sn'lik emniyet zamanlayıcısı kayıtları geri yükler.
+
+---
+
 # CopyBoard v2.9.1 Release Notes
 
 macOS'ta ilk ekran görüntüsü artık siyah yapışmıyor; genel performans iyileştirmeleri.

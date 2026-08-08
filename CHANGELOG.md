@@ -1,3 +1,37 @@
+# CopyBoard v2.9.1 Release Notes
+
+macOS'ta ilk ekran görüntüsü artık siyah yapışmıyor; genel performans iyileştirmeleri.
+
+## 📸 İlk çekimde siyah görüntü düzeltildi (macOS)
+- Uygulama açıldıktan sonraki **ilk** ekran görüntüsü, panoya yapıştırıldığında **siyah bir dikdörtgen** (üzerinde yalnızca ok/çizimler) çıkabiliyordu; ikinci çekim her zaman düzgündü. Sebep: macOS'ta oturumun ilk `desktopCapturer.getSources()` çağrısı, ScreenCaptureKit henüz ısınmadığı için **boş bir kare** döndürebiliyor (0 baytlık PNG). Bu boş veri ekran katmanına hiç çizilemiyordu; overlay penceresi saydam olduğu için altındaki canlı masaüstü görünüyor ve her şey normal sanılıyordu — ta ki kopya yapıştırılana kadar.
+- Çözüm kendi kendini iyileştirme üzerine kurulu, kullanıcıya soru sorulmuyor:
+  - Ana süreç boş kareyi fark edip çekimi kısa aralıklarla kendisi yineliyor (ekran başına 5 deneme).
+  - Yine de kullanılamaz görüntü ulaşırsa (boş/bozuk PNG), overlay yeni `capture-retry` kanalıyla **sessizce yeni bir yakalama istiyor**; pencere ancak kullanılabilir görüntüyle görünür olduğundan bu denemeler tamamen görünmez.
+  - Tüm denemeler tükenirse (ör. Ekran Kaydı izni geri alınmışsa) engelleyici pencere yerine kısa bir bildirim gösterilip overlay kapatılıyor; uygulama askıda kalmıyor.
+- Kopyalama son bir güvenlik denetiminden geçiyor: tamamen saydam (yapıştırıldığında siyah görünecek) bir kırpma artık panoya hiç gönderilmiyor.
+
+## 🖼️ Görüntünün sessizce silinmesi engellendi (Snipper, OCR, Kayıt)
+- Yakalama yüklendikten sonra gelen bir pencere `resize` olayı, canvas boyutu yeniden atandığı için **ekran görüntüsünü, çizimleri ve geri-al geçmişini sessizce siliyordu** — saydam pencere yüzünden yine fark edilmiyordu. Görüntü artık bellekte tutuluyor; boyut değişiminde silinmek yerine yeniden çiziliyor. Aynı düzeltme OCR ve ekran kaydı bölge seçimine de uygulandı.
+
+## ⚡ Genel Performans
+- **Geçmiş yazmaları artık toplu:** her pano kopyalaması, tüm ayar dosyasını (~1MB'a ulaşabiliyor) ana süreçte senkron olarak baştan yazdırıyordu. Yazmalar yarım saniyelik pencerede birleştiriliyor; çıkışta ve uyku/kilitte anında diske işleniyor. Saklanan veri değişmiyor.
+- **Yayınlar yalnızca görünür pencerelere:** her kopyalamada ~0,5MB'lık geçmiş, gizli olsalar bile 3 pencereye IPC ile gönderiliyordu. Artık yalnızca görünür pencereler push alıyor; gizli pencereler açılırken güncel veriyi kendileri çekiyor (veri kaybı yok).
+- **Aşırı büyük kopyalar (1MB+ metin) geçmişe alınmıyor:** ya bütün olarak saklanır ya hiç — kesilerek saklama yok (kesik öğe daha sonra panoya eksik yapışırdı). Pano işleyişi etkilenmez; bu sınır ayar dosyasının kontrolsüz büyüyüp açılışı yavaşlatmasını önler.
+- **Liste satırları tek satır:** geçmiş/favori satırları artık tek satırda üç nokta ile kısaltılıyor (tarih aynı satırın sağında); öğenin geniş hali imleç satırın üzerinde **500 ms** durunca çıkan araç ipucunda gösteriliyor. İpucu içeriği yalnızca o anda kuruluyor — satır başına DOM metni ~%85 azaldı, çok satırlı sarma hesabı kalktı (ana pencere + widget + hızlı yapıştır). Kopyalama ve arama her zaman bellekteki tam içerikle çalışır.
+- **Toast bildirimleri tek pencereyi yeniden kullanıyor:** her bildirim yeni bir renderer süreci başlatıyordu (~100-300ms). Pencere bir kez kurulup gizlenerek yeniden kullanılıyor (v2.9.0'daki imleç-ekranı konumlandırması ve tam ekran üstü görünürlük korunuyor).
+- **OCR belleği boşta serbest bırakılıyor:** Tesseract işçisi ilk taramadan sonra süresiz bellekte kalıyordu (150MB+). 5 dakika kullanılmayınca kapatılıyor; sonraki tarama yalnızca 1-2 sn ısınma bedeli öder (v2.9.0'ın çevrimdışı dil paketi sayesinde indirme gerektirmez).
+- **Widget "üstte tut" zamanlayıcısı seyreltildi** (3sn → 10sn): gösterimde ve her konum değişiminde zaten yeniden uygulanıyor; sık aralık boşuna uyandırıyordu.
+
+## 🧭 Arayüz
+- **Bildirim (toast) yüksekliği içeriğe göre ayarlanıyor:** pencere sabit 320×100 olduğu için uzun mesajların sonu kırpılıyor ve okunamıyordu (ör. Erişilebilirlik izni uyarısı 138 px gerektiriyordu, 38 px'i görünmüyordu). Kart artık ölçülüp pencere ona göre büyütülüyor/küçültülüyor; kart pencere dışında beklediği için boyutlanma görünmez, sağ-üst köşe sabit kalıyor.
+- **"+" (Manuel Ekle) düğmesi kaldırıldı** — artık gerekmiyordu; düğme, modal, DOM referansları, preload köprüsü (`addManualItem`) ve ana süreçteki `add-manual-item` IPC handler'ı dahil tüm zincir söküldü. Yerine başlıkta **Geçmiş** düğmesi var: galeri/ayarlar/hakkında panellerinden tek tıkla geçmiş listesine (Tümü sekmesi) dönülüyor — galeri düğmesinin simetriği.
+- **Widget geçmiş paneli ana pencereyle tutarlı:** satırlar aynı tasarımda — tek satır metin + sağda tarih-saat, aynı yazı boyutu/rengi, aynı 500 ms araç ipucu. Sanal kaydırma satır yüksekliği yeni kompakt düzene göre güncellendi (56→44 px).
+
+## 🖥️ Windows
+- Boş ilk kare macOS'a özgü bir durum; Windows'ta davranış pratikte değişmedi (aynı korumalar orada da devrede ama tetiklenmeleri beklenmez). Performans iyileştirmeleri iki platformda da geçerli.
+
+---
+
 # CopyBoard v2.9.0 Release Notes
 
 Galeri yenilendi: büyük görüntüleyici penceresi geldi; macOS düzeltmeleri, çevrimdışı OCR ve video kaydı iyileştirmeleri.

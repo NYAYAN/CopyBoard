@@ -23,7 +23,39 @@ function armIdle() {
     idleTimer = setTimeout(() => window.api.quickPasteDismiss(), IDLE_MS);
 }
 
+// Shared hover tooltip: one element, content built only after the cursor rests on a
+// row for 500ms. Rows are single-line ellipsized; this shows the fuller content.
+const TOOLTIP_CHARS = 500;
+const TOOLTIP_DELAY_MS = 500;
+const tip = document.createElement('div');
+tip.className = 'qp-tooltip';
+document.body.appendChild(tip);
+let tipTimer = null;
+
+function hideTip() {
+    if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+    tip.classList.remove('visible');
+}
+
+function scheduleTip(content, row) {
+    if (tipTimer) clearTimeout(tipTimer);
+    tipTimer = setTimeout(() => {
+        tipTimer = null;
+        tip.textContent = content.length > TOOLTIP_CHARS ? content.slice(0, TOOLTIP_CHARS) + '…' : content;
+        const r = row.getBoundingClientRect();
+        tip.style.left = '8px';
+        tip.style.top = '0px';
+        tip.classList.add('visible');
+        const th = tip.offsetHeight;
+        const below = r.bottom + 6;
+        tip.style.top = (below + th > window.innerHeight - 8 ? Math.max(8, r.top - th - 6) : below) + 'px';
+    }, TOOLTIP_DELAY_MS);
+}
+
+listEl.addEventListener('scroll', hideTip, { passive: true });
+
 function render(history) {
+    hideTip(); // rows are about to be torn down
     const items = (history || []).slice(0, count);
     listEl.innerHTML = '';
 
@@ -35,12 +67,18 @@ function render(history) {
         return;
     }
 
+    // Rows clip what goes into the DOM (a copied item can be hundreds of KB); the click
+    // handler passes the full item.content, so what gets pasted is never truncated.
+    const PREVIEW_CHARS = 300; // single-line rows — this covers any realistic width
+    const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
     for (const item of items) {
         const div = document.createElement('div');
         div.className = 'qp-item';
-        div.textContent = item.content;
-        div.title = item.content;
+        div.textContent = clip(item.content, PREVIEW_CHARS);
+        div.addEventListener('mouseenter', () => scheduleTip(item.content, div));
+        div.addEventListener('mouseleave', hideTip);
         div.addEventListener('click', () => {
+            hideTip();
             window.api.quickPastePick(item.content);
         });
         listEl.appendChild(div);

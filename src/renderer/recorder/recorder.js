@@ -29,11 +29,33 @@ const state = {
     scaleY: null
 };
 
+// Retained so the frozen backdrop can be repainted: assigning canvas.width/height WIPES the
+// canvas, and behind this transparent window the live desktop looks identical to the frozen
+// shot — a late resize used to silently swap one for the other.
+let screenBitmap = null;
+
+function paintScreen() {
+    if (!screenBitmap) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(screenBitmap, 0, 0, canvas.width, canvas.height);
+}
+
 function resizeCanvas() {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const dpr = window.devicePixelRatio || 1;
     state.dpr = dpr;
+
+    if (screenBitmap) {
+        // Backdrop loaded: keep its physical resolution, only restretch and rescale.
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        state.scaleX = canvas.width / w;
+        state.scaleY = canvas.height / h;
+        return;
+    }
 
     canvas.width = w * dpr;
     canvas.height = h * dpr;
@@ -74,6 +96,7 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
     state.scaleX = physW / logicalW;
     state.scaleY = physH / logicalH;
 
+    screenBitmap = null;
     canvas.width = physW;
     canvas.height = physH;
     canvas.style.width = logicalW + 'px';
@@ -90,25 +113,33 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
         window.api.notifyReady();
     };
 
+    // Unusable screenshot → self-heal like the snipper: ask main to re-capture and re-send
+    // (this handler re-runs with the fresh data). Still hidden here, so it's invisible.
+    // The backdrop is cosmetic for video — recording is a live stream — but a silent gap
+    // would leave region selection running on the live desktop instead of the frozen frame.
+    const fail = (reason) => {
+        window.api.sendDebugLog('Recorder: capture unusable (' + reason + ') — requesting re-capture');
+        window.api.retryCapture();
+    };
+
     // Binary PNG buffer from main — decode via ImageBitmap (no base64/string round-trip).
     if (imageData && imageData.byteLength) {
         createImageBitmap(new Blob([imageData], { type: 'image/png' })).then((bmp) => {
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-            if (bmp.close) bmp.close();
+            screenBitmap = bmp; // kept (not closed) so resizeCanvas can repaint from it
+            paintScreen();
             finish();
-        }).catch(() => finish());
+        }).catch((err) => fail('çözümlenemedi: ' + ((err && err.message) || 'bilinmeyen hata')));
     } else if (typeof imageData === 'string' && imageData.length > 100) {
         const img = new Image();
         img.onload = () => {
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            screenBitmap = img;
+            paintScreen();
             finish();
         };
+        img.onerror = () => fail('görüntü yüklenemedi');
         img.src = imageData;
     } else {
-        // Fallback for initial frame if the capture failed
-        setTimeout(finish, 50);
+        fail('boş görüntü verisi');
     }
 });
 

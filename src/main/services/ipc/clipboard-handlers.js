@@ -70,11 +70,6 @@ function registerClipboardHandlers() {
 
     ipcMain.on('quickpaste-dismiss', () => hideQuickPaste());
 
-    ipcMain.on('add-manual-item', (e, content) => {
-        addHistory(content);
-        showToast('Öğe Eklendi', 'success');
-    });
-
     ipcMain.on('add-to-favorites', (e, item) => addToFavorites(item));
     ipcMain.on('remove-from-favorites', (e, id) => removeFromFavorites(id));
     ipcMain.on('set-item-note', (e, id, note) => setItemNote(id, note));

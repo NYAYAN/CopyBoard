@@ -2,22 +2,49 @@ const { state, store } = require('./state');
 const { showToast } = require('./window-manager');
 const crypto = require('crypto');
 
-// Broadcast updated data to all windows
+// History items are stored WHOLE or not at all — never truncated, because a truncated
+// entry would silently paste corrupted content later. Copies larger than this simply
+// don't enter the list (the OS clipboard is unaffected). The gate keeps the config file
+// bounded: it's rewritten on every change and read synchronously at startup.
+const MAX_ITEM_CHARS = 1000000; // ≈1-3MB on disk depending on encoding
+
+// Persisting history rewrites the ENTIRE electron-store file (~1MB with a large history)
+// synchronously via JSON.stringify + write. Doing that on every clipboard copy (the 1s
+// watcher) blocks the main process needlessly, so writes trail behind by half a second
+// and coalesce. main.js flushes on quit and on suspend/lock, so a crash risks at most
+// the newest entry — the clipboard itself always keeps the actual data.
+let saveTimer = null;
+function saveHistorySoon() {
+    if (saveTimer) return; // a write is already scheduled; it will pick up this change too
+    saveTimer = setTimeout(() => {
+        saveTimer = null;
+        store.set('history', state.history);
+    }, 500);
+}
+
+function flushHistorySave() {
+    if (!saveTimer) return; // nothing pending — disk already matches memory
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    store.set('history', state.history);
+}
+
+// Broadcast updated data to windows that can actually show it. Hidden windows are
+// skipped — each one re-pulls on show (quick-paste reloads via getHistory on every
+// open; showMain pushes a fresh snapshot) — so pushing ~0.5MB of history over IPC to
+// three windows on every clipboard copy was pure waste.
 function broadcast() {
     const data = { history: state.history, favorites: state.favorites };
-    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-        state.mainWindow.webContents.send('update-history', data);
-    }
-    if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
-        state.widgetWindow.webContents.send('update-history', data);
-    }
-    if (state.quickPasteWindow && !state.quickPasteWindow.isDestroyed()) {
-        state.quickPasteWindow.webContents.send('update-history', data);
-    }
+    [state.mainWindow, state.widgetWindow, state.quickPasteWindow].forEach(win => {
+        if (win && !win.isDestroyed() && win.isVisible()) {
+            win.webContents.send('update-history', data);
+        }
+    });
 }
 
 function addHistory(content) {
     if (!content) return;
+    if (content.length > MAX_ITEM_CHARS) return; // whole-or-nothing: see MAX_ITEM_CHARS
     const existingIndex = state.history.findIndex(i => i.content === content);
     // Preserve an existing note when the same content is re-copied (dedup recreates the entry).
     const prevNote = existingIndex !== -1 ? state.history[existingIndex].note : undefined;
@@ -32,7 +59,7 @@ function addHistory(content) {
     state.history.unshift(entry);
 
     while (state.history.length > state.maxItems) state.history.pop();
-    store.set('history', state.history);
+    saveHistorySoon();
     broadcast();
 }
 
@@ -146,5 +173,6 @@ module.exports = {
     reorderHistory,
     reorderFavorites,
     startClipboardWatcher,
-    broadcast
+    broadcast,
+    flushHistorySave
 };

@@ -22,10 +22,12 @@
                 <h1>CopyBoard</h1>
             </div>
             <div class="actions">
-                <button id="add-manual-btn" class="icon-btn" title="Manuel Ekle" aria-label="Manuel Ekle">
+                <button id="history-btn" class="icon-btn" title="Geçmiş" aria-label="Geçmiş">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                         style="width: 16px; height: 16px;">
-                        <path d="M12 4v16m8-8H4" />
+                        <path d="M3 3v5h5" />
+                        <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+                        <path d="M12 7v5l4 2" />
                     </svg>
                 </button>
                 <button id="gallery-btn" class="icon-btn" title="Ekran Görüntüleri" aria-label="Ekran Görüntüleri">
@@ -210,19 +212,6 @@
             <div class="modal-actions">
                 <button id="cancel-clear-btn" class="modal-btn">Vazgeç</button>
                 <button id="confirm-clear-btn" class="modal-btn danger">Sil</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Manual Add Modal -->
-    <div id="add-item-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h3>Yeni Öğe Ekle</h3>
-            <textarea id="manual-text-input" placeholder="Metni buraya yapıştırın veya yazın..." rows="4"></textarea>
-            <div class="modal-actions">
-                <button id="cancel-add-btn" class="modal-btn">İptal</button>
-                <button id="confirm-add-btn" class="modal-btn"
-                    style="background: var(--accent); color: white;">Ekle</button>
             </div>
         </div>
     </div>

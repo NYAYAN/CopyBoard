@@ -18,6 +18,24 @@ const widgetSearch = document.getElementById('widget-search');
 // actions use exactly the 4 shared icons, so ICONS is that shared set verbatim.
 const { ICONS, matchesSearch } = window.CopyBoardShared;
 
+// DISPLAY-only caps: rows and the hover tooltip clip what goes into the DOM — a copied
+// item can be hundreds of KB. Copy/search always use the full in-memory item.content.
+// Rows are single-line ellipsized, so ~300 chars covers any width.
+const PREVIEW_CHARS = 300;
+const TOOLTIP_CHARS = 500;
+const TOOLTIP_DELAY_MS = 500;
+const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
+
+// Same date/time presentation as the main-window list, so the two designs match.
+// Cached formatters — constructing Intl.DateTimeFormat per row per render is costly.
+const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' });
+const formatMeta = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return isNaN(d) ? '' : `${DATE_FMT.format(d)} ${TIME_FMT.format(d)}`;
+};
+
 let isOpen = false;
 let isHistoryOpen = false;
 let isDragging = false;
@@ -164,7 +182,9 @@ function hideTooltip() {
 historyItemsContainer.addEventListener('scroll', hideTooltip, { passive: true });
 
 // --- Virtual Scroll ---
-const ITEM_HEIGHT = 56;
+// Must equal the fixed .history-item height in widget.css — the virtual list
+// positions rows purely by arithmetic on this constant.
+const ITEM_HEIGHT = 44;
 const BUFFER = 4;
 
 function renderVirtualList(items) {
@@ -196,8 +216,14 @@ function renderVirtualList(items) {
 
         const textEl = document.createElement('div');
         textEl.className = 'history-item-text';
-        textEl.textContent = item.content;
+        textEl.textContent = clip(item.content, PREVIEW_CHARS);
         div.appendChild(textEl);
+
+        // Timestamp inline at the right — mirrors the main-window row design
+        const metaEl = document.createElement('div');
+        metaEl.className = 'history-item-meta';
+        metaEl.textContent = formatMeta(item.timestamp);
+        div.appendChild(metaEl);
 
         // Row actions (favorite / copy / delete) — mirrors the main window's row
         const actions = document.createElement('div');
@@ -265,8 +291,8 @@ function renderVirtualList(items) {
 
         div.addEventListener('mouseenter', () => {
             tooltipTimeout = setTimeout(() => {
-                showTooltip(item.content, div.getBoundingClientRect());
-            }, 400);
+                showTooltip(clip(item.content, TOOLTIP_CHARS), div.getBoundingClientRect());
+            }, TOOLTIP_DELAY_MS);
         });
         div.addEventListener('mouseleave', () => {
             clearTimeout(tooltipTimeout);

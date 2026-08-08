@@ -1,4 +1,4 @@
-const { ipcMain, clipboard, dialog, BrowserWindow, app, nativeImage, systemPreferences } = require('electron');
+const { ipcMain, clipboard, dialog, BrowserWindow, app, nativeImage, systemPreferences, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
 // Tesseract will be lazy-loaded in the OCR handler to speed up startup
@@ -7,11 +7,32 @@ const { showToast, closeAllCaptureWindows } = require('../window-manager');
 const { addHistory } = require('../history-manager');
 const { addScreenshot } = require('../screenshot-library');
 
-// --- OCR worker (lazy + cached) ---
-// Creating a Tesseract worker loads ~10MB of eng+tur language data, so we keep
-// a single worker alive across scans instead of rebuilding it every time.
+// --- OCR worker (lazy + cached + idle-released) ---
+// Creating a Tesseract worker loads ~10MB of eng+tur language data, so we keep a single
+// worker alive across scans instead of rebuilding it every time. But alive-forever costs
+// 150MB+ of RSS after one scan, so an idle timer tears it down after 5 minutes without
+// OCR; the next scan just pays the ~1-2s warmup again.
+const OCR_IDLE_MS = 5 * 60 * 1000;
 let ocrWorker = null;
 let ocrWorkerPromise = null;
+let ocrIdleTimer = null;
+
+function cancelOcrRelease() {
+    if (ocrIdleTimer) { clearTimeout(ocrIdleTimer); ocrIdleTimer = null; }
+}
+
+function scheduleOcrRelease() {
+    cancelOcrRelease();
+    ocrIdleTimer = setTimeout(() => {
+        ocrIdleTimer = null;
+        if (ocrWorker) {
+            try { ocrWorker.terminate(); } catch (e) { }
+            ocrWorker = null;
+            ocrWorkerPromise = null;
+        }
+    }, OCR_IDLE_MS);
+}
+
 function getOcrWorker() {
     if (ocrWorker) return Promise.resolve(ocrWorker);
     if (!ocrWorkerPromise) {
@@ -80,6 +101,43 @@ function registerCaptureHandlers() {
         // Cancel/close from any monitor tears down the whole capture (every overlay). The
         // widget is restored by the windows' 'closed' handler once all of them are gone.
         closeAllCaptureWindows();
+    });
+
+    // The overlay got a screenshot it can't use (empty buffer or a PNG that won't decode).
+    // Self-heal instead of surfacing an error: re-capture that display and re-send. The
+    // overlay only becomes visible after a usable screenshot arrives ('snip-ready'), so
+    // retries are invisible to the user. Bounded per window; when the limit is hit the
+    // capture tears down with a toast — the true last resort (e.g. permission revoked).
+    const MAX_CAPTURE_RETRIES = 2; // on top of captureDisplay's own 5 grab attempts each
+    ipcMain.on('capture-retry', async (e) => {
+        const win = BrowserWindow.fromWebContents(e.sender);
+        if (!win || win.isDestroyed() || !state.captureWindows.includes(win)) return;
+
+        const giveUp = () => {
+            showToast('Ekran görüntüsü alınamadı. Lütfen tekrar deneyin.', 'error');
+            closeAllCaptureWindows();
+        };
+
+        win.__captureRetries = (win.__captureRetries || 0) + 1;
+        if (win.__captureRetries > MAX_CAPTURE_RETRIES) return giveUp();
+
+        // Normally still hidden here; never bake our own overlay into a re-capture.
+        if (win.isVisible()) win.hide();
+
+        try {
+            const displays = screen.getAllDisplays();
+            const display = screen.getDisplayMatching(win.getBounds());
+            const index = Math.max(0, displays.findIndex(d => d.id === display.id));
+            const cap = await require('../capture-service').captureDisplay(display, index);
+
+            if (win.isDestroyed()) return;
+            if (!cap) return giveUp();
+            win.webContents.send('capture-screen', cap.pngBuffer, state.lastMode, cap.sourceId,
+                state.videoQuality, cap.captureWidth, cap.captureHeight, displays.length > 1);
+        } catch (err) {
+            console.error('Capture retry failed:', err);
+            if (!win.isDestroyed()) giveUp();
+        }
     });
 
     ipcMain.on('capture-claim-monitor', (e) => {
@@ -191,6 +249,9 @@ function registerCaptureHandlers() {
         }
     });
 
+    // Video chunks arrive every second and used to be written with fs.appendFileSync on
+    // the MAIN process — at high quality that's a multi-MB synchronous disk write that
+    // froze every window and IPC handler once a second for the whole recording. A write
     ipcMain.on('record-start', (e) => {
         state.tempVideoPath = path.join(app.getPath('temp'), `temp_video_${Date.now()}.webm`);
         endVideoStream(() => { }); // paranoia: a leftover stream from an aborted run
@@ -214,7 +275,9 @@ function registerCaptureHandlers() {
                 state.recorderWindow.hide();
             }
 
-            // Small delay to ensure window is hidden
+            // Small delay to ensure window is hidden. The stream is flushed BEFORE the
+            // save dialog opens — it copies the temp file, so the last chunks must be
+            // on disk first.
             setTimeout(() => {
                 endVideoStream(async () => {
                     try {
@@ -268,6 +331,7 @@ function registerCaptureHandlers() {
         // Close every monitor's overlay before running OCR (image data is already in hand).
         closeAllCaptureWindows();
 
+        cancelOcrRelease(); // never tear the worker down while a scan is about to use it
         showToast('Metin Taranıyor...', 'info');
         try {
             const worker = await getOcrWorker();
@@ -284,11 +348,15 @@ function registerCaptureHandlers() {
         } catch (err) {
             console.error(err);
             showToast('Metin tanıma başarısız oldu.', 'error');
+        } finally {
+            scheduleOcrRelease(); // free the ~150MB worker after 5 idle minutes
         }
     });
 
-    // Release the cached OCR worker on quit (best-effort)
+    // Release the cached OCR worker and any open video stream on quit (best-effort)
     app.on('before-quit', () => {
+        cancelOcrRelease();
+        endVideoStream(() => { });
         if (ocrWorker) {
             try { ocrWorker.terminate(); } catch (e) { }
             ocrWorker = null;

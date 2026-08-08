@@ -97,6 +97,21 @@
 
         <div id="gallery-panel" class="settings-panel hidden">
             <div class="gallery-toolbar">
+                <div class="gallery-actions-group">
+                    <button id="gallery-folder-btn" title="Klasörde Göster" aria-label="Klasörde Göster">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                    </button>
+                    <button id="gallery-view-btn" title="Büyük Görüntüle (en yeni)" aria-label="Büyük Görüntüle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round">
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="m21 21-4.3-4.3M11 8v6M8 11h6" />
+                        </svg>
+                    </button>
+                </div>
                 <div class="gallery-layout-toggle">
                     <button id="gallery-layout-1" title="Tek sütun" aria-label="Tek sütun">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -137,28 +152,57 @@
             </div>
             <div class="setting-item">
                 <label for="shortcut-input">Liste Kısayolu:</label>
-                <input type="text" id="shortcut-input" placeholder="Tuşlara basın..." readonly class="shortcut-input"
+                <div class="shortcut-row">
+                    <input type="text" id="shortcut-input" placeholder="Tuşlara basın..." readonly class="shortcut-input"
                     title="Kopyalanan verilerin listesini açmak için">
+                    <input type="checkbox" id="shortcut-enabled" class="shortcut-toggle" checked
+                        title="Kısayolu aç/kapa">
+                </div>
             </div>
             <div class="setting-item">
                 <label for="image-shortcut-input">Çizim Modu:</label>
-                <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
+                <div class="shortcut-row">
+                    <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
                     class="shortcut-input" title="Ekran görüntüsü alıp üzerinde çizim yapmak için">
+                    <input type="checkbox" id="image-shortcut-enabled" class="shortcut-toggle" checked
+                        title="Kısayolu aç/kapa">
+                </div>
             </div>
             <div class="setting-item">
                 <label for="ocr-shortcut-input">Metin Oku (OCR):</label>
-                <input type="text" id="ocr-shortcut-input" placeholder="Tuşlara basın..." readonly
+                <div class="shortcut-row">
+                    <input type="text" id="ocr-shortcut-input" placeholder="Tuşlara basın..." readonly
                     class="shortcut-input" title="Ekrandaki yazıları kopyalamak için">
+                    <input type="checkbox" id="ocr-shortcut-enabled" class="shortcut-toggle" checked
+                        title="Kısayolu aç/kapa">
+                </div>
+            </div>
+            <div class="setting-item">
+                <label for="color-shortcut-input">Renk Kodu Al:</label>
+                <div class="shortcut-row">
+                    <input type="text" id="color-shortcut-input" placeholder="Tuşlara basın..." readonly
+                    class="shortcut-input" title="Ekrandaki bir pikselin renk kodunu kopyalamak için">
+                    <input type="checkbox" id="color-shortcut-enabled" class="shortcut-toggle" checked
+                        title="Kısayolu aç/kapa">
+                </div>
             </div>
             <div class="setting-item">
                 <label for="video-shortcut-input">Video Kayıt:</label>
-                <input type="text" id="video-shortcut-input" placeholder="Tuşlara basın..." readonly
+                <div class="shortcut-row">
+                    <input type="text" id="video-shortcut-input" placeholder="Tuşlara basın..." readonly
                     class="shortcut-input" title="Ekranın belirli bir bölgesini videoya kaydetmek için">
+                    <input type="checkbox" id="video-shortcut-enabled" class="shortcut-toggle" checked
+                        title="Kısayolu aç/kapa">
+                </div>
             </div>
             <div class="setting-item">
                 <label for="paste-shortcut-input">Hızlı Yapıştır:</label>
-                <input type="text" id="paste-shortcut-input" placeholder="Tuşlara basın..." readonly
+                <div class="shortcut-row">
+                    <input type="text" id="paste-shortcut-input" placeholder="Tuşlara basın..." readonly
                     class="shortcut-input" title="Geçmişten seçip odaktaki alana anında yapıştırmak için">
+                    <input type="checkbox" id="paste-shortcut-enabled" class="shortcut-toggle" checked
+                        title="Kısayolu aç/kapa">
+                </div>
             </div>
             <div class="setting-item">
                 <label for="video-quality">Video Kalitesi:</label>

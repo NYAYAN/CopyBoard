@@ -1,6 +1,7 @@
 import { elements } from './dom.js';
 import { openNoteModal } from './notes.js';
 import { onDragStart, onDragOver, onDrop } from './drag-drop.js';
+import { showTooltipAt, hideTooltip } from './tooltip.js';
 
 // Cached formatters — constructing Intl.DateTimeFormat per item per render is costly
 const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -20,38 +21,12 @@ const TOOLTIP_CHARS = 500;
 const TOOLTIP_DELAY_MS = 500;
 const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
 
-// Shared hover tooltip — ONE element for the whole list, its content built only after
-// the cursor rests on a row for 500ms. Cheaper than per-row title attributes and shows
-// far more of the item than the native tooltip would.
-const tooltip = document.createElement('div');
-tooltip.className = 'history-tooltip';
-document.body.appendChild(tooltip);
-let tooltipTimer = null;
-
-function hideTooltip() {
-    if (tooltipTimer) { clearTimeout(tooltipTimer); tooltipTimer = null; }
-    tooltip.classList.remove('visible');
-}
-
+// Row content preview uses the window's shared tooltip (see tooltip.js) — native title
+// tooltips are invisible in this always-on-top window, and one element keeps a row's
+// tooltip from ever fighting a control's.
 function scheduleTooltip(content, row) {
-    if (tooltipTimer) clearTimeout(tooltipTimer);
-    tooltipTimer = setTimeout(() => {
-        tooltipTimer = null;
-        tooltip.textContent = clip(content, TOOLTIP_CHARS);
-        const r = row.getBoundingClientRect();
-        // Below the row; flip above when there's no room. Measure AFTER setting text.
-        tooltip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 308)) + 'px';
-        tooltip.style.top = '0px';
-        tooltip.classList.add('visible');
-        const th = tooltip.offsetHeight;
-        const below = r.bottom + 8;
-        tooltip.style.top = (below + th > window.innerHeight - 8 ? Math.max(8, r.top - th - 8) : below) + 'px';
-    }, TOOLTIP_DELAY_MS);
+    showTooltipAt(clip(content, TOOLTIP_CHARS), row.getBoundingClientRect(), TOOLTIP_DELAY_MS);
 }
-
-// The list rebuilds (innerHTML='') on every render — never leave a tooltip orbiting a
-// row that no longer exists. Same for scrolling under the cursor.
-document.addEventListener('scroll', hideTooltip, { capture: true, passive: true });
 
 // Monochrome inline SVGs (stroke=currentColor) matching the header icon set, so row
 // actions render consistently across OSes and don't reflow on state swaps (fixed box).

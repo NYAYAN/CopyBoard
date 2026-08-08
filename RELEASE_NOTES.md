@@ -1,21 +1,28 @@
-# CopyBoard v2.9.2 - macOS Tepsi Simgesi Düzeltmeleri 🍎📌
+# CopyBoard v2.9.3 - Renk Kodu Al, Kısayol Anahtarları ve Görünür İpuçları 🎨🎚️
 
-Bu sürüm, macOS menü çubuğundaki CopyBoard simgesiyle ilgili üç sorunu gideriyor.
+Yeni bir araç, kısayollar üzerinde tam kontrol ve uzun süredir görünmeyen ipuçlarının düzeltilmesi.
 
-## 📌 Simgeye tıklayınca pencere açılıyor
-- Şimdiye kadar simgeye **sol tıklamak menüyü açıyordu**; pencereyi açmak için menüden ayrıca "Göster" demek gerekiyordu. Artık **sol tık doğrudan pencereyi açıp kapatıyor**, menü **sağ tıkta**.
-- Pencere açıkken simgeye tekrar tıklamak onu kapatır.
-- Menünün içeriği aynı: Göster, Hızlı Yapıştır, Ekran Görüntüsü Al, Metin Oku (OCR), Video Kaydet, Çıkış. Windows'ta davranış değişmedi.
+## 🎨 Renk Kodu Al (yeni)
+- **Alt+3** (Ayarlar'dan değiştirilebilir) veya tepsi menüsünden **Renk Kodu Al**: ekran donar, büyüteç imlecin altındaki pikselin renk kodunu canlı gösterir.
+- **Tek tık** → kod panoya kopyalanır ve geçmişe eklenir (`#336699` gibi), bildirim çıkar. **Esc** iptal eder.
+- Bu modda ekran **karartılmaz** — normal ekran görüntüsü modundaki karartma, kopyaladığınızdan farklı bir renk görmenize sebep olurdu.
 
-## 🚫 "Göster" bazen hiçbir şey yapmıyordu
-- Tepsiden açılan pencere, macOS odağı önceki uygulamaya geri verirken **kendini anında tekrar gizleyebiliyordu**; tıklama boşa gitmiş gibi görünüyordu. Pencere artık açıldıktan hemen sonra kapanmıyor ve uygulama düzgün şekilde öne alınıyor.
+## 🎚️ Her kısayolun kendi aç/kapa anahtarı
+- Ayarlar'da her kısayolun yanında bir anahtar var. **Kapattığınızda o tuş kombinasyonu diğer uygulamalara serbest kalır** — CopyBoard'un ihtiyacınız olan bir kısayolu tutması sorunu böylece çözülür.
+- Kısayol **silinmez**: kapalıyken soluk görünür ama değeri durur, tekrar açtığınızda aynı tuşla geri gelir. Tercihiniz kalıcıdır.
+- Kapalı kısayol tepsi menüsünde de gösterilmez; menüdeki işlemi tıklayarak her zaman kullanabilirsiniz.
 
-## ⌨️ Menü açıkken basılan kısayollar artık birikmiyor
-- Menü açıkken kısayollar (Ekran Görüntüsü, OCR, Hızlı Yapıştır…) **tepki vermiyordu**; menüyü kapatınca o sırada bastığınız her şey **arka arkaya birden tetikleniyordu**. Bunun sebebi macOS'ta yerel menülerin uygulamayı geçici olarak dondurmasıydı.
-- Artık menü açıkken kısayollar devre dışı bırakılıyor: basış birikmiyor, menü kapanınca sürpriz bir işlem yığını çalışmıyor. Menü kapanır kapanmaz kısayollar normale dönüyor.
+## 💬 İpuçları artık gerçekten görünüyor
+- Ana pencere her zaman üstte olduğu için, üzerine gelince çıkması gereken açıklamalar (başlık düğmeleri, ayarlar…) **pencerenin arkasında kalıyor ve hiç görünmüyordu**. Artık pencere içinde çiziliyorlar ve her zaman görünüyorlar.
+
+## 🖼️ Galeri araç çubuğu
+- Grid düğmelerinin karşısına, sola iki yeni işlem: **Klasörde Göster** (ekran görüntüsü klasörünü açar) ve **Büyük Görüntüle** (en yeni görüntüyü büyük pencerede açar).
+
+## ✨ Görünüm
+- Ayarlardaki tüm onay kutuları **kayan anahtar** görünümüne geçti.
 
 ## 📦 Kurulum & Güncelleme
-1. CopyBoard-Setup-2.9.2.exe (Windows) veya CopyBoard-2.9.2-arm64.dmg (macOS) dosyasını indirip kurun; veya
+1. CopyBoard-Setup-2.9.3.exe (Windows) veya CopyBoard-2.9.3-arm64.dmg (macOS) dosyasını indirip kurun; veya
 2. Açık uygulamada otomatik güncelleme bildirimiyle geçin.
 
 ---

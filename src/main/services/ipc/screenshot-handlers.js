@@ -2,7 +2,7 @@ const { ipcMain, clipboard, nativeImage, shell, Menu, BrowserWindow, screen } = 
 const fs = require('fs');
 const path = require('path');
 const { showToast } = require('../window-manager');
-const { publicList, getScreenshotById, deleteScreenshot, pruneMissing } = require('../screenshot-library');
+const { publicList, getScreenshotById, deleteScreenshot, pruneMissing, screenshotsDir } = require('../screenshot-library');
 
 // Screenshot gallery IPC (main window).
 
@@ -161,6 +161,18 @@ function registerScreenshotHandlers() {
     ipcMain.on('copy-screenshot', (e, id) => copyShot(id));
     ipcMain.on('delete-screenshot', (e, id) => removeShot(id));
     ipcMain.on('show-screenshot-file', (e, id) => revealShot(id));
+
+    // Toolbar action: reveal the gallery FOLDER (not one file). The directory is created
+    // lazily on the first saved screenshot, so it may legitimately not exist yet.
+    ipcMain.on('open-screenshot-folder', async () => {
+        const dir = screenshotsDir();
+        if (!fs.existsSync(dir)) {
+            showToast('Henüz ekran görüntüsü yok.', 'info');
+            return;
+        }
+        const err = await shell.openPath(dir);
+        if (err) showToast('Klasör açılamadı: ' + err, 'error');
+    });
 
     // Large viewer window (opened from the gallery preview or the context menu).
     ipcMain.on('open-screenshot-viewer', (e, id) => openViewer(id));

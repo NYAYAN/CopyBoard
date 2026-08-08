@@ -64,6 +64,13 @@ const state = {
         draw: store.get('globalShortcutImage', 'Alt+9'),
         video: store.get('globalShortcutVideo', 'Alt+8'),
         ocr: store.get('globalShortcutOcr', 'Alt+2'),
+        color: store.get('globalShortcutColor', 'Alt+3'),
+        // Per-shortcut on/off. The accelerator is KEPT when a shortcut is switched off, so
+        // turning it back on restores the same binding — only the registration goes away.
+        enabled: Object.assign(
+            { list: true, draw: true, video: true, ocr: true, color: true, paste: true },
+            store.get('shortcutsEnabled', {})
+        ),
         paste: store.get('globalShortcutPaste', 'CommandOrControl+Shift+V')
     },
     showWidget: store.get('showWidget', false),

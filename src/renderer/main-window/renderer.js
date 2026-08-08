@@ -1,6 +1,7 @@
-import { initState, setupEventListeners, updateHistoryState, resetSearchState } from './modules/events.js';
+import { initState, setupEventListeners, updateHistoryState, resetSearchState, applyShortcutEnabled } from './modules/events.js';
 import { renderHistory } from './modules/history-renderer.js';
 import { initGallery } from './modules/gallery.js';
+import { initTooltips } from './modules/tooltip.js';
 import { elements } from './modules/dom.js';
 
 (async () => {
@@ -44,9 +45,13 @@ import { elements } from './modules/dom.js';
     elements.shortcutInput.value = format(settings.globalShortcut);
     elements.imageShortcutInput.value = format(settings.globalShortcutImage);
     elements.ocrShortcutInput.value = format(settings.globalShortcutOcr);
+    elements.colorShortcutInput.value = format(settings.globalShortcutColor);
     elements.videoShortcutInput.value = format(settings.globalShortcutVideo);
     elements.pasteShortcutInput.value = format(settings.globalShortcutPaste);
     if (settings.videoQuality) elements.videoQualitySelect.value = settings.videoQuality;
+
+    const enabled = settings.shortcutsEnabled || {};
+    ['list', 'draw', 'ocr', 'color', 'video', 'paste'].forEach(k => applyShortcutEnabled(k, enabled[k] !== false));
 
     // 4. Render Initial History
     renderHistory(history.history || [], history.favorites || [], 'all');
@@ -54,6 +59,7 @@ import { elements } from './modules/dom.js';
     // 5. Setup Listeners
     setupEventListeners();
     initGallery();
+    initTooltips(); // native title tooltips are invisible in an always-on-top window
 })();
 
 // IPC Event Listeners

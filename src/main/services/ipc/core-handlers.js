@@ -9,6 +9,8 @@ function registerCoreHandlers() {
         maxItems: state.maxItems, quickPasteCount: state.quickPasteCount, globalShortcut: state.shortcuts.list,
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
         globalShortcutOcr: state.shortcuts.ocr,
+        globalShortcutColor: state.shortcuts.color,
+        shortcutsEnabled: state.shortcuts.enabled,
         globalShortcutPaste: state.shortcuts.paste,
         autoStart: state.autoStart, videoQuality: state.videoQuality,
         clipboardPaused: state.clipboardPaused || false,

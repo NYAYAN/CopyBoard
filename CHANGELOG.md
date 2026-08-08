@@ -1,3 +1,30 @@
+# CopyBoard v2.9.3 Release Notes
+
+Renk kodu alma, kısayol başına aç/kapa, görünür ipuçları ve galeri araç çubuğu.
+
+## 🎨 Renk Kodu Al (yeni)
+- Yeni kısayol (varsayılan **Alt+3**) ve tepsi menüsü öğesi: ekran donuyor, büyüteç imlecin altındaki pikselin hex kodunu canlı gösteriyor, tek tık kodu panoya + geçmişe alıyor (`Renk kodu kopyalandı: #336699`), **Esc** iptal ediyor.
+- Bu modda ekran **karartılmıyor** — normal ekran görüntüsü modundaki %50 karartma, kopyalanandan başka bir renk görmene sebep olurdu. Seçim kutusu/araç çubuğu da gizli; büyüteç tek araç.
+- Büyüteç etiketi ile tıklamanın kopyaladığı değer artık **aynı kaynaktan** (ekran görüntüsü katmanı) okunuyor; önceden etiket büyütülmüş kopyadan örneklendiği için ayrışabilirdi.
+
+## 🎚️ Kısayol başına aç/kapa
+- Ayarlar'da her kısayolun yanında bir anahtar var. Kapatınca kısayol işletim sisteminden **bırakılıyor**, yani o kombinasyon başka uygulamalara serbest kalıyor — CopyBoard'un bir tuşu gasp etmesi böylece çözülüyor.
+- Kısayolun **değeri silinmiyor**: girdi soluklaşıyor ama bağlama duruyor, tekrar açınca aynı tuşla geri geliyor. Kapalıyken değiştirilirse yeni değer saklanıyor, açıldığı anda kaydediliyor.
+- Kapalı bir kısayol tepsi menüsünde de gösterilmiyor ve menü açıkken tetiklemiyor; menü öğesinin kendisi tıklamayla çalışmaya devam ediyor. Tercih kalıcı.
+
+## 💬 İpuçları artık görünüyor
+- Ana pencere "her zaman üstte" olduğu için, macOS'un yerel `title` ipuçları (ayrı bir sistem penceresinde normal seviyede çizilir) **pencerenin arkasında kalıyor ve hiç görünmüyordu** — başlıktaki düğmeler, ayar satırları, hepsi.
+- İpuçları artık sayfanın içinde çiziliyor: bir öğenin üzerine ilk gelindiğinde `title` otomatik olarak sayfa-içi ipucuna dönüştürülüyor (yerel olan kaldırılıyor, çift ipucu olmuyor). Sonradan oluşturulan satır/düğmeler de kapsanıyor; pencere kenarına yaklaşınca yukarı dönüyor.
+- Geçmiş satırlarının 500 ms'lik ipucu da aynı elemanı kullanıyor — tek sistem, iki ipucu asla üst üste binmiyor.
+
+## 🖼️ Galeri araç çubuğu
+- Grid düğmelerinin karşısına, sola iki galeri-geneli işlem eklendi: **Klasörde Göster** (ekran görüntüsü klasörünü açar) ve **Büyük Görüntüle** (en yeni görüntüyü büyük pencerede açar). Galeri boşken ikisi de pasif.
+
+## ✨ Görünüm
+- Ayar panelindeki tüm onay kutuları **kayan anahtar** (switch) görünümüne geçti. Tamamen görsel: öğeler hâlâ gerçek checkbox olduğundan mevcut mantık, etiket tıklaması ve klavye erişimi değişmedi.
+
+---
+
 # CopyBoard v2.9.2 Release Notes
 
 macOS menü çubuğu (tepsi) simgesi düzeltmeleri.

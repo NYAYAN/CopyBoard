@@ -209,6 +209,23 @@ function registerCaptureHandlers() {
         }
     });
 
+    // Colour-picker mode: the overlay sends the hex under the crosshair. It's text, not an
+    // image, so it goes to the clipboard and the history like any other copied string.
+    ipcMain.on('snip-copy-color', (e, hex) => {
+        try {
+            const value = String(hex || '').trim().toLowerCase();
+            if (!/^#[0-9a-f]{6}$/.test(value)) throw new Error('geçersiz renk kodu');
+            clipboard.writeText(value);
+            state.lastText = value; // keep the watcher from re-capturing our own write
+            addHistory(value);
+            showToast('Renk kodu kopyalandı: ' + value, 'success');
+        } catch (err) {
+            showToast('Renk kopyalanamadı: ' + err.message, 'error');
+        } finally {
+            closeAllCaptureWindows();
+        }
+    });
+
     ipcMain.on('snip-save-image', async (e, d) => {
         let win = BrowserWindow.fromWebContents(e.sender);
         if (!win && state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;

@@ -86,4 +86,4 @@ function pruneMissing() {
     return false;
 }
 
-module.exports = { addScreenshot, publicList, getScreenshotById, deleteScreenshot, pruneMissing };
+module.exports = { addScreenshot, publicList, getScreenshotById, deleteScreenshot, pruneMissing, screenshotsDir };

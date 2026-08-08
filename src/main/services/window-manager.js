@@ -19,6 +19,7 @@ function showMain() {
             display.workArea.y + height - 560
         );
         state.mainWindowShownAt = Date.now();
+        state.mainWindowWasFocused = false;
         state.mainWindow.show();
         // The dock is hidden (accessory app), so show()+focus() alone doesn't necessarily
         // make CopyBoard the active app and the fresh window can lose focus at once.
@@ -63,9 +64,14 @@ function createMainWindow() {
     });
 
     state.mainWindow.loadFile(path.join(__dirname, '../../renderer/main-window/index.html'));
+    state.mainWindow.on('focus', () => { state.mainWindowWasFocused = true; });
     state.mainWindow.on('blur', () => {
         if (!state.mainWindow || state.mainWindow.isDestroyed()) return;
         if (Date.now() - (state.mainWindowShownAt || 0) < SHOW_SETTLE_MS) return; // focus still settling
+        // Close-on-click-away only makes sense for a window that actually HELD focus. If it
+        // never got it (another app kept/stole it after the tray click), a blur here means
+        // the window never became active — hiding on it is what made "Göster" look dead.
+        if (!state.mainWindowWasFocused) return;
         state.mainWindowHiddenAt = Date.now();
         state.mainWindow.webContents.send('reset-view');
         state.mainWindow.hide();

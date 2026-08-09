@@ -584,7 +584,20 @@ input[type="checkbox"] {
     background: rgba(255, 255, 255, 0.03);
 }
 
-.history-item.copied {
+/* Favorites rows carrying a note get a faint accent wash so annotated entries read as
+   such while scanning — the note icon alone sits in the actions column, which only
+   fades in on hover. Declared after :hover, so both states need their own rule. */
+.history-item.has-note {
+    background: rgba(137, 87, 229, 0.09);
+}
+
+.history-item.has-note:hover {
+    background: rgba(137, 87, 229, 0.15);
+}
+
+/* Copy flash wins over the note wash in both states (hence the :hover selector). */
+.history-item.copied,
+.history-item.copied:hover {
     background: rgba(80, 250, 123, 0.1);
 }
 
@@ -746,6 +759,44 @@ input[type="checkbox"] {
     text-align: left;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.08);
+    position: relative;
+}
+
+/* Copy-the-note icon, parked in the modal's top-right corner on the title's baseline.
+   Absolute rather than in the actions row: it acts on the note being read, not on the
+   modal's open/edit/close flow, and the actions row is already the primary choice. */
+.note-copy-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.note-copy-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+.note-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+/* Confirmation: the icon swaps to a check and goes green for 800ms, matching the row
+   copy button — the modal stays open, so the button is the only place to say "done". */
+.note-copy-btn.copied {
+    color: #50fa7b;
 }
 
 .modal h3 {

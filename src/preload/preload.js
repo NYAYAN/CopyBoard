@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
     setShortcutEnabled: (key, enabled) => ipcRenderer.send('set-shortcut-enabled', key, enabled),
     setPasteShortcut: (shortcut) => ipcRenderer.send('set-paste-shortcut', shortcut),
     copyItem: (text) => ipcRenderer.send('copy-item', text),
+    copyText: (text) => ipcRenderer.send('copy-text', text), // copy without dismissing the window
     deleteHistoryItem: (id) => ipcRenderer.send('delete-history-item', id),
     addToFavorites: (item) => ipcRenderer.send('add-to-favorites', item),
     removeFromFavorites: (id) => ipcRenderer.send('remove-from-favorites', id),

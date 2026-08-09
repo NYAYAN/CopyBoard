@@ -56,6 +56,7 @@ export const elements = {
     noteViewActions: document.getElementById('note-view-actions'),
     noteEditActions: document.getElementById('note-edit-actions'),
     closeNoteBtn: document.getElementById('close-note-btn'),
+    copyNoteBtn: document.getElementById('copy-note-btn'),
     editNoteBtn: document.getElementById('edit-note-btn'),
     saveNoteBtn: document.getElementById('save-note-btn'),
     cancelNoteBtn: document.getElementById('cancel-note-btn'),

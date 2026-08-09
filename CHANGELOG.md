@@ -1,3 +1,19 @@
+# CopyBoard v2.9.4 Release Notes
+
+Satır düğmelerinin ipuçları ve not metnini kopyalama.
+
+## 💬 Satır düğmelerinin ipuçları artık görünüyor
+- v2.9.3 sayfa-içi ipucu sistemini getirdi ama **geçmiş satırlarının içindeki düğmeler kapsam dışı kaldı**: `initTooltips()` `.history-item` içindeki her şeyi atlar (satırlar kendi içerik önizlemesini yönetir), dolayısıyla yıldız, kopyala ve sil düğmelerindeki `title` yerel ipucuna düşüyor, "her zaman üstte" pencerenin arkasında çizilip hiç görünmüyordu.
+- Bu üç düğme artık — not düğmesi gibi — sayfa-içi ipucunu kendisi sürüyor: kendi dikdörtgenine tutturuluyor, 250 ms sonra beliriyor, fare ayrılınca kayboluyor. Satırın 500 ms'lik içerik önizlemesi düğmeye girildiğinde iptal ediliyor, iki ipucu asla çakışmıyor.
+- Dört düğmede tekrarlanan bağlama tek bir `labelAction()` yardımcısında toplandı; `title` artık hiçbirinde yok, `aria-label` değerlerinin hepsi korundu ve tek yerden veriliyor.
+
+## 📋 Notu kopyala
+- Not penceresine bir **kopyala düğmesi** eklendi: öğenin kendisini değil, **notun metnini** panoya alır ve geçmişe ekler.
+- Yeni `copy-text` IPC'si satır kopyalamadan (`copy-item`) farklı olarak **pencereyi gizlemez** — düğmenin yerinde onay verebilmesi için. İkon 800 ms tik işaretine döner, sonra geri gelir.
+- Düğme yalnızca not görüntüleme modunda görünür; düzenleme modunda gizlenir (henüz kaydedilmemiş metin kopyalanmasın diye).
+
+---
+
 # CopyBoard v2.9.3 Release Notes
 
 Renk kodu alma, kısayol başına aç/kapa, görünür ipuçları ve galeri araç çubuğu.

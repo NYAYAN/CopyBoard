@@ -31,6 +31,7 @@ export function showNoteViewMode(text) {
     elements.noteInput.classList.add('hidden');
     elements.noteViewActions.classList.remove('hidden');
     elements.noteEditActions.classList.add('hidden');
+    elements.copyNoteBtn.classList.remove('hidden'); // there is a note to copy
 }
 
 export function showNoteEditMode(text) {
@@ -41,6 +42,7 @@ export function showNoteEditMode(text) {
     elements.noteInput.classList.remove('hidden');
     elements.noteViewActions.classList.add('hidden');
     elements.noteEditActions.classList.remove('hidden');
+    elements.copyNoteBtn.classList.add('hidden'); // nothing settled to copy while editing
 
     elements.noteInput.focus();
 }

@@ -93,6 +93,25 @@ export function setupEventListeners() {
     // Note Modal
     elements.closeNoteBtn.addEventListener('click', closeNoteModal);
     elements.editNoteBtn.addEventListener('click', () => showNoteEditMode(elements.noteInput.value));
+    // Copies the note itself, not the item it's attached to. The window stays put (see the
+    // 'copy-text' handler), so the icon confirms in place with the same 800ms check swap
+    // the row copy button uses. The copy glyph is read back from the markup rather than
+    // duplicated here, so the two never drift apart.
+    const noteCopyIcon = elements.copyNoteBtn.innerHTML;
+    const noteCheckIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    let noteCopyTimer = null;
+    elements.copyNoteBtn.addEventListener('click', () => {
+        const text = elements.noteViewContent.textContent;
+        if (!text) return;
+        window.api.copyText(text);
+        elements.copyNoteBtn.innerHTML = noteCheckIcon;
+        elements.copyNoteBtn.classList.add('copied');
+        clearTimeout(noteCopyTimer);
+        noteCopyTimer = setTimeout(() => {
+            elements.copyNoteBtn.innerHTML = noteCopyIcon;
+            elements.copyNoteBtn.classList.remove('copied');
+        }, 800);
+    });
     elements.cancelNoteBtn.addEventListener('click', () => {
         // Notes are opened from the favorites tab, so look there first; fall back to history.
         const id = getCurrentNoteItemId();

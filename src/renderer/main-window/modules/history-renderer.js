@@ -19,6 +19,9 @@ const { ICONS: SHARED_ICONS, matchesSearch } = window.CopyBoardShared;
 const PREVIEW_CHARS = 300;
 const TOOLTIP_CHARS = 500;
 const TOOLTIP_DELAY_MS = 500;
+// Row action icons are deliberate hover targets, not something you cross by accident on
+// the way to a row — so they reveal faster than the row's content preview.
+const ACTION_TOOLTIP_DELAY_MS = 250;
 const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
 
 // Row content preview uses the window's shared tooltip (see tooltip.js) — native title
@@ -26,6 +29,21 @@ const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
 // tooltip from ever fighting a control's.
 function scheduleTooltip(content, row) {
     showTooltipAt(clip(content, TOOLTIP_CHARS), row.getBoundingClientRect(), TOOLTIP_DELAY_MS);
+}
+
+// Label a row action. Deliberately no title= : initTooltips skips everything inside a row
+// (rows own their content preview), so a title here would fall through to the native OS
+// tooltip — drawn at normal window level and therefore invisible behind this always-on-top
+// window. Each button drives the in-page tooltip itself, anchored to its own rect, while
+// aria-label carries the same text for screen readers. `tipText` defaults to the label;
+// pass it when the hover should say more than the label does.
+function labelAction(btn, label, tipText = label) {
+    btn.setAttribute('aria-label', label);
+    btn.addEventListener('mouseenter', () => {
+        hideTooltip(); // drop the row preview so the two tooltips never fight
+        showTooltipAt(tipText, btn.getBoundingClientRect(), ACTION_TOOLTIP_DELAY_MS);
+    });
+    btn.addEventListener('mouseleave', hideTooltip);
 }
 
 // Monochrome inline SVGs (stroke=currentColor) matching the header icon set, so row
@@ -75,6 +93,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         // Drag handles for favorites (reordering)
         if (activeTab === 'favorites') {
             domItem.classList.add('favorites-tab');
+            if (item.note) domItem.classList.add('has-note');
             domItem.dataset.tabContext = 'favorites';
             domItem.dataset.itemId = item.id;
             domItem.setAttribute('draggable', 'true');
@@ -108,13 +127,14 @@ export function renderHistory(history, favorites, activeTab, query = '') {
 
         // Note button (favorites only)
         if (activeTab === 'favorites') {
+            const label = item.note ? 'Notu Düzenle' : 'Not Ekle';
             const infoBtn = document.createElement('button');
             infoBtn.className = `action-btn info-btn ${item.note ? 'has-note' : ''}`;
             infoBtn.innerHTML = item.note ? ICONS.noteEdit : ICONS.noteAdd;
-            infoBtn.title = item.note ? 'Notu Düzenle' : 'Not Ekle';
-            infoBtn.setAttribute('aria-label', item.note ? 'Notu Düzenle' : 'Not Ekle');
-            if (item.note) infoBtn.title += `\nNot: ${item.note.substring(0, 50)}${item.note.length > 50 ? '...' : ''}`;
-            infoBtn.addEventListener('click', (e) => { e.stopPropagation(); openNoteModal(item); });
+            // An existing note shows its text on hover — the same text the modal opens
+            // with, so hovering and clicking tell the same story.
+            labelAction(infoBtn, label, item.note ? clip(item.note, TOOLTIP_CHARS) : label);
+            infoBtn.addEventListener('click', (e) => { e.stopPropagation(); hideTooltip(); openNoteModal(item); });
             actionsDiv.appendChild(infoBtn);
         }
 
@@ -124,8 +144,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
             // In Favoriler: always ⭐, clicking removes from favorites
             starBtn.className = 'action-btn star-btn active';
             starBtn.innerHTML = ICONS.starFilled;
-            starBtn.title = 'Favorilerden Çıkar';
-            starBtn.setAttribute('aria-label', 'Favorilerden Çıkar');
+            labelAction(starBtn, 'Favorilerden Çıkar');
             starBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 window.api.removeFromFavorites(item.id);
@@ -135,8 +154,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
             const isAlreadyFavorited = favoritedContents.has(itemContent);
             starBtn.className = `action-btn star-btn ${isAlreadyFavorited ? 'active' : ''}`;
             starBtn.innerHTML = isAlreadyFavorited ? ICONS.starFilled : ICONS.starOutline;
-            starBtn.title = isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : 'Favorilere Ekle';
-            starBtn.setAttribute('aria-label', isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : 'Favorilere Ekle');
+            labelAction(starBtn, isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : 'Favorilere Ekle');
             starBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (!isAlreadyFavorited) {
@@ -149,8 +167,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'action-btn copy-btn';
         copyBtn.innerHTML = ICONS.copy;
-        copyBtn.title = 'Kopyala';
-        copyBtn.setAttribute('aria-label', 'Kopyala');
+        labelAction(copyBtn, 'Kopyala');
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             copyBtn.innerHTML = ICONS.check;
@@ -161,8 +178,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn delete-btn';
         deleteBtn.innerHTML = ICONS.trash;
-        deleteBtn.title = activeTab === 'favorites' ? 'Favorilerden Çıkar' : 'Sil';
-        deleteBtn.setAttribute('aria-label', activeTab === 'favorites' ? 'Favorilerden Çıkar' : 'Sil');
+        labelAction(deleteBtn, activeTab === 'favorites' ? 'Favorilerden Çıkar' : 'Sil');
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (activeTab === 'favorites') {

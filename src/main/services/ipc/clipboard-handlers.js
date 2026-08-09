@@ -36,6 +36,16 @@ function registerClipboardHandlers() {
         if (state.mainWindow) state.mainWindow.hide();
     });
 
+    // Same write as 'copy-item' minus the hide. Picking a row means "give me this and get
+    // out of the way", but copying from inside an open modal (the note detail) doesn't —
+    // the window has to stay put so the button can show its confirmation.
+    ipcMain.on('copy-text', (e, text) => {
+        if (!text) return;
+        clipboard.writeText(text);
+        state.lastText = text; // keep the 1s watcher from re-capturing our own write
+        addHistory(text);
+    });
+
     // Quick-paste picker: put the chosen item on the clipboard, hide the (non-focusable)
     // picker, then paste straight into the field the user was in — see paste-service.
     ipcMain.on('quickpaste-pick', (e, text) => {

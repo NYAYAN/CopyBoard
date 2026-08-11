@@ -1,6 +1,7 @@
 const mainBtn = document.getElementById('widget-main');
 const menu = document.getElementById('widget-menu');
 const btnSnippet = document.getElementById('btn-snippet');
+const btnQuickPaste = document.getElementById('btn-quickpaste');
 const btnScreenshot = document.getElementById('btn-screenshot');
 const btnOcr = document.getElementById('btn-ocr');
 const btnVideo = document.getElementById('btn-video');
@@ -114,6 +115,11 @@ let lastIgnoreState = null;
 function setIgnore(ignore, options) {
     if (lastIgnoreState === ignore) return;
     lastIgnoreState = ignore;
+    // The cursor just landed on a widget surface, so we are still NOT the frontmost
+    // app — this is the last moment we can see which app the user is typing in. The
+    // click that follows makes CopyBoard frontmost, and a Quick-Paste pick has to be
+    // handed back to that app. macOS-only; a no-op elsewhere.
+    if (!ignore) window.api.widgetAction('note-front-app');
     window.api.setIgnoreMouseEvents(ignore, options);
 }
 
@@ -514,6 +520,14 @@ btnSnippet.addEventListener('click', async () => {
             historyTimeout = null;
         }, 300);
     }
+});
+
+// Mouse-driven Quick Paste. This is the ONLY way in when macOS Secure Event Input is
+// active (any focused password field): the OS then hands keystrokes exclusively to that
+// app, so our global accelerator never fires — but mouse events are untouched.
+btnQuickPaste.addEventListener('click', () => {
+    window.api.widgetAction('quickpaste');
+    closeAll();
 });
 
 btnScreenshot.addEventListener('click', () => window.api.widgetAction('capture-draw'));

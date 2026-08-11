@@ -385,7 +385,8 @@ function handleWidgetAction(action, data) {
     // Scaled dimensions
     const FULL_W = Math.round(418 * s);
     const COL_H = Math.round(68 * s);
-    const EXP_H = Math.round(350 * s);
+    // Menu column: 70px offset + 6 × 42px items + 5 × 10px gaps = 372, plus bottom slack.
+    const EXP_H = Math.round(402 * s);
     const HIS_H = Math.round(400 * s);
     const PANEL_W = Math.round(350 * s);
     const BTN_W = Math.round(68 * s);
@@ -504,6 +505,17 @@ function handleWidgetAction(action, data) {
 
     } else if (action === 'open-list') {
         showMain();
+    } else if (action === 'note-front-app') {
+        require('./paste-service').noteFrontApp();
+    } else if (action === 'quickpaste') {
+        // On Windows the paste is a bare Ctrl+V into whatever window has the foreground,
+        // and the click that opened this menu gave it to the widget. Dropping focus hands
+        // it back to the app underneath. macOS re-activates the remembered app instead
+        // (see paste-service), so leave its carefully-tuned activation alone.
+        if (process.platform === 'win32') {
+            try { state.widgetWindow.blur(); } catch (e) { }
+        }
+        toggleQuickPaste();
     } else if (action === 'capture-draw') {
         require('./capture-service').startCapture('draw');
     } else if (action === 'capture-ocr') {

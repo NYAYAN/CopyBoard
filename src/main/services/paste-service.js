@@ -78,6 +78,14 @@ function sendPasteWindows() {
 // requires Accessibility permission. See ensureAccessibility().
 
 let macFrontApp = null;
+let macFrontAppAt = 0;
+
+// How long a remembered target stays usable. It only has to survive the picker being
+// opened from OUR OWN UI (widget button / tray menu), where the click makes CopyBoard
+// frontmost and the real target is the app the user was in a moment earlier: hover →
+// click → read the list → pick. Short enough that we never yank a long-forgotten app
+// to the front.
+const FRONT_APP_TTL_MS = 120000;
 
 // Bundle ids are [A-Za-z0-9.-]; anything else is not one, and we refuse to
 // interpolate it into AppleScript source.
@@ -94,13 +102,23 @@ function osa(args, cb) {
 }
 
 // Remember the app to paste into. Called when the picker opens, so the answer is
-// ready (and the osascript startup cost is paid) before the user clicks.
+// ready (and the osascript startup cost is paid) before the user clicks — and from
+// the widget on hover, which is the last moment we are still NOT the frontmost app.
 function captureFrontmostApp() {
     osa(
         ['-e', 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true'],
         (err, stdout) => {
             const id = err ? '' : String(stdout).trim();
-            macFrontApp = (BUNDLE_ID.test(id) && !isSelf(id)) ? id : null;
+            if (BUNDLE_ID.test(id) && !isSelf(id)) {
+                macFrontApp = id;
+                macFrontAppAt = Date.now();
+                return;
+            }
+            // Frontmost is CopyBoard itself: the picker was opened from the widget or
+            // the tray, whose click took focus. KEEP the app the user was actually in —
+            // clearing it here would send the Cmd+V to our own window. Only a target
+            // that has gone stale is dropped.
+            if (Date.now() - macFrontAppAt > FRONT_APP_TTL_MS) macFrontApp = null;
         }
     );
 }
@@ -118,8 +136,9 @@ function classifyOsaError(msg) {
 
 function sendPasteMac(onError) {
     const args = [];
-    if (macFrontApp) {
-        args.push('-e', `tell application id "${macFrontApp}" to activate`);
+    const target = (macFrontApp && Date.now() - macFrontAppAt <= FRONT_APP_TTL_MS) ? macFrontApp : null;
+    if (target) {
+        args.push('-e', `tell application id "${target}" to activate`);
         args.push('-e', 'delay 0.06');
     }
     args.push('-e', 'tell application "System Events" to keystroke "v" using command down');
@@ -162,6 +181,23 @@ function warmPasteHelper() {
     if (trusted) captureFrontmostApp();
 }
 
+// Refresh the paste target WITHOUT prompting for anything. Called from the widget the
+// moment the cursor lands on it — the click that follows makes CopyBoard frontmost, so
+// this hover is the last chance to see which app the user is actually typing in.
+// Throttled: the cursor crosses the widget often and each call costs an osascript spawn.
+const NOTE_THROTTLE_MS = 1500;
+let lastNoteAt = 0;
+
+function noteFrontApp() {
+    if (process.platform !== 'darwin') return;
+    const now = Date.now();
+    if (now - lastNoteAt < NOTE_THROTTLE_MS) return;
+    lastNoteAt = now;
+    // Never prompt here — an Accessibility/Automation dialog popped by a mere hover
+    // would be baffling. warmPasteHelper() owns the one prompt per run.
+    if (ensureAccessibility(false)) captureFrontmostApp();
+}
+
 // onError('automation' | 'accessibility' | 'unknown') — macOS only, fired async when
 // the keystroke could not be delivered.
 function sendPasteKeystroke(onError) {
@@ -177,4 +213,4 @@ function disposePasteHelper() {
     }
 }
 
-module.exports = { sendPasteKeystroke, warmPasteHelper, disposePasteHelper, ensureAccessibility };
+module.exports = { sendPasteKeystroke, warmPasteHelper, noteFrontApp, disposePasteHelper, ensureAccessibility };

@@ -1,20 +1,25 @@
-# CopyBoard v2.9.4 - Görünen Düğme İpuçları ve Notu Kopyala 💬📋
+# CopyBoard v2.9.5 - OCR Düzeltmesi ve Hızlı Yapıştır Düğmesi 🔤📋
 
-Küçük ama her gün hissedilen iki iyileştirme.
+Metin tarama yeniden çalışıyor, hızlı yapıştırma parola alanlarında da kullanılabiliyor.
 
-## 💬 Satır düğmelerinin ipuçları artık görünüyor
-- Geçmiş satırlarındaki **yıldız, kopyala ve sil** düğmelerinin üzerine geldiğinizde ne işe yaradıkları artık gerçekten yazıyor. Önceki sürümde bu açıklamalar pencerenin arkasında kaldığı için hiç görünmüyordu.
-- İpucu düğmenin hemen altında, yarım saniyeden kısa sürede beliriyor; fareyi çekince kayboluyor.
-- Satırın kendi içerik önizlemesiyle çakışmıyor: düğmeye geldiğinizde önizleme kapanıyor, düğmenin açıklaması çıkıyor.
+## 🔤 Metin Tara (OCR) yeniden çalışıyor
+- Önceki sürümde **her tarama hata veriyordu** (`Only absolute URLs are supported`) — Windows ve macOS'ta aynı şekilde. Düzeltildi.
+- Tarama tamamen **çevrimdışı**: dil verisi uygulamayla birlikte geliyor, internet gerekmiyor.
+- Bir tarama ters giderse uygulama kendini toparlıyor; OCR'ı geri getirmek için artık uygulamayı yeniden başlatmanız gerekmiyor.
+- Hız: ilk tarama ~0,7 saniye, sonraki taramalar ~0,4 saniye.
 
-## 📋 Notu kopyala
-- Not penceresine bir **kopyala düğmesi** geldi: notun metnini tek tıkla panoya alır.
-- Öğenin kendisini değil **notu** kopyalar ve **pencere açık kalır**, böylece kopyaladıktan sonra notu okumaya devam edebilirsiniz.
-- Düğme onay için kısa süre tik işaretine döner.
-- Notu düzenlerken düğme gizlenir; kaydettikten sonra tekrar görünür.
+## 📋 Hızlı Yapıştır artık widget menüsünde
+- Widget menüsüne **Hızlı Yapıştır** düğmesi eklendi.
+- macOS'ta bir **parola alanı** odaktayken sistem klavyeyi o uygulamaya kilitler ve kısayollar çalışmaz. Bu düğme faresle çalıştığı için panel o durumda da açılıyor.
+- Seçtiğiniz öğe, widget'a gelmeden önce yazmakta olduğunuz uygulamaya yapıştırılıyor.
+- Windows'ta da düğme, arkadaki uygulamaya doğru yapıştırıyor.
+- Ayarlardaki Hızlı Yapıştır satırının açıklaması bu durumu ve alternatifleri anlatıyor.
+
+## 📐 Widget menüsü
+- Menü, altıncı düğmeyi de tam gösterecek şekilde büyüdü — önceden son öğe kırpılıyordu.
 
 ## 📦 Kurulum & Güncelleme
-1. CopyBoard-Setup-2.9.4.exe (Windows) veya CopyBoard-2.9.4-arm64.dmg (macOS) dosyasını indirip kurun; veya
+1. CopyBoard-Setup-2.9.5.exe (Windows) veya CopyBoard-2.9.5-arm64.dmg (macOS) dosyasını indirip kurun; veya
 2. Açık uygulamada otomatik güncelleme bildirimiyle geçin.
 
 ---

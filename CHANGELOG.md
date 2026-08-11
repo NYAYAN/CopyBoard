@@ -1,3 +1,30 @@
+# CopyBoard v2.9.5 Release Notes
+
+OCR'ın hiç çalışmaması, Secure Input altında hızlı yapıştırma ve widget menüsü.
+
+## 🔤 OCR artık çalışıyor (kritik)
+- Her tarama `TypeError: Only absolute URLs are supported` ile düşüyordu; Windows ve macOS'ta aynı şekilde. Sebep: tesseract.js worker thread'inde hangi ortamda olduğunu `is-electron` ile soruyor, cevap `'node'` değil `'electron'` olduğu için `langPath`'i **URL sanıp** node-fetch'e veriyor ve node-fetch düz bir dosya yolunu reddediyor (`worker-script/index.js:134`). Pakette gelen `eng/tur.traineddata` yerindeydi — bozuk olan yükleme yoluydu.
+- Dil verisi artık `langPath` yerine **`cachePath` + `cacheMethod: 'readOnly'`** ile okunuyor: kütüphanenin cache okuyucusu düz `fs.readFile`, yani network koduna hiç girilmiyor. `readOnly` aynı zamanda kurulum dizinine yazmasını — init hata verirse gönderdiğimiz veriyi **silmesini** — engelliyor. Etkisiz kalan `langPath`/`gzip` seçenekleri kaldırıldı.
+- Paketli veri bulunamazsa CDN'e düşülüyor ve indirilen veri `userData`'ya cache'leniyor: bozuk bir kurulumda da tarama çalışır, indirme bir kez olur.
+- `errorHandler` verilmediği için tesseract hatayı **kendi mesaj dinleyicisinde `throw` ediyordu** → main process'te yakalanmamış exception, yani kullanıcıya hata kutusu (`createWorker.js:247`). Artık normal bir reject.
+- `createWorker()`, dil yüklemesi başarısız olduğunda promise'ini **hiç settle etmiyor** (iç reject'i yalnızca core-load adımı için işliyor): ilk hatadan sonra `ocrWorkerPromise` sonsuza kadar pending kalıyor ve OCR uygulama yeniden başlatılana kadar tamamen ölüyordu — ekranda tek iz "Metin Taranıyor..." toast'ıydı. Worker kurulumu (45 sn) ve taramanın kendisi (60 sn) artık zaman aşımlı.
+- Worker thread'i ölürse `exit` olayında cache anında bırakılıyor. tesseract bunu göremiyor: thread'e async `send()` ile post ettiği için hata unhandled rejection olarak kayboluyor ve `recognize()` hiç settle etmiyor. Ölmüş worker'a denk gelen tarama artık sessizce yenisini kurup devam ediyor, kullanıcı hata görmüyor.
+- Yeniden deneme yalnızca **düzelebilecek** durumda yapılıyor: önceki taramadan kalan worker. O tarama için yeni kurulmuş bir worker hata verdiyse sorun görüntüde ya da ortamda, yeniden kurmak sıcak worker'ı boşa harcamaktan başka bir şey yapmaz.
+- Ölçüm (gerçek uygulama, uçtan uca sürülerek): overlay 180 ms'de açılıyor, soğuk worker'la tarama 713 ms, sıcak worker'la 442 ms.
+- Yan not: `options` içinde hiç okunmayan `load_system_dawg`/`load_freq_dawg` kaldırıldı — bunlar `createWorker`'ın 4. (`config`) argümanına ait, verildikleri yerde etkisizdi.
+
+## 📋 Hızlı Yapıştır widget'tan (macOS Secure Input)
+- Widget menüsüne **Hızlı Yapıştır** düğmesi eklendi. Bir parola alanı odaktayken macOS **Secure Event Input**'u açar ve klavyeyi o uygulamaya kilitler: global kısayol hiç tetiklenmez. Fare olayları etkilenmediği için bu düğme, o durumda panele **tek giriş yolu**.
+- Yapıştırma hedefi widget'a **fare girdiği anda** okunuyor (`note-front-app` → `noteFrontApp()`): tıklama CopyBoard'u öne alıyor, dolayısıyla hover kullanıcının gerçekten yazdığı uygulamayı görebildiğimiz son an. 1.5 sn throttle ve hover sırasında asla izin kutusu açılmıyor (tek prompt `warmPasteHelper()`'da kalıyor).
+- Hatırlanan hedef 120 sn yaşıyor. Frontmost CopyBoard'un kendisi olduğunda hedef **silinmiyor** — silinse Cmd+V kendi penceremize giderdi — yalnızca eskimişse bırakılıyor.
+- Windows'ta yapıştırma öndeki pencereye giden düz bir Ctrl+V olduğu için menüyü açan tıklamanın aldığı odak widget'tan bırakılıyor (`blur`) ve alttaki uygulamaya geri veriliyor. macOS'ta hedef yeniden aktive edildiğinden o yol olduğu gibi bırakıldı.
+- Ayarlardaki Hızlı Yapıştır kısayolunun ipucu artık Secure Input durumunu ve widget/tepsi alternatifini anlatıyor.
+
+## 📐 Widget menüsü
+- Menü yüksekliği 350 → 402 px. Altıncı öğe (Hızlı Yapıştır) eklendikten sonra 70 px offset + 6 × 42 px öğe + 5 × 10 px boşluk sığmıyor, son düğme kırpılıyordu.
+
+---
+
 # CopyBoard v2.9.4 Release Notes
 
 Satır düğmelerinin ipuçları ve not metnini kopyalama.

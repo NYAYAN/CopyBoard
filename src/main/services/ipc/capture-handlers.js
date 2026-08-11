@@ -13,43 +13,115 @@ const { addScreenshot } = require('../screenshot-library');
 // 150MB+ of RSS after one scan, so an idle timer tears it down after 5 minutes without
 // OCR; the next scan just pays the ~1-2s warmup again.
 const OCR_IDLE_MS = 5 * 60 * 1000;
+// Tesseract's createWorker() promise never settles when language loading fails — its internal
+// reject only propagates for the core-load step — so the wait is bounded here. Without the
+// bound one failure leaves a forever-pending promise in ocrWorkerPromise and every later scan
+// awaits it, so OCR stays dead until restart with the "Metin Taranıyor..." toast as the only sign.
+const OCR_WORKER_TIMEOUT_MS = 45 * 1000;
+// Same reasoning for the scan itself: a worker thread that dies mid-recognize never rejects
+// (tesseract.js registers a browser-style onerror that node's worker_threads never calls).
+const OCR_SCAN_TIMEOUT_MS = 60 * 1000;
 let ocrWorker = null;
 let ocrWorkerPromise = null;
 let ocrIdleTimer = null;
 
+// Reject with a flagged error if promise hasn't settled in time. The flag marks the worker as
+// unusable — tesseract.js rejects with plain strings, so only our own errors carry properties.
+function withOcrTimeout(promise, ms, message) {
+    let timer = null;
+    const bounded = new Promise((resolve, reject) => {
+        timer = setTimeout(() => {
+            const err = new Error(message);
+            err.ocrTimeout = true;
+            reject(err);
+        }, ms);
+        promise.then(resolve, reject);
+    });
+    return bounded.finally(() => clearTimeout(timer));
+}
+
 function cancelOcrRelease() {
     if (ocrIdleTimer) { clearTimeout(ocrIdleTimer); ocrIdleTimer = null; }
+}
+
+// Drop the cached worker (and any half-finished creation) so the next scan starts clean.
+function releaseOcrWorker() {
+    const worker = ocrWorker;
+    ocrWorker = null;
+    ocrWorkerPromise = null;
+    if (worker) { try { worker.terminate(); } catch (e) { } }
 }
 
 function scheduleOcrRelease() {
     cancelOcrRelease();
     ocrIdleTimer = setTimeout(() => {
         ocrIdleTimer = null;
-        if (ocrWorker) {
-            try { ocrWorker.terminate(); } catch (e) { }
-            ocrWorker = null;
-            ocrWorkerPromise = null;
-        }
+        releaseOcrWorker();
     }, OCR_IDLE_MS);
+}
+
+// eng/tur language data ships with the app (extraResources → resources/tessdata; the repo root
+// in dev) so OCR works offline instead of pulling ~10MB from the CDN on first scan.
+//
+// It is loaded through cachePath, NOT langPath: tesseract.js asks is-electron which environment
+// its worker thread is in, gets 'electron' rather than 'node', and therefore treats langPath as
+// a URL and hands it to node-fetch — which rejects a plain filesystem path with
+// "TypeError: Only absolute URLs are supported" on macOS and Windows alike. Its cache reader is
+// a plain fs.readFile, so pointing cachePath at the bundled tessdata loads eng/tur straight off
+// disk and never touches the network path. 'readOnly' keeps tesseract.js from writing into the
+// install dir — or, when init fails, from deleting the data we shipped.
+function getOcrLangOptions() {
+    const dir = app.isPackaged
+        ? path.join(process.resourcesPath, 'tessdata')
+        : app.getAppPath();
+    const hasBundledData = ['eng', 'tur'].every(lang => {
+        try { return fs.statSync(path.join(dir, `${lang}.traineddata`)).size > 0; }
+        catch (err) { return false; }
+    });
+    if (hasBundledData) return { cachePath: dir, cacheMethod: 'readOnly' };
+    // Data missing from the install: let tesseract.js pull it from its CDN and cache the
+    // download somewhere writable, so a broken install still scans and only downloads once.
+    console.error(`Bundled tessdata not found in ${dir} - falling back to the Tesseract CDN.`);
+    return { cachePath: app.getPath('userData'), cacheMethod: 'write' };
+}
+
+function createOcrWorker() {
+    const Tesseract = require('tesseract.js');
+    const creating = Tesseract.createWorker('eng+tur', 1, {
+        ...getOcrLangOptions(),
+        // Without a handler tesseract.js rethrows worker errors from inside its own message
+        // listener, which surfaces as an uncaught exception in the main process (Electron's
+        // error dialog) instead of a rejected promise we can turn into a toast.
+        errorHandler: err => console.error('OCR worker error:', err)
+    });
+
+    return withOcrTimeout(creating, OCR_WORKER_TIMEOUT_MS, 'OCR worker hazırlanamadı (zaman aşımı)')
+        .catch(err => {
+            // A worker that finishes after the timeout would sit there holding ~150MB.
+            creating.then(w => { try { w.terminate(); } catch (e) { } }, () => { });
+            throw err;
+        });
 }
 
 function getOcrWorker() {
     if (ocrWorker) return Promise.resolve(ocrWorker);
     if (!ocrWorkerPromise) {
-        const Tesseract = require('tesseract.js');
-        // eng/tur language data ships with the app (extraResources → resources/tessdata;
-        // the repo root in dev), so OCR works offline instead of pulling ~10MB from the
-        // CDN on first scan. gzip:false — the bundled files are plain .traineddata.
-        // cacheMethod 'none' — we read straight from langPath, so a cache copy would be
-        // pure duplication (and the install dir may not even be writable).
-        const langPath = app.isPackaged
-            ? path.join(process.resourcesPath, 'tessdata')
-            : app.getAppPath();
-        ocrWorkerPromise = Tesseract.createWorker('eng+tur', 1, {
-            langPath, gzip: false, cacheMethod: 'none',
-            load_system_dawg: '0', load_freq_dawg: '0'
-        })
-            .then(w => { ocrWorker = w; return w; })
+        ocrWorkerPromise = createOcrWorker()
+            .then(w => {
+                ocrWorker = w;
+                // tesseract.js can't tell when its worker thread dies: it posts to the thread
+                // from an async send(), so the failure floats off as an unhandled rejection and
+                // recognize() never settles. Watch the thread and drop the cache as soon as it
+                // exits, so the next scan rebuilds at once instead of waiting out the scan
+                // timeout. A thread that is alive but wedged is still the timeout's job.
+                const thread = w.worker;
+                if (thread && typeof thread.once === 'function') {
+                    thread.once('exit', () => {
+                        if (ocrWorker === w) { ocrWorker = null; ocrWorkerPromise = null; }
+                    });
+                }
+                return w;
+            })
             .catch(err => { ocrWorkerPromise = null; throw err; });
     }
     return ocrWorkerPromise;
@@ -351,9 +423,31 @@ function registerCaptureHandlers() {
         cancelOcrRelease(); // never tear the worker down while a scan is about to use it
         showToast('Metin Taranıyor...', 'info');
         try {
-            const worker = await getOcrWorker();
-            const { data: { text } } = await worker.recognize(Buffer.from(d.split(',')[1], 'base64'));
-            const c = text.trim();
+            const image = Buffer.from(d.split(',')[1], 'base64');
+            let reusedWorker = false;
+            const scan = async () => {
+                reusedWorker = !!ocrWorker; // a worker held over from an earlier scan may have died
+                const worker = await getOcrWorker();
+                const { data: { text } } = await withOcrTimeout(
+                    worker.recognize(image), OCR_SCAN_TIMEOUT_MS, 'Metin taranamadı (zaman aşımı)');
+                return text.trim();
+            };
+
+            let c;
+            try {
+                c = await scan();
+            } catch (firstErr) {
+                if (firstErr && firstErr.ocrTimeout) releaseOcrWorker(); // wedged, never reuse it
+                // Retry only the fault a retry can fix: a worker held over from an earlier scan
+                // that has since died or wedged. When it was built for this scan the failure is
+                // the image or the environment, and rebuilding would burn a warm worker to fail
+                // in exactly the same way.
+                if (!reusedWorker) throw firstErr;
+                console.error('OCR failed on the cached worker, retrying with a fresh one:', firstErr);
+                releaseOcrWorker();
+                c = await scan();
+            }
+
             if (c) {
                 state.lastText = c;
                 clipboard.writeText(c);
@@ -374,11 +468,7 @@ function registerCaptureHandlers() {
     app.on('before-quit', () => {
         cancelOcrRelease();
         endVideoStream(() => { });
-        if (ocrWorker) {
-            try { ocrWorker.terminate(); } catch (e) { }
-            ocrWorker = null;
-            ocrWorkerPromise = null;
-        }
+        releaseOcrWorker();
     });
 }
 

@@ -280,6 +280,33 @@ body {
     opacity: 1;
 }
 
+/* Menu-button labels. These can't use the native title attribute: Chromium draws that
+   tooltip in its own OS window at the normal window level, while this widget is pinned
+   to the screen-saver level — so the tooltip renders BEHIND the buttons and is never
+   readable. An in-page element is inside the widget's own window, so it stays on top.
+   Positioned from JS (see positionBtnTooltip) because there are only ~13px to the right
+   of the button column and it has to flip sides with the widget. */
+.btn-tooltip {
+    position: fixed;
+    background: rgba(24, 24, 27, 0.98);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--text);
+    white-space: nowrap;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    z-index: 1200;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.btn-tooltip.visible {
+    opacity: 1;
+}
+
 /* ── Left-side layout overrides ─────────────────────────────────────────── */
 .left-side .history-panel {
     right: auto;

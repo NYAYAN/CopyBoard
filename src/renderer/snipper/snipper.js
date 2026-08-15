@@ -702,15 +702,17 @@ document.addEventListener('keydown', (e) => {
     // Enter/Escape handler); don't trigger canvas undo, image copy, or window close.
     if (document.activeElement === textInput) return;
     if (e.key === 'Escape') window.api.closeSnipper();
-    if (e.ctrlKey && e.key.toLowerCase() === 'z') undo();
-    if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+    // Cmd on macOS, Ctrl elsewhere — accept either so Cmd+C/Cmd+Z work natively on Mac.
+    const cmdOrCtrl = e.ctrlKey || e.metaKey;
+    if (cmdOrCtrl && e.key.toLowerCase() === 'z') undo();
+    if (cmdOrCtrl && e.key.toLowerCase() === 'c') {
         e.preventDefault(); // Prevent default copy which might fail if nothing focusable
         buttons['btn-copy']();
     }
     // Plain C = color picker: copy the hex code under the loupe crosshair to the
     // clipboard (it also lands in the CopyBoard history). Only while the loupe is
-    // visible, so it can't clash with Ctrl+C image copy during annotation.
-    if (!e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'c' && loupe.style.display === 'block' && loupeHex) {
+    // visible, so it can't clash with Cmd/Ctrl+C image copy during annotation.
+    if (!cmdOrCtrl && !e.altKey && e.key.toLowerCase() === 'c' && loupe.style.display === 'block' && loupeHex) {
         e.preventDefault();
         window.api.copyItem(loupeHex);
         loupeFlashText = '✓ Kopyalandı ' + loupeHex;

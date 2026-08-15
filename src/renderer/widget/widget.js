@@ -25,6 +25,9 @@ const { ICONS, matchesSearch } = window.CopyBoardShared;
 const PREVIEW_CHARS = 300;
 const TOOLTIP_CHARS = 500;
 const TOOLTIP_DELAY_MS = 500;
+// Shorter than the history-row delay: these are icon-only buttons, so the label is the
+// only way to tell them apart and waiting half a second to find out is too slow.
+const BTN_TOOLTIP_DELAY_MS = 300;
 const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
 
 // Same date/time presentation as the main-window list, so the two designs match.
@@ -184,6 +187,55 @@ function hideTooltip() {
     clearTimeout(tooltipTimeout);
     tooltip.classList.remove('visible');
 }
+
+// --- Menu button tooltips ---
+// The buttons carry aria-label rather than title on purpose: Chromium renders a native
+// title tooltip in its own OS window at the normal window level, and this widget is
+// pinned above that (screen-saver level), so the tooltip came up BEHIND the buttons.
+// An in-page element lives inside the widget's own window and stays visible.
+const btnTooltip = document.createElement('div');
+btnTooltip.className = 'btn-tooltip';
+document.body.appendChild(btnTooltip);
+let btnTooltipTimeout = null;
+
+function positionBtnTooltip(btn) {
+    const rect = btn.getBoundingClientRect();
+    const gap = 10, margin = 6;
+    const w = btnTooltip.offsetWidth, h = btnTooltip.offsetHeight;
+
+    // The button column hugs the widget's outer edge — there are only ~13px beyond it —
+    // so the label points inward, and which way that is flips with the widget's side.
+    const toRight = document.body.classList.contains('left-side');
+    let left = toRight ? rect.right + gap : rect.left - gap - w;
+    left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+
+    let top = rect.top + rect.height / 2 - h / 2;
+    top = Math.max(margin, Math.min(top, window.innerHeight - h - margin));
+
+    btnTooltip.style.left = `${left}px`;
+    btnTooltip.style.top = `${top}px`;
+}
+
+function showBtnTooltip(btn) {
+    btnTooltip.textContent = btn.getAttribute('aria-label') || '';
+    positionBtnTooltip(btn); // measurable while transparent, so it fades in already placed
+    btnTooltip.classList.add('visible');
+}
+
+function hideBtnTooltip() {
+    clearTimeout(btnTooltipTimeout);
+    btnTooltip.classList.remove('visible');
+}
+
+document.querySelectorAll('.menu-item').forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+        clearTimeout(btnTooltipTimeout);
+        btnTooltipTimeout = setTimeout(() => showBtnTooltip(btn), BTN_TOOLTIP_DELAY_MS);
+    });
+    btn.addEventListener('mouseleave', hideBtnTooltip);
+    // The menu collapses on click; a lingering label would outlive the button.
+    btn.addEventListener('click', hideBtnTooltip);
+});
 
 historyItemsContainer.addEventListener('scroll', hideTooltip, { passive: true });
 
@@ -414,6 +466,7 @@ function closeAll() {
     mainBtn.classList.remove('active');
     historyPanel.classList.remove('open');
     hideTooltip();
+    hideBtnTooltip();
 
     // Reset search
     searchQuery = '';

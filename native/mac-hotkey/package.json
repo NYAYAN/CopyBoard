@@ -1,0 +1,11 @@
+{
+  "name": "mac-hotkey",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Global hotkeys for physical keys Electron's accelerator strings cannot name (macOS only)",
+  "main": "index.js",
+  "gypfile": true,
+  "os": [
+    "darwin"
+  ]
+}

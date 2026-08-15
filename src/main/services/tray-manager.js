@@ -16,9 +16,14 @@ let contextMenu = null;
 function buildMenu() {
     const all = state.shortcuts || {};
     const on = all.enabled || {};
+    // Lazy: shortcuts.js reaches back here to rebuild the menu, so a top-level require
+    // would be a load-order cycle.
+    const { menuAccelerator } = require('./ipc/shortcuts');
     // A switched-off shortcut isn't registered, so don't advertise it on the menu either —
     // and don't let the menu honour it while open. The item itself still works by clicking.
-    const s = new Proxy({}, { get: (_, k) => (on[k] === false ? undefined : all[k]) });
+    // menuAccelerator also drops bindings whose key has no accelerator name at all (the
+    // native-only ones) — Menu.buildFromTemplate throws on those.
+    const s = new Proxy({}, { get: (_, k) => (on[k] === false ? undefined : menuAccelerator(all[k])) });
     const menu = Menu.buildFromTemplate([
         { label: 'Göster', accelerator: s.list, click: showMain },
         // Always-available way to open the picker even when its global hotkey is

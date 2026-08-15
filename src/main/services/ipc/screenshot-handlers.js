@@ -2,7 +2,7 @@ const { ipcMain, clipboard, nativeImage, shell, Menu, BrowserWindow, screen } = 
 const fs = require('fs');
 const path = require('path');
 const { showToast } = require('../window-manager');
-const { publicList, getScreenshotById, deleteScreenshot, pruneMissing, screenshotsDir } = require('../screenshot-library');
+const { addScreenshot, publicList, getScreenshotById, deleteScreenshot, pruneMissing, screenshotsDir } = require('../screenshot-library');
 
 // Screenshot gallery IPC (main window).
 
@@ -20,12 +20,14 @@ function shotOrPrune(id) {
 }
 
 // Full-size PNG as a data URL (the sandboxed renderers can't read arbitrary file
-// paths, and their CSP only allows 'self' + data: images).
+// paths, and their CSP only allows 'self' + data: images). The byte count rides along
+// for the viewer's title — the file is already in hand, so it costs nothing.
 function shotDataUrl(id) {
     const shot = shotOrPrune(id);
     if (!shot) return null;
     try {
-        return { shot, dataUrl: 'data:image/png;base64,' + fs.readFileSync(shot.file).toString('base64') };
+        const buffer = fs.readFileSync(shot.file);
+        return { shot, dataUrl: 'data:image/png;base64,' + buffer.toString('base64'), size: buffer.length };
     } catch (err) {
         deleteScreenshot(id); // vanished between the existence check and the read
         return null;
@@ -47,7 +49,7 @@ function viewerPayloadFor(id) {
     const list = publicList();
     const idx = list.findIndex(s => s.id === r.shot.id);
     return {
-        id: r.shot.id, dataUrl: r.dataUrl,
+        id: r.shot.id, dataUrl: r.dataUrl, size: r.size,
         w: r.shot.w, h: r.shot.h, timestamp: r.shot.timestamp,
         pos: idx + 1, total: list.length
     };
@@ -148,10 +150,28 @@ function revealShot(id) {
     if (shot) shell.showItemInFolder(shot.file);
 }
 
+// Every delete entry point (gallery grid, context menu, the viewer's own Sil button) lands
+// here, so this is where an open viewer gets straightened out: step to the neighbour when
+// the shot on screen is the one going away, close when it was the last one, and otherwise
+// just refresh the strip and the "3 / 26" counter.
 function removeShot(id) {
     if (!getScreenshotById(id)) return;
+    const list = publicList(); // neighbours have to be read BEFORE the entry disappears
+    const idx = list.findIndex(s => s.id === id);
+    const neighbour = list[idx + 1] || list[idx - 1] || null;
+
     deleteScreenshot(id);
     showToast('Ekran görüntüsü silindi.', 'info');
+
+    if (!viewerWindow || viewerWindow.isDestroyed() || !viewerPayload) return;
+    if (viewerPayload.id === id) {
+        if (neighbour) viewerShow(neighbour.id);
+        else viewerWindow.close();
+    } else {
+        // Some other shot went away: re-send the current one so the strip and the counter
+        // both settle on the new list (same id, so nothing on screen is disturbed).
+        viewerShow(viewerPayload.id);
+    }
 }
 
 function registerScreenshotHandlers() {
@@ -192,6 +212,31 @@ function registerScreenshotHandlers() {
 
     // Filmstrip click: jump straight to a shot.
     ipcMain.on('viewer-select', (e, id) => viewerShow(id));
+
+    // Edited copy: the viewer flattens its drawing onto the image (cropped to the selected
+    // region, if there is one) and sends a PNG data URL. It goes into the gallery as its own
+    // entry too — same deal as a fresh snip, so the edited version outlives the next
+    // clipboard write instead of being one-shot.
+    ipcMain.on('viewer-copy-annotated', (e, dataUrl) => {
+        try {
+            const buffer = Buffer.from(String(dataUrl).split(',')[1], 'base64');
+            // Already at the image's native resolution — no display-scale compensation.
+            const img = nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
+            if (img.isEmpty()) throw new Error('Görüntü oluşturulamadı');
+            clipboard.writeImage(img);
+            let newId = null;
+            try { newId = addScreenshot(buffer); } catch (galleryErr) { console.error('Gallery save failed:', galleryErr); }
+            showToast('Düzenlenen resim kopyalandı.', 'success');
+            // Switch the viewer to the copy that was just filed: the user sees exactly what
+            // landed on the clipboard, and further edits build on it. Bounds are left alone
+            // (the window stays where it was put). If the gallery write failed, fall back to
+            // re-sending the current shot so at least the strip and "3 / 26" stay honest.
+            if (newId) viewerShow(newId);
+            else if (viewerPayload) viewerShow(viewerPayload.id);
+        } catch (err) {
+            showToast('Kopyalama Hatası: ' + err.message, 'error');
+        }
+    });
 
     // Right-click a thumbnail: native context menu with the same actions as the preview.
     ipcMain.on('screenshot-context-menu', (e, id) => {

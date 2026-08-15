@@ -41,11 +41,52 @@ body {
 }
 
 .title {
-    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 0.72rem;
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
+}
+
+/* Dimensions / weight / position read as values, so they get a chip each. */
+.ti-chip {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.ti-dim {
+    font-weight: 600;
+}
+
+.ti-pos {
+    background: rgba(137, 87, 229, 0.22);
+    color: #c9aefc;
+}
+
+.ti-time {
+    flex: 0 1 auto;
+    overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Narrow windows: drop the softest information first so the chips always survive. */
+@media (max-width: 720px) {
+    .ti-time {
+        display: none;
+    }
+}
+
+@media (max-width: 560px) {
+    .ti-pos {
+        display: none;
+    }
 }
 
 .toolbar-actions {
@@ -73,8 +114,17 @@ body {
     background: rgba(255, 255, 255, 0.16);
 }
 
-.tb-btn.close:hover {
+.tb-btn.close:hover,
+.tb-btn.danger:hover {
     background: #e5534b;
+}
+
+.tb-btn.active {
+    background: var(--accent);
+}
+
+.tb-btn.active:hover {
+    background: #9a6bf0;
 }
 
 .tb-btn svg {
@@ -82,8 +132,121 @@ body {
     height: 14px;
 }
 
+/* ── Annotation toolbar (second row, only while drawing is on) ─────────────── */
+.drawbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--panel);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.drawbar[hidden] {
+    display: none;
+}
+
+.db-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.db-sep {
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.db-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.db-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.db-btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+.db-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.db-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* Stroke-width picker: a dot the size of what it draws. */
+.dot {
+    display: block;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.dot.s1 {
+    width: 4px;
+    height: 4px;
+}
+
+.dot.s2 {
+    width: 7px;
+    height: 7px;
+}
+
+.dot.s3 {
+    width: 11px;
+    height: 11px;
+}
+
+.swatch {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.swatch.active {
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--text);
+}
+
+/* Custom colour: the native picker sits invisibly over a rainbow dot. */
+.swatch.custom {
+    overflow: hidden;
+    background: conic-gradient(#ff3b30, #ffd60a, #32d74b, #0a84ff, #bf5af2, #ff3b30);
+}
+
+.swatch.custom input {
+    position: absolute;
+    inset: -6px;
+    padding: 0;
+    border: none;
+    opacity: 0;
+    cursor: pointer;
+}
+
 .stage {
     flex: 1;
+    position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -112,6 +275,151 @@ body {
     max-width: none;
     max-height: none;
     cursor: zoom-out;
+}
+
+/* The annotation layer is parked exactly on top of the rendered image (viewer.js
+   keeps its box in sync) and stays click-through until drawing is turned on. */
+#viewer-canvas {
+    position: absolute;
+    pointer-events: none;
+}
+
+/* Draw mode frames the drawable area, so there's no guessing where the pen bites:
+   the letterbox around the image drops to near-black, and the image edge gets an
+   accent ring with corner brackets. */
+.stage.drawing {
+    background: #0a0a0b;
+}
+
+.stage.drawing #viewer-canvas {
+    pointer-events: auto;
+    cursor: crosshair;
+}
+
+/* Marker only — sized/placed with the canvas by viewer.js, never hit-tested, never
+   part of what gets copied. Everything is drawn INWARD (inset ring, brackets pinned
+   to 0): anything outside the box is clipped on whichever axis the fitted image runs
+   flush with the stage. The dark halo behind the ring keeps it readable over pale
+   screenshots. */
+.draw-frame {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+.draw-frame[hidden] {
+    display: none;
+}
+
+.draw-frame span {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 5px solid var(--accent);
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.85));
+}
+
+/* Sat on the inside edge for the same reason the ring is: nothing outside the image
+   box survives the stage's overflow. */
+.draw-frame span.tl {
+    top: 0;
+    left: 0;
+    border-right: none;
+    border-bottom: none;
+}
+
+.draw-frame span.tr {
+    top: 0;
+    right: 0;
+    border-left: none;
+    border-bottom: none;
+}
+
+.draw-frame span.bl {
+    bottom: 0;
+    left: 0;
+    border-right: none;
+    border-top: none;
+}
+
+.draw-frame span.br {
+    bottom: 0;
+    right: 0;
+    border-left: none;
+    border-top: none;
+}
+
+/* Action bar for the crop selection, parked under it by viewer.js. */
+.crop-bar {
+    position: absolute;
+    z-index: 6;
+    display: flex;
+    gap: 6px;
+    padding: 5px;
+    background: rgba(28, 28, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.crop-bar[hidden] {
+    display: none;
+}
+
+.cb-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.72rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.cb-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.cb-btn.primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.cb-btn.primary:hover {
+    background: #9a6bf0;
+}
+
+/* Live text entry: sized/coloured to match what the canvas will render. */
+.text-wrap {
+    position: absolute;
+    z-index: 5;
+}
+
+.text-wrap[hidden] {
+    display: none;
+}
+
+.text-wrap textarea {
+    min-width: 60px;
+    padding: 1px 4px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px dashed rgba(255, 255, 255, 0.65);
+    border-radius: 4px;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    white-space: pre;
+    line-height: 1.25;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    user-select: text;
+}
+
+.text-wrap textarea::placeholder {
+    color: rgba(255, 255, 255, 0.45);
 }
 
 /* ←/→ overlay arrows: visible while the mouse is in the window, hidden at the

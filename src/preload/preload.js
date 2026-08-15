@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('api', {
     viewerNav: (dir) => ipcRenderer.send('viewer-nav', dir),
     viewerSelect: (id) => ipcRenderer.send('viewer-select', id),
     viewerClose: () => ipcRenderer.send('viewer-close'),
+    viewerCopyAnnotated: (dataUrl) => ipcRenderer.send('viewer-copy-annotated', dataUrl), // image + drawing, flattened
 
     // Quick-paste picker
     quickPastePick: (text) => ipcRenderer.send('quickpaste-pick', text),

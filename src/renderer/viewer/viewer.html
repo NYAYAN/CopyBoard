@@ -14,13 +14,20 @@
     <div class="toolbar">
         <div class="title" id="viewer-title">Ekran Görüntüsü</div>
         <div class="toolbar-actions">
+            <button id="draw-btn" class="tb-btn" title="Çizim Araçları">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                </svg>
+                Çiz
+            </button>
             <button id="copy-btn" class="tb-btn" title="Panoya Kopyala">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
-                Kopyala
+                <span id="copy-label">Kopyala</span>
             </button>
             <button id="folder-btn" class="tb-btn" title="Klasörde Göster">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -29,6 +36,13 @@
                 </svg>
                 Klasör
             </button>
+            <button id="delete-btn" class="tb-btn danger" title="Bu ekran görüntüsünü sil">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+                </svg>
+                Sil
+            </button>
             <button id="close-btn" class="tb-btn close" title="Kapat (Esc)" aria-label="Kapat">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                     <path d="M18 6 6 18M6 6l12 12" />
@@ -36,8 +50,101 @@
             </button>
         </div>
     </div>
+
+    <!-- Annotation tools — same set (and icons) as the snipper's toolbar, so a capture
+         can be marked up the same way whether it's fresh or pulled back out of the gallery. -->
+    <div class="drawbar" id="drawbar" hidden>
+        <div class="db-group" id="tool-group">
+            <button class="db-btn tool active" data-tool="pen" title="Kalem" aria-label="Kalem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                </svg>
+            </button>
+            <button class="db-btn tool" data-tool="rect" title="Kare" aria-label="Kare">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+            </button>
+            <button class="db-btn tool" data-tool="circle" title="Yuvarlak" aria-label="Yuvarlak">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9" />
+                </svg>
+            </button>
+            <button class="db-btn tool" data-tool="arrow" title="Ok" aria-label="Ok">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <line x1="4" y1="20" x2="20" y2="4" />
+                    <polyline points="14 4 20 4 20 10" />
+                </svg>
+            </button>
+            <button class="db-btn tool" data-tool="text" title="Metin" aria-label="Metin">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <polyline points="4 7 4 4 20 4 20 7" />
+                    <line x1="9" y1="20" x2="15" y2="20" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
+                </svg>
+            </button>
+            <button class="db-btn tool" data-tool="blur" title="Bulanıklaştır" aria-label="Bulanıklaştır">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="12" cy="12" r="7" opacity="0.5" />
+                    <circle cx="12" cy="12" r="10" opacity="0.3" />
+                </svg>
+            </button>
+            <button class="db-btn tool" data-tool="crop" title="Alan Seç (Kırp)" aria-label="Alan Seç">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M6 1v16a2 2 0 0 0 2 2h16" />
+                    <path d="M1 6h16a2 2 0 0 1 2 2v16" />
+                </svg>
+            </button>
+        </div>
+        <div class="db-sep"></div>
+        <!-- Swatches are built in viewer.js: this window's CSP forbids inline style attributes. -->
+        <div class="db-group" id="color-group"></div>
+        <div class="db-sep"></div>
+        <div class="db-group" id="size-group">
+            <button class="db-btn size" data-size="thin" title="İnce" aria-label="İnce"><span
+                    class="dot s1"></span></button>
+            <button class="db-btn size active" data-size="med" title="Orta" aria-label="Orta"><span
+                    class="dot s2"></span></button>
+            <button class="db-btn size" data-size="thick" title="Kalın" aria-label="Kalın"><span
+                    class="dot s3"></span></button>
+        </div>
+        <div class="db-sep"></div>
+        <div class="db-group">
+            <button class="db-btn" id="undo-btn" title="Geri Al (Ctrl/Cmd+Z)" aria-label="Geri Al" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M3 7v6h6" />
+                    <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3" />
+                </svg>
+            </button>
+            <button class="db-btn" id="clear-btn" title="Çizimleri Temizle" aria-label="Çizimleri Temizle" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <div class="stage" id="viewer-stage">
         <img id="viewer-img" alt="Ekran görüntüsü">
+        <canvas id="viewer-canvas"></canvas>
+        <!-- Corner brackets marking the drawable area while the tools are open. -->
+        <div class="draw-frame" id="draw-frame" hidden>
+            <span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span>
+        </div>
+        <div class="text-wrap" id="text-wrap" hidden>
+            <textarea id="text-input" rows="1" wrap="off" spellcheck="false" placeholder="Metin"></textarea>
+        </div>
+        <!-- Sits under the crop selection: the next move is right where the user's eyes are. -->
+        <div class="crop-bar" id="crop-bar" hidden>
+            <button class="cb-btn primary" id="crop-copy">Alanı Kopyala</button>
+            <button class="cb-btn" id="crop-cancel">İptal</button>
+        </div>
     </div>
     <button id="nav-prev" class="nav-btn prev" title="Önceki (←)" aria-label="Önceki">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"

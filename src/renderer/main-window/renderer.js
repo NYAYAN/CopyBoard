@@ -3,6 +3,7 @@ import { renderHistory } from './modules/history-renderer.js';
 import { initGallery } from './modules/gallery.js';
 import { initTooltips } from './modules/tooltip.js';
 import { elements } from './modules/dom.js';
+import { keycapFor, applyLayoutMap } from './modules/accelerator.js';
 
 (async () => {
     // 1. Load Initial Data
@@ -33,12 +34,16 @@ import { elements } from './modules/dom.js';
 
     // Formatting Helpers for Shortcuts
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    // Bindings on keys Electron can't name are stored as their physical code
+    // (…+IntlBackslash). Ask the OS what this keyboard actually prints on those, so the
+    // field reads Cmd + " rather than Cmd + IntlBackslash.
+    try { applyLayoutMap(await navigator.keyboard.getLayoutMap()); } catch (e) { /* fallbacks */ }
     function format(s) {
         return s ? s.split('+').map(k => {
             if (k === 'CommandOrControl') return isMac ? 'Cmd' : 'Ctrl';
             if (k === 'Control') return 'Ctrl';
             if (k === 'Option') return 'Option';
-            return k;
+            return keycapFor(k);
         }).join(' + ') : '';
     }
 

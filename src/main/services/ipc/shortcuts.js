@@ -2,6 +2,7 @@ const { ipcMain, globalShortcut } = require('electron');
 const { state, store } = require('../state');
 const { showMain, showToast, toggleQuickPaste } = require('../window-manager');
 const { startCapture } = require('../capture-service');
+const nativeHotkey = require('../native-hotkey');
 
 // Defaults mirror state.js — used to recover a binding whose persisted value can
 // never work as a global accelerator (see sanitizePersistedShortcuts).
@@ -28,12 +29,34 @@ const liveShortcuts = new Map();
 let shortcutsSuspended = false;
 let resumeWatchdog = null;
 
+// ── One front door for claiming a hotkey ──────────────────────────────────────
+// Almost every binding goes to Electron. A handful of physical keys have no
+// accelerator name at all — most visibly the ISO key below Esc, which prints " on
+// Turkish-Q — and those are recorded as their KeyboardEvent.code
+// ("CommandOrControl+IntlBackslash") and claimed through the native addon instead.
+// Routing on the string keeps the two apart: handing such a string to Electron would
+// NOT fail, it would silently bind a different physical key.
+function claim(accel, action) {
+    if (nativeHotkey.isNative(accel)) return nativeHotkey.register(accel, action);
+    try { return globalShortcut.register(accel, action); } catch (e) { return false; }
+}
+
+function release(accel) {
+    if (!accel) return;
+    if (nativeHotkey.isNative(accel)) { nativeHotkey.unregister(accel); return; }
+    try { globalShortcut.unregister(accel); } catch (e) { }
+}
+
+// Native-only bindings have no accelerator string a menu can display; Electron throws
+// on them. The tray shows those items without a key hint rather than not at all.
+function menuAccelerator(accel) {
+    return accel && !nativeHotkey.isNative(accel) ? accel : undefined;
+}
+
 function suspendShortcuts() {
     if (shortcutsSuspended) return;
     shortcutsSuspended = true;
-    for (const accel of liveShortcuts.keys()) {
-        try { globalShortcut.unregister(accel); } catch (e) { }
-    }
+    for (const accel of liveShortcuts.keys()) release(accel);
     // Never leave the app hotkey-less if the menu's close event goes missing.
     clearTimeout(resumeWatchdog);
     resumeWatchdog = setTimeout(resumeShortcuts, 60000);
@@ -44,9 +67,7 @@ function resumeShortcuts() {
     shortcutsSuspended = false;
     clearTimeout(resumeWatchdog);
     resumeWatchdog = null;
-    for (const [accel, action] of liveShortcuts) {
-        try { globalShortcut.register(accel, action); } catch (e) { }
-    }
+    for (const [accel, action] of liveShortcuts) claim(accel, action);
 }
 
 function parseAccelerator(s) {
@@ -72,18 +93,25 @@ function isReservedShortcut(s) {
     return hasCmdCtrl && !hasAlt && !hasShift && RESERVED_KEYS.includes(key);
 }
 
+// Keycaps for the physical keys recorded by KeyboardEvent.code. What these keys print
+// depends on the layout (IntlBackslash is " on Turkish-Q, § on US-ISO); the settings
+// dialog shows the real keycap because the renderer reads it off the event. Here — in
+// toasts and the tray — the common case is the honest choice over "IntlBackslash".
+const CODE_KEYCAPS = { IntlBackslash: '"', IntlYen: '¥', IntlRo: '_', Lang1: 'かな', Lang2: '英数' };
+
 // Turn an Electron accelerator into something a user recognizes in a toast.
 function toDisplay(accel) {
     const isMac = process.platform === 'darwin';
     return String(accel)
         .split('+')
         .map(p => {
-            const t = p.trim().toLowerCase();
+            const raw = p.trim();
+            const t = raw.toLowerCase();
             if (t === 'commandorcontrol' || t === 'cmdorctrl') return isMac ? 'Cmd' : 'Ctrl';
             if (t === 'command' || t === 'cmd' || t === 'super' || t === 'meta') return 'Cmd';
             if (t === 'control' || t === 'ctrl') return 'Ctrl';
             if (t === 'option') return 'Option';
-            return p.trim();
+            return CODE_KEYCAPS[raw] || raw;
         })
         .join(' + ');
 }
@@ -118,7 +146,7 @@ function registerShortcutHandlers() {
                 showToast(`"${toDisplay(accel)}" kaydedilemedi — başka bir uygulama kullanıyor olabilir.`, 'error');
             }
         } else {
-            try { globalShortcut.unregister(accel); } catch (e) { }
+            release(accel);
             liveShortcuts.delete(accel); // keep suspend/resume from resurrecting it
         }
         // The tray menu only advertises (and honours, while open) shortcuts that are on.
@@ -148,7 +176,7 @@ function registerShortcutHandlers() {
         if (!action) return;
 
         // Free the previous accelerator before claiming the new one.
-        try { globalShortcut.unregister(prevShortcut); } catch (e) { }
+        release(prevShortcut);
 
         // A switched-off shortcut is only stored, never registered.
         if (!isEnabled(key)) {
@@ -159,8 +187,7 @@ function registerShortcutHandlers() {
             return;
         }
 
-        let ok = false;
-        try { ok = globalShortcut.register(shortcut, action); } catch (e) { ok = false; }
+        const ok = claim(shortcut, action);
 
         if (ok) {
             state.shortcuts[key] = shortcut;
@@ -171,11 +198,17 @@ function registerShortcutHandlers() {
             // it's open, so it has to follow the new binding.
             try { require('../tray-manager').rebuildTrayMenu(); } catch (e) { console.error('rebuildTrayMenu failed:', e); }
         } else {
-            // register() returns false (without throwing) when the accelerator is already
-            // claimed by the OS or another app. Don't persist a dead shortcut: warn the user
-            // and restore the previous working binding.
-            showToast('Kısayol kaydedilemedi - başka bir uygulama kullanıyor olabilir', 'error');
-            try { if (prevShortcut) globalShortcut.register(prevShortcut, action); } catch (e) { }
+            // Claiming fails (without throwing) when the accelerator is already taken by
+            // the OS or another app — or, for a native-only key, when the addon isn't
+            // there to claim it. Don't persist a dead shortcut: say why and restore the
+            // previous working binding.
+            showToast(
+                nativeHotkey.isNative(shortcut) && !nativeHotkey.isAvailable()
+                    ? `Bu tuş bu sürümde kısayol olarak kullanılamıyor (${nativeHotkey.unavailableReason()}).`
+                    : 'Kısayol kaydedilemedi - başka bir uygulama kullanıyor olabilir',
+                'error'
+            );
+            if (prevShortcut) claim(prevShortcut, action);
         }
     }
 
@@ -204,8 +237,7 @@ function registerShortcutHandlers() {
             console.warn(`[shortcut] "${accel}" (${label}) is a reserved editing shortcut — skipping registration`);
             return false;
         }
-        let ok = false;
-        try { ok = globalShortcut.register(accel, action); } catch (e) { ok = false; }
+        const ok = claim(accel, action);
         if (ok) {
             liveShortcuts.set(accel, action); // so suspend/resume can restore it verbatim
         } else {
@@ -254,4 +286,4 @@ function registerShortcutHandlers() {
     ipcMain.on('set-paste-shortcut', (e, s) => updateShortcut('paste', s, 'globalShortcutPaste'));
 }
 
-module.exports = { registerShortcutHandlers, suspendShortcuts, resumeShortcuts };
+module.exports = { registerShortcutHandlers, suspendShortcuts, resumeShortcuts, menuAccelerator };

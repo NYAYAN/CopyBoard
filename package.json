@@ -10,7 +10,10 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "test:electron": "electron test/electron-accelerator-check.js",
+    "postinstall": "node scripts/build-native.js",
+    "build:native": "node scripts/build-native.js"
   },
   "keywords": [],
   "author": "Nurullah YAYAN",
@@ -64,6 +67,9 @@
       "icon.ico",
       "trayIcon.png",
       "trayIcon@2x.png",
+      "native/mac-hotkey/index.js",
+      "native/mac-hotkey/package.json",
+      "native/mac-hotkey/build/Release/mac_hotkey.node",
       "!**/*.map",
       "!**/*.idb",
       "!**/*.pdb"
@@ -77,11 +83,16 @@
         "from": "tur.traineddata",
         "to": "tessdata/tur.traineddata"
       }
+    ],
+    "asarUnpack": [
+      "native/mac-hotkey/build/Release/*.node"
     ]
   },
   "devDependencies": {
     "electron": "^39.2.7",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "node-addon-api": "^8.5.0",
+    "node-gyp": "^11.0.0"
   },
   "dependencies": {
     "electron-store": "^8.1.0",

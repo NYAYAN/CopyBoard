@@ -32,12 +32,13 @@ function broadcastScreenshots() {
     }
 }
 
+// Returns the gallery id the buffer ended up under — callers may want to jump to it.
 function addScreenshot(pngBuffer) {
     const items = listScreenshots();
 
     // Copy-then-save of the same image fires two adds back to back — index it once.
     const hash = crypto.createHash('sha1').update(pngBuffer).digest('hex');
-    if (items[0] && items[0].hash === hash) return;
+    if (items[0] && items[0].hash === hash) return items[0].id;
 
     const dir = screenshotsDir();
     fs.mkdirSync(dir, { recursive: true });
@@ -57,6 +58,7 @@ function addScreenshot(pngBuffer) {
     }
     store.set('screenshots', items);
     broadcastScreenshots();
+    return id;
 }
 
 function getScreenshotById(id) {

@@ -138,31 +138,33 @@ export function setupEventListeners() {
         elements.galleryBtn.classList.remove('active');
     };
 
-    // The setting groups are disclosures, not remembered preferences: every visit to
-    // Settings starts them closed, so the panel opens on the settings people came for.
-    const setShortcutsOpen = (open) => {
-        elements.shortcutsBody.hidden = !open;
-        elements.shortcutsToggle.setAttribute('aria-expanded', String(open));
+    // Each settings group is a disclosure, not a remembered preference: every visit to
+    // Settings starts them all closed, so the panel opens as a list of headings instead
+    // of one long scroll. Wiring is generic — a group is a .group-header button plus the
+    // body its aria-controls points at, so adding a group needs no JS.
+    const groupBody = (btn) => document.getElementById(btn.getAttribute('aria-controls'));
+    const setGroupOpen = (btn, open) => {
+        const body = groupBody(btn);
+        if (!body) return;
+        body.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
     };
-    elements.shortcutsToggle.addEventListener('click', () => {
-        setShortcutsOpen(elements.shortcutsBody.hidden);
-    });
+    const groupHeaders = [...elements.settingsPanel.querySelectorAll('.group-header')];
+    groupHeaders.forEach(btn => btn.addEventListener('click', () => setGroupOpen(btn, groupBody(btn).hidden)));
 
-    // The widget group has nothing inside while the widget is off, so the disclosure is
-    // disabled there rather than opening onto an empty box. Switching the widget on
-    // expands it right away — that's what checking the box used to do.
-    const setWidgetOpen = (open) => {
+    // One group is conditional: the widget's settings only exist while the widget is on,
+    // so its disclosure is disabled rather than opening onto an empty box.
+    const syncWidgetGroup = () => {
         const hasSettings = elements.widgetCheck.checked;
-        const show = open && hasSettings;
-        elements.widgetExtraSettings.hidden = !show;
         elements.widgetToggle.disabled = !hasSettings;
-        elements.widgetToggle.setAttribute('aria-expanded', String(show));
         elements.widgetToggle.title = hasSettings ? '' : 'Widget açıkken ayarları burada';
+        if (!hasSettings) setGroupOpen(elements.widgetToggle, false);
     };
-    elements.widgetToggle.addEventListener('click', () => {
-        setWidgetOpen(elements.widgetExtraSettings.hidden);
-    });
-    setWidgetOpen(false);
+    const collapseSettingsGroups = () => {
+        groupHeaders.forEach(btn => setGroupOpen(btn, false));
+        syncWidgetGroup();
+    };
+    collapseSettingsGroups();
 
     elements.settingsBtn.addEventListener('click', () => {
         elements.aboutPanel.classList.add('hidden');
@@ -170,8 +172,7 @@ export function setupEventListeners() {
         closeGalleryPanel();
         elements.settingsPanel.classList.toggle('hidden');
         elements.settingsBtn.classList.toggle('active');
-        setShortcutsOpen(false);
-        setWidgetOpen(false);
+        collapseSettingsGroups();
     });
 
     elements.aboutBtn.addEventListener('click', () => {
@@ -218,7 +219,8 @@ export function setupEventListeners() {
     elements.incognitoCheck.addEventListener('change', (e) => window.api.setClipboardPaused(e.target.checked));
     elements.widgetCheck.addEventListener('change', (e) => {
         window.api.setShowWidget(e.target.checked);
-        setWidgetOpen(e.target.checked); // on reveals its settings, off folds them away
+        syncWidgetGroup();
+        setGroupOpen(elements.widgetToggle, e.target.checked); // on reveals its settings
     });
     elements.widgetTransparentCheck.addEventListener('change', (e) => window.api.setWidgetTransparent(e.target.checked));
     elements.widgetColorInput.addEventListener('input', (e) => window.api.setWidgetColor(e.target.value));

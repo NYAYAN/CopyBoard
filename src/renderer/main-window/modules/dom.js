@@ -6,9 +6,7 @@ export const elements = {
     historyBtn: document.getElementById('history-btn'),
     settingsPanel: document.getElementById('settings-panel'),
     aboutPanel: document.getElementById('about-panel'),
-    shortcutsToggle: document.getElementById('shortcuts-toggle'),
-    shortcutsBody: document.getElementById('shortcuts-body'),
-    widgetToggle: document.getElementById('widget-toggle'),
+    widgetToggle: document.getElementById('widget-toggle'), // the one group with a condition
 
     // Screenshot gallery
     galleryBtn: document.getElementById('gallery-btn'),

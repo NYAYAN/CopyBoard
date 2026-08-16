@@ -24,7 +24,8 @@
 }
 
 /* Light theme: same rules, different tokens. Accent, danger and warning keep their
-   hues — they carry meaning, not mood. */
+   hues — they carry meaning, not mood — but not their lightness: a colour picked to
+   glow on a near-black panel disappears on a near-white one. */
 :root[data-theme="light"] {
     --bg-color: #f4f4f7;
     --bg-rgb: 244, 244, 247;
@@ -38,6 +39,10 @@
     --accent: #7a45de;
     --accent-hover: #8f61ea;
     --danger: #b3261e;
+    /* The dark theme's #f1fa8c is a pale pastel: on this background it measured 1.1:1,
+       so a favourited row's star was effectively blank. This amber clears 3:1 both on
+       the row and on the darker wash the button takes under hover. */
+    --warning: #8a6500;
     --danger-wash: rgba(179, 38, 30, 0.09);
     --danger-wash-strong: rgba(179, 38, 30, 0.16);
     --success: #1a9c4b;
@@ -129,7 +134,9 @@ h1 {
 
 .icon-btn.active {
     background: var(--card-hover);
-    color: var(--accent);
+    /* The lighter accent, not the base one: on the raised background the base accent
+       measured 2.6:1 in dark mode — the selected tab was the one you could see least. */
+    color: var(--accent-hover);
     box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.05);
 }
 
@@ -609,7 +616,7 @@ input[type="checkbox"] {
 }
 
 .gallery-item-actions button.act-del:hover {
-    background: #e5534b;
+    background: #d32f2f;
 }
 
 .gallery-item-actions button svg {
@@ -978,7 +985,9 @@ input[type="checkbox"] {
 
 .modal textarea:focus {
     border-color: var(--accent) !important;
-    background: rgba(0, 0, 0, 0.3) !important;
+    /* Deepen the sunken wash rather than paint it black: a literal 30% black put
+       near-black note text on a dark grey field in the light theme. */
+    background: rgba(var(--fg-rgb), 0.1) !important;
 }
 
 .note-view {

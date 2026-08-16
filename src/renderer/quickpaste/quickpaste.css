@@ -7,6 +7,8 @@
     --border: rgba(var(--fg-rgb), 0.12);
     --tooltip-bg: rgba(24, 24, 27, 0.98);
     --tooltip-text: #f2f2f7;
+    --danger: #ff9a9a;
+    --danger-wash: rgba(255, 80, 80, 0.22);
 }
 
 :root[data-theme="light"] {
@@ -17,6 +19,10 @@
     --fg-rgb: 0, 0, 0;
     --tooltip-bg: rgba(252, 252, 253, 0.98);
     --tooltip-text: #1c1c22;
+    /* The dark theme's pink sits at 1.5:1 on a pale red wash — this is the same red
+       the rest of the app uses for danger in light mode. */
+    --danger: #b3261e;
+    --danger-wash: rgba(179, 38, 30, 0.14);
 }
 
 * {
@@ -89,8 +95,8 @@ body {
 }
 
 .qp-close:hover {
-    background: rgba(255, 80, 80, 0.22);
-    color: #ff9a9a;
+    background: var(--danger-wash);
+    color: var(--danger);
 }
 
 .qp-list {

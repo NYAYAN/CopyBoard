@@ -2,6 +2,7 @@ const { Tray, Menu, app } = require('electron');
 const path = require('path');
 const { state } = require('./state');
 const { showMain, toggleMain, toggleQuickPaste } = require('./window-manager');
+const { t } = require('./i18n');
 
 // The tray menu carries each action's own global shortcut as its ACCELERATOR — not just
 // for discoverability. A native macOS menu runs a modal event-tracking loop in which the
@@ -25,17 +26,17 @@ function buildMenu() {
     // native-only ones) — Menu.buildFromTemplate throws on those.
     const s = new Proxy({}, { get: (_, k) => (on[k] === false ? undefined : menuAccelerator(all[k])) });
     const menu = Menu.buildFromTemplate([
-        { label: 'Göster', accelerator: s.list, click: showMain },
+        { label: t('Göster'), accelerator: s.list, click: showMain },
         // Always-available way to open the picker even when its global hotkey is
         // claimed/blocked (another clipboard app, RDP/endpoint policy, reserved combo).
-        { label: 'Hızlı Yapıştır', accelerator: s.paste, click: () => toggleQuickPaste() },
+        { label: t('Hızlı Yapıştır'), accelerator: s.paste, click: () => toggleQuickPaste() },
         { type: 'separator' },
-        { label: 'Ekran Görüntüsü Al', accelerator: s.draw, click: () => require('./capture-service').startCapture('draw') },
-        { label: 'Metin Oku (OCR)', accelerator: s.ocr, click: () => require('./capture-service').startCapture('ocr') },
-        { label: 'Renk Kodu Al', accelerator: s.color, click: () => require('./capture-service').startCapture('color') },
-        { label: 'Video Kaydet', accelerator: s.video, click: () => require('./capture-service').startCapture('video') },
+        { label: t('Ekran Görüntüsü Al'), accelerator: s.draw, click: () => require('./capture-service').startCapture('draw') },
+        { label: t('Metin Oku (OCR)'), accelerator: s.ocr, click: () => require('./capture-service').startCapture('ocr') },
+        { label: t('Renk Kodu Al'), accelerator: s.color, click: () => require('./capture-service').startCapture('color') },
+        { label: t('Video Kaydet'), accelerator: s.video, click: () => require('./capture-service').startCapture('video') },
         { type: 'separator' },
-        { label: 'Çıkış', click: () => app.quit() }
+        { label: t('Çıkış'), click: () => app.quit() }
     ]);
 
     menu.on('menu-will-show', () => {

@@ -115,8 +115,34 @@ input[type="checkbox"]:focus-visible {
     outline-offset: 2px;
 }
 
-.icon-btn.spinning svg {
+.icon-btn.spinning svg,
+.settings-action-btn.spinning svg {
     animation: spin 0.8s linear infinite;
+}
+
+/* An action, not a value: sits in a setting row where a select or a switch usually is. */
+.settings-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.settings-action-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.settings-action-btn svg {
+    width: 13px;
+    height: 13px;
 }
 
 @keyframes spin {
@@ -246,6 +272,13 @@ input[type="checkbox"]:focus-visible {
     justify-content: space-between;
     align-items: center;
     font-size: 0.75rem;
+}
+
+/* A setting that sits outside every group (the language picker) — ruled off so it reads
+   as its own thing rather than a heading that forgot its chevron. */
+.settings-panel>.setting-item {
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 /* Collapsible group inside the settings panel (the shortcut rows). Closed by default,

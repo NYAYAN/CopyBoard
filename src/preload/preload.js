@@ -1,7 +1,20 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Fetched synchronously so the dictionary is in hand before the page's own scripts run
+// (shared/i18n.js translates the markup in its first pass). A sandboxed preload can't
+// read the JSON itself, hence the round trip; the payload is a few KB of strings.
+let i18n = { lang: 'tr', dict: {} };
+let theme = { mode: 'dark', resolved: 'dark' };
+try { i18n = ipcRenderer.sendSync('i18n-get') || i18n; } catch (e) { /* main not ready — stay Turkish */ }
+try { theme = ipcRenderer.sendSync('theme-get') || theme; } catch (e) { /* stay dark */ }
+
 contextBridge.exposeInMainWorld('api', {
     platform: process.platform,
+    i18n,
+    setLanguage: (lang) => ipcRenderer.send('set-language', lang),
+    theme,
+    setTheme: (value) => ipcRenderer.send('set-theme', value),
+    onThemeChanged: (cb) => ipcRenderer.on('theme-changed', (_, value) => cb(value)),
     getHistory: () => ipcRenderer.invoke('get-history'),
     getSettings: () => ipcRenderer.invoke('get-settings'),
     getAudioSettings: () => ipcRenderer.invoke('get-audio-settings'),
@@ -71,6 +84,7 @@ contextBridge.exposeInMainWorld('api', {
     viewerNav: (dir) => ipcRenderer.send('viewer-nav', dir),
     viewerSelect: (id) => ipcRenderer.send('viewer-select', id),
     viewerClose: () => ipcRenderer.send('viewer-close'),
+    viewerCopyAnnotated: (dataUrl) => ipcRenderer.send('viewer-copy-annotated', dataUrl), // image + drawing, flattened
 
     // Quick-paste picker
     quickPastePick: (text) => ipcRenderer.send('quickpaste-pick', text),

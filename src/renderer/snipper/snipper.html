@@ -4,8 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;">
+    <link rel="stylesheet" href="../shared/tokens.css">
+    <link rel="stylesheet" href="../shared/overlay-tooltip.css">
     <link rel="stylesheet" href="snipper.css">
+    <script src="../shared/theme.js"></script>
 </head>
 
 <body>
@@ -70,18 +73,20 @@
         </div>
         <div class="divider"></div>
         <div class="color-group collapsed">
-            <div class="color-dot active" data-color="#ff0000" style="background: #ff0000;" tabindex="0" role="button" aria-label="Kırmızı"></div>
-            <div class="color-dot" data-color="#00ff00" style="background: #00ff00;" tabindex="0" role="button" aria-label="Yeşil"></div>
-            <div class="color-dot" data-color="#0000ff" style="background: #0000ff;" tabindex="0" role="button" aria-label="Mavi"></div>
-            <div class="color-dot" data-color="#ffff00" style="background: #ffff00;" tabindex="0" role="button" aria-label="Sarı"></div>
-            <div class="color-dot" data-color="#ffffff" style="background: #ffffff;" tabindex="0" role="button" aria-label="Beyaz"></div>
-            <div class="color-dot" data-color="#000000" style="background: #000000;" tabindex="0" role="button" aria-label="Siyah"></div>
+            <!-- The same seven the viewer's annotation bar offers, so a capture looks the
+                 same whether it is marked up fresh or pulled back out of the gallery. The
+                 swatch colours come from CSS (see .color-dot[data-color]) rather than a
+                 style attribute, which is what let this window drop 'unsafe-inline'. -->
+            <div class="color-dot active" data-color="#ff3b30" tabindex="0" role="button" aria-label="Kırmızı"></div>
+            <div class="color-dot" data-color="#ff9f0a" tabindex="0" role="button" aria-label="Turuncu"></div>
+            <div class="color-dot" data-color="#ffd60a" tabindex="0" role="button" aria-label="Sarı"></div>
+            <div class="color-dot" data-color="#32d74b" tabindex="0" role="button" aria-label="Yeşil"></div>
+            <div class="color-dot" data-color="#0a84ff" tabindex="0" role="button" aria-label="Mavi"></div>
+            <div class="color-dot" data-color="#ffffff" tabindex="0" role="button" aria-label="Beyaz"></div>
+            <div class="color-dot" data-color="#000000" tabindex="0" role="button" aria-label="Siyah"></div>
         </div>
         <button class="color-toggle-btn" id="color-toggle" title="Renkler">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 2v20M2 12h20" />
-            </svg>
+            <span class="current-color" id="current-color"></span>
         </button>
         <div class="divider"></div>
         <div class="action-group">
@@ -120,6 +125,8 @@
     </div>
 
     <div class="instruction">Metni veya resmi seçmek için alanı tarayın.</div>
+    <script src="../shared/i18n.js"></script>
+    <script src="../shared/overlay-tooltip.js"></script>
     <script src="snipper.js"></script>
 </body>
 

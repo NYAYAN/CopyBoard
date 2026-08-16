@@ -1,0 +1,73 @@
+/* OCR overlay. Scales and the accent come from ../shared/tokens.css.
+ *
+ * Lifted out of a <style> block in ocr.html so this window can run the same strict CSP as
+ * the other capture overlays (style-src 'self').
+ *
+ * The banner uses the same --overlay-* group as the snipper's and the recorder's chrome,
+ * so the three capture surfaces read as one tool and change theme together. */
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: transparent;
+    font-family: var(--font-ui);
+    user-select: none;
+    /* Hidden until the capture is painted, so the cursor is never baked into it. */
+    cursor: none;
+}
+
+body.ready {
+    cursor: url('../shared/cursor.svg') 15 15, crosshair;
+}
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 10;
+    cursor: url('../shared/cursor.svg') 15 15, crosshair;
+}
+
+#screen-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+/* Sade Seçim Kutusu */
+.selection-box {
+    position: absolute;
+    border: 2px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    z-index: 20;
+    display: none;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 0 0 9999px rgba(0, 0, 0, 0.4);
+    /* Arka planı karartma efekti için 9999px shadow ekledim */
+    pointer-events: none;
+}
+
+.instruction {
+    position: fixed;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--overlay-surface);
+    color: var(--overlay-text);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    z-index: 100;
+    pointer-events: none;
+    border: 1px solid var(--overlay-border);
+    box-shadow: var(--overlay-shadow);
+}
+
+.hidden {
+    display: none !important;
+}

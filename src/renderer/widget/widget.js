@@ -1,7 +1,7 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 const mainBtn = document.getElementById('widget-main');
 const menu = document.getElementById('widget-menu');
 const btnSnippet = document.getElementById('btn-snippet');
-const btnQuickPaste = document.getElementById('btn-quickpaste');
 const btnScreenshot = document.getElementById('btn-screenshot');
 const btnOcr = document.getElementById('btn-ocr');
 const btnVideo = document.getElementById('btn-video');
@@ -17,24 +17,33 @@ const widgetSearch = document.getElementById('widget-search');
 // list search predicate — both come from the shared classic script loaded before this one
 // (see ../shared/render-utils.js and the <script> tag in widget.html). The widget's row
 // actions use exactly the 4 shared icons, so ICONS is that shared set verbatim.
-const { ICONS, matchesSearch } = window.CopyBoardShared;
+const { ICONS, matchesSearch, fold } = window.CopyBoardShared;
 
 // DISPLAY-only caps: rows and the hover tooltip clip what goes into the DOM — a copied
 // item can be hundreds of KB. Copy/search always use the full in-memory item.content.
 // Rows are single-line ellipsized, so ~300 chars covers any width.
-const PREVIEW_CHARS = 300;
+const PREVIEW_CHARS = 220;
 const TOOLTIP_CHARS = 500;
 const TOOLTIP_DELAY_MS = 500;
-const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
+// Shorter than the history-row delay: these are icon-only buttons, so the label is the
+// only way to tell them apart and waiting half a second to find out is too slow.
+const BTN_TOOLTIP_DELAY_MS = 300;
 
-// Same date/time presentation as the main-window list, so the two designs match.
-// Cached formatters — constructing Intl.DateTimeFormat per row per render is costly.
-const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' });
+// Content classification, row-text clipping and time formatting are shared with the main
+// window and the quick-paste picker (see ../shared/content-type.js) — three windows render
+// rows of clipboard entries and they should not each have their own idea of what a URL
+// looks like or how to write a timestamp.
+const C = window.CopyBoardContent;
+
+// The panel is 350px wide, so the row can't spell out a full date. It shows what the
+// main window's day headings would otherwise have said: a clock time for today and
+// yesterday, a weekday name this week, a date before that.
 const formatMeta = (ts) => {
     if (!ts) return '';
     const d = new Date(ts);
-    return isNaN(d) ? '' : `${DATE_FMT.format(d)} ${TIME_FMT.format(d)}`;
+    if (isNaN(d)) return '';
+    const now = new Date();
+    return C.shortTime(d, C.groupKey(d, now), now);
 };
 
 let isOpen = false;
@@ -185,12 +194,61 @@ function hideTooltip() {
     tooltip.classList.remove('visible');
 }
 
+// --- Menu button tooltips ---
+// The buttons carry aria-label rather than title on purpose: Chromium renders a native
+// title tooltip in its own OS window at the normal window level, and this widget is
+// pinned above that (screen-saver level), so the tooltip came up BEHIND the buttons.
+// An in-page element lives inside the widget's own window and stays visible.
+const btnTooltip = document.createElement('div');
+btnTooltip.className = 'btn-tooltip';
+document.body.appendChild(btnTooltip);
+let btnTooltipTimeout = null;
+
+function positionBtnTooltip(btn) {
+    const rect = btn.getBoundingClientRect();
+    const gap = 10, margin = 6;
+    const w = btnTooltip.offsetWidth, h = btnTooltip.offsetHeight;
+
+    // The button column hugs the widget's outer edge — there are only ~13px beyond it —
+    // so the label points inward, and which way that is flips with the widget's side.
+    const toRight = document.body.classList.contains('left-side');
+    let left = toRight ? rect.right + gap : rect.left - gap - w;
+    left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+
+    let top = rect.top + rect.height / 2 - h / 2;
+    top = Math.max(margin, Math.min(top, window.innerHeight - h - margin));
+
+    btnTooltip.style.left = `${left}px`;
+    btnTooltip.style.top = `${top}px`;
+}
+
+function showBtnTooltip(btn) {
+    btnTooltip.textContent = btn.getAttribute('aria-label') || '';
+    positionBtnTooltip(btn); // measurable while transparent, so it fades in already placed
+    btnTooltip.classList.add('visible');
+}
+
+function hideBtnTooltip() {
+    clearTimeout(btnTooltipTimeout);
+    btnTooltip.classList.remove('visible');
+}
+
+document.querySelectorAll('.menu-item').forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+        clearTimeout(btnTooltipTimeout);
+        btnTooltipTimeout = setTimeout(() => showBtnTooltip(btn), BTN_TOOLTIP_DELAY_MS);
+    });
+    btn.addEventListener('mouseleave', hideBtnTooltip);
+    // The menu collapses on click; a lingering label would outlive the button.
+    btn.addEventListener('click', hideBtnTooltip);
+});
+
 historyItemsContainer.addEventListener('scroll', hideTooltip, { passive: true });
 
 // --- Virtual Scroll ---
 // Must equal the fixed .history-item height in widget.css — the virtual list
 // positions rows purely by arithmetic on this constant.
-const ITEM_HEIGHT = 44;
+const ITEM_HEIGHT = 38;
 const BUFFER = 4;
 
 function renderVirtualList(items) {
@@ -220,16 +278,35 @@ function renderVirtualList(items) {
         const div = document.createElement('div');
         div.className = 'history-item';
 
+        // Leading glyph — or, for a colour, the colour itself. Same anatomy as the main
+        // window's rows.
+        const type = C.classify(item.content);
+        const iconEl = document.createElement('span');
+        iconEl.className = 'row-icon';
+        const colour = type === 'color' ? C.cssColor(item.content) : null;
+        if (colour) {
+            const swatch = document.createElement('span');
+            swatch.className = 'row-swatch';
+            swatch.style.background = colour;
+            iconEl.appendChild(swatch);
+        } else {
+            iconEl.innerHTML = C.iconFor(type);
+        }
+        div.appendChild(iconEl);
+
         const textEl = document.createElement('div');
-        textEl.className = 'history-item-text';
-        textEl.textContent = clip(item.content, PREVIEW_CHARS);
+        textEl.className = C.MONO_TYPES.has(type) ? 'history-item-text mono' : 'history-item-text';
+        textEl.textContent = C.previewText(item.content, PREVIEW_CHARS);
         div.appendChild(textEl);
 
-        // Timestamp inline at the right — mirrors the main-window row design
+        // Trailing slot: the timestamp, replaced in place by the actions on hover.
+        const trail = document.createElement('div');
+        trail.className = 'row-trail';
+
         const metaEl = document.createElement('div');
         metaEl.className = 'history-item-meta';
         metaEl.textContent = formatMeta(item.timestamp);
-        div.appendChild(metaEl);
+        trail.appendChild(metaEl);
 
         // Row actions (favorite / copy / delete) — mirrors the main window's row
         const actions = document.createElement('div');
@@ -239,7 +316,7 @@ function renderVirtualList(items) {
         const starBtn = document.createElement('button');
         starBtn.className = 'action-btn star-btn' + (isFav ? ' active' : '');
         starBtn.innerHTML = isFav ? ICONS.starFilled : ICONS.starOutline;
-        starBtn.title = isInFavoritesTab ? 'Favorilerden Çıkar' : (isFav ? 'Zaten Favorilerde' : 'Favorilere Ekle');
+        starBtn.title = isInFavoritesTab ? t('Favorilerden Çıkar') : (isFav ? 'Zaten Favorilerde' : t('Favorilere Ekle'));
         starBtn.setAttribute('aria-label', starBtn.title);
         starBtn.onclick = (e) => {
             e.stopPropagation();
@@ -259,36 +336,38 @@ function renderVirtualList(items) {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'action-btn';
         copyBtn.innerHTML = ICONS.copy;
-        copyBtn.title = 'Kopyala';
-        copyBtn.setAttribute('aria-label', 'Kopyala');
+        copyBtn.title = t('Kopyala');
+        copyBtn.setAttribute('aria-label', t('Kopyala'));
         copyBtn.onclick = (e) => {
             e.stopPropagation();
             window.api.copyItem(item.content);
             closeAll();
         };
 
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'action-btn del';
-        deleteBtn.innerHTML = ICONS.trash;
-        deleteBtn.title = isInFavoritesTab ? 'Favorilerden Çıkar' : 'Sil';
-        deleteBtn.setAttribute('aria-label', deleteBtn.title);
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            hideTooltip();
-            if (isInFavoritesTab) {
-                window.api.removeFromFavorites(item.id);
-                allFavoriteItems = allFavoriteItems.filter(f => f.id !== item.id);
-            } else {
-                window.api.deleteHistoryItem(item.id);
-                allHistoryItems = allHistoryItems.filter(h => h.id !== item.id);
-            }
-            renderHistory(allHistoryItems, allFavoriteItems);
-        };
-
         actions.appendChild(starBtn);
         actions.appendChild(copyBtn);
-        actions.appendChild(deleteBtn);
-        div.appendChild(actions);
+
+        // Only the history tab gets a delete button. In favourites the star above it
+        // already IS the removal control — the two were wired to the same call, so the
+        // row carried the same action twice.
+        if (!isInFavoritesTab) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'action-btn del';
+            deleteBtn.innerHTML = ICONS.trash;
+            deleteBtn.title = t('Sil');
+            deleteBtn.setAttribute('aria-label', deleteBtn.title);
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                hideTooltip();
+                window.api.deleteHistoryItem(item.id);
+                allHistoryItems = allHistoryItems.filter(h => h.id !== item.id);
+                renderHistory(allHistoryItems, allFavoriteItems);
+            };
+            actions.appendChild(deleteBtn);
+        }
+
+        trail.appendChild(actions);
+        div.appendChild(trail);
 
         div.addEventListener('click', () => {
             window.api.copyItem(item.content);
@@ -297,7 +376,7 @@ function renderVirtualList(items) {
 
         div.addEventListener('mouseenter', () => {
             tooltipTimeout = setTimeout(() => {
-                showTooltip(clip(item.content, TOOLTIP_CHARS), div.getBoundingClientRect());
+                showTooltip(C.clip(item.content, TOOLTIP_CHARS), div.getBoundingClientRect());
             }, TOOLTIP_DELAY_MS);
         });
         div.addEventListener('mouseleave', () => {
@@ -325,7 +404,9 @@ function renderHistory(history, favorites) {
 
     // Apply Search Filter
     if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+        // Folded, not lowercased: plain toLowerCase cannot match Turkish (see
+        // CopyBoardShared.fold).
+        const q = fold(searchQuery);
         displayItems = displayItems.filter(item => matchesSearch(item, q));
     }
 
@@ -336,8 +417,15 @@ function renderHistory(history, favorites) {
     if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
 
     if (displayItems.length === 0) {
-        const msg = searchQuery ? 'Eşleşen sonuç bulunamadı' : (activeTab === 'favorites' ? 'Favori öğe yok' : 'Geçmiş boş');
-        historyItemsContainer.innerHTML = `<div style="padding: 20px; text-align: center; opacity: 0.5; font-size: 13px;">${msg}</div>`;
+        const msg = searchQuery ? t('Eşleşen sonuç bulunamadı') : (activeTab === 'favorites' ? t('Favori öğe yok') : t('Geçmiş boş'));
+        // textContent, not an innerHTML string with an inline style: the message can
+        // contain a search term, and the class carries the styling so the window needs no
+        // 'unsafe-inline' in its CSP.
+        historyItemsContainer.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.className = 'history-empty';
+        empty.textContent = msg;
+        historyItemsContainer.appendChild(empty);
         return;
     }
 
@@ -414,6 +502,7 @@ function closeAll() {
     mainBtn.classList.remove('active');
     historyPanel.classList.remove('open');
     hideTooltip();
+    hideBtnTooltip();
 
     // Reset search
     searchQuery = '';
@@ -520,14 +609,6 @@ btnSnippet.addEventListener('click', async () => {
             historyTimeout = null;
         }, 300);
     }
-});
-
-// Mouse-driven Quick Paste. This is the ONLY way in when macOS Secure Event Input is
-// active (any focused password field): the OS then hands keystrokes exclusively to that
-// app, so our global accelerator never fires — but mouse events are untouched.
-btnQuickPaste.addEventListener('click', () => {
-    window.api.widgetAction('quickpaste');
-    closeAll();
 });
 
 btnScreenshot.addEventListener('click', () => window.api.widgetAction('capture-draw'));

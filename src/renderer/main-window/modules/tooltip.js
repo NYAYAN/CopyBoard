@@ -61,7 +61,7 @@ export function initTooltips() {
     document.addEventListener('mouseover', (e) => {
         const el = e.target.closest && e.target.closest('[title], [data-tip]');
         // History rows drive their own (longer, slower) tooltip — see history-renderer.
-        if (!el || el.closest('.history-item')) return;
+        if (!el || el.closest('.row')) return;
 
         if (el.hasAttribute('title')) {
             const t = el.getAttribute('title');

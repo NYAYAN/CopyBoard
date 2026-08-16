@@ -1,52 +1,62 @@
+/* Floating widget. Colour, type, spacing and motion come from ../shared/tokens.css.
+   This file used to declare its own --primary/--bg-dark/--star/--del-hover set — a third
+   private palette that had drifted from the main window's.
+ *
+ * The one exception is --primary: it is a user setting (Ayarlar → Yüzen araç → Renk) and
+ * widget.js writes it onto the root element at runtime, so it stays a real token here and
+ * merely defaults to the app accent. */
+
 :root {
-    --primary: #8957e5;
-    --bg-dark: rgba(34, 34, 38, 0.97);
-    --bg-elev: rgba(54, 54, 60, 0.94);
-    --text: #ffffff;
-    --text-dim: rgba(255, 255, 255, 0.55);
-    --border: rgba(255, 255, 255, 0.12);
-    --border-strong: rgba(255, 255, 255, 0.2);
+    --primary: var(--accent);
+    /* Buttons float over arbitrary desktop content, so they need a surface of their own
+       rather than the window background — there isn't one. */
+    --btn-bg: color-mix(in srgb, var(--bg-overlay) 94%, transparent);
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-    color: var(--text);
-    background: transparent;
-    user-select: none;
-    -webkit-user-select: none;
     position: relative;
     width: 100%;
     height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    /* Transparent window: only the panel and the buttons paint. */
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-/* ── History / Favorites Panel ──────────────────────────────────────────── */
+/* ── History / Favorites panel ──────────────────────────────────────────────── */
+/* 350×400 is load-bearing: window-manager sizes the widget window around these numbers
+   (HIS_H / FULL_W) when the panel is open. */
 .history-panel {
     position: absolute;
     right: 68px;
     top: 10px;
     width: 350px;
     height: 400px;
-    background: var(--bg-dark);
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    backdrop-filter: blur(20px) saturate(1.4);
-    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    z-index: 5;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow:
-        0 16px 48px rgba(0, 0, 0, 0.55),
-        0 4px 12px rgba(0, 0, 0, 0.35),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-xl);
+    background: color-mix(in srgb, var(--bg-overlay) 94%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: var(--shadow-lg);
     opacity: 0;
     pointer-events: none;
     transform: translateX(16px) scale(0.96);
     transform-origin: right center;
-    transition: opacity 0.28s ease, transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-    z-index: 5;
+    transition: opacity var(--dur-slow) var(--ease-standard),
+        transform var(--dur-slow) var(--ease-out);
 }
 
 .history-panel.open {
@@ -55,232 +65,277 @@ body {
     transform: translateX(0) scale(1);
 }
 
-.panel-tabs {
+/* Search + tabs on one row — the same bar the main window uses, so the two lists behind
+   the same shortcut look like the same product. */
+.filterbar {
+    flex: 0 0 auto;
     display: flex;
-    gap: 4px;
-    padding: 8px 8px 0;
-    background: transparent;
-    flex-shrink: 0;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+}
+
+.search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.search-icon {
+    position: absolute;
+    left: 9px;
+    width: 14px;
+    height: 14px;
+    color: var(--text-tertiary);
+    pointer-events: none;
+}
+
+.segmented {
+    flex: 0 0 auto;
+    display: flex;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+    background: var(--bg-inset);
 }
 
 .tab-btn {
-    flex: 1;
-    padding: 9px 8px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid transparent;
-    border-radius: 9px;
-    color: var(--text-dim);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    height: 24px;
+    padding: 0 var(--sp-4);
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-secondary);
     font-family: inherit;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
 }
 
 .tab-btn:hover {
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-primary);
 }
 
 .tab-btn.active {
-    color: #fff;
-    background: color-mix(in srgb, var(--primary) 32%, transparent);
-    border-color: color-mix(in srgb, var(--primary) 55%, transparent);
-}
-
-.search-container {
-    padding: 10px 12px 8px;
-    flex-shrink: 0;
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
+    color: var(--accent-text);
+    font-weight: var(--fw-semibold);
 }
 
 #widget-search {
     width: 100%;
-    box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.28);
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    padding: 8px 10px;
-    color: var(--text);
-    font-size: 12px;
-    outline: none;
-    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    height: 30px;
+    padding: 0 var(--sp-4) 0 29px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    background: var(--bg-inset);
+    color: var(--text-primary);
     font-family: inherit;
+    font-size: var(--fs-sm);
+    outline: none;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+        box-shadow var(--dur-fast) var(--ease-standard);
 }
 
 #widget-search::placeholder {
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--text-tertiary);
 }
 
 #widget-search:focus {
-    border-color: var(--primary);
-    background: rgba(0, 0, 0, 0.4);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .history-items {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    padding: 4px 8px 8px;
+    overscroll-behavior: contain;
+    padding: 0 var(--sp-3) var(--sp-4);
 }
 
-.history-items::-webkit-scrollbar {
-    width: 8px;
-}
-
-.history-items::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.16);
-    border-radius: 4px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-}
-
-.history-items::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
-    background-clip: padding-box;
-}
-
+/* Fixed height = ITEM_HEIGHT in widget.js — the virtual list positions rows purely by
+   arithmetic on that constant, so the two must not drift. */
 .history-item {
-    /* Fixed height = ITEM_HEIGHT in widget.js (virtual scroll math depends on it).
-       Single-line row: text left, timestamp right — same design as the main window. */
-    height: 44px;
-    box-sizing: border-box;
-    padding: 0 12px;
+    height: 38px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    border-radius: 10px;
+    gap: var(--sp-4);
+    padding: 0 var(--sp-4);
+    border-radius: var(--r-sm);
     cursor: pointer;
-    transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
-    border: 1px solid transparent;
-    position: relative;
-}
-
-.history-item-meta {
-    flex-shrink: 0;
-    font-size: 10px;
-    color: #9a9aae;
-}
-
-.item-star {
-    position: absolute;
-    top: 6px;
-    right: 30px;
-    font-size: 10px;
-    opacity: 0.6;
-    pointer-events: none;
+    transition: background var(--dur-fast) var(--ease-standard);
 }
 
 .history-item:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
 }
 
-.history-item:active {
-    transform: scale(0.985);
-}
-
-/* Row actions (favorite / copy / delete) — mirrors the main window's history row:
-   dark-pill icon buttons grouped on the right, revealed on hover/focus. */
-.history-actions {
-    display: flex;
-    gap: 3px;
-    align-items: center;
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    padding-left: 24px;
-    background: linear-gradient(90deg, transparent, rgba(28, 28, 32, 0.97) 30%, rgba(28, 28, 32, 0.97));
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.18s ease;
-}
-
-.history-item:hover .history-actions,
-.history-item:focus-within .history-actions {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.action-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: none;
-    width: 24px;
-    height: 24px;
+.row-icon {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
-    border-radius: 6px;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.6);
-    transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
-    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--text-tertiary);
 }
 
-.action-btn svg {
-    width: 15px;
-    height: 15px;
+.row-icon svg {
+    width: 14px;
+    height: 14px;
 }
 
-.action-btn:hover {
-    background: rgba(255, 255, 255, 0.14);
-    color: #fff;
-    transform: scale(1.08);
+.history-item:hover .row-icon {
+    color: var(--accent-text);
 }
 
-.action-btn:focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: 1px;
-}
-
-.action-btn.star-btn.active {
-    color: #f1fa8c;
-}
-
-.action-btn.del:hover {
-    background: rgba(255, 80, 80, 0.28);
-    color: #ff9a9a;
+.row-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: var(--r-xs);
+    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.25);
 }
 
 .history-item-text {
-    flex: 1;
-    font-size: 13px;
-    line-height: 1.4;
+    flex: 1 1 auto;
+    min-width: 0;
     /* Single line + ellipsis: the full content lives in the 500ms hover tooltip. */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 0;
+    font-size: var(--fs-md);
 }
 
-/* Tooltip */
-.history-tooltip {
+.history-item-text.mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+}
+
+/* Trailing slot, fixed width so swapping the timestamp for the buttons on hover doesn't
+   re-flow the text. The old markup solved that with an opaque gradient plate that slid
+   over the content instead. */
+.row-trail {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 66px;
+}
+
+.history-item-meta {
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.history-actions {
+    display: none;
+    gap: var(--sp-1);
+}
+
+.history-item:hover .history-actions,
+.history-item:focus-within .history-actions {
+    display: flex;
+}
+
+.history-item:hover .history-item-meta,
+.history-item:focus-within .history-item-meta {
+    display: none;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--r-xs);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
+}
+
+.action-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.action-btn:hover {
+    background: var(--surface-active);
+    color: var(--text-primary);
+}
+
+.action-btn.star-btn.active {
+    color: var(--warning);
+}
+
+.action-btn.del:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.history-empty {
+    padding: var(--sp-8) var(--sp-5);
+    text-align: center;
+    font-size: var(--fs-sm);
+    color: var(--text-tertiary);
+}
+
+/* ── Tooltips ───────────────────────────────────────────────────────────────── */
+/* Neither of these can use the native title attribute: Chromium draws that in its own OS
+   window at the normal level, while this widget is pinned to the screen-saver level — so
+   the tooltip renders BEHIND the widget and is never readable. */
+.history-tooltip,
+.btn-tooltip {
     position: fixed;
-    max-width: 300px;
-    background: rgba(24, 24, 27, 0.98);
-    border: 1px solid var(--border-strong);
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--text);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-    pointer-events: none;
     z-index: 1000;
-    word-break: break-word;
-    white-space: pre-wrap;
-    max-height: 180px;
     overflow: hidden;
+    padding: var(--sp-4) var(--sp-5);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    background: var(--bg-overlay);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-normal);
+    pointer-events: none;
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.history-tooltip.visible {
+.history-tooltip {
+    max-width: 300px;
+    max-height: 180px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.btn-tooltip {
+    z-index: 1200;
+    padding: var(--sp-3) var(--sp-4);
+    white-space: nowrap;
+}
+
+.history-tooltip.visible,
+.btn-tooltip.visible {
     opacity: 1;
 }
 
-/* ── Left-side layout overrides ─────────────────────────────────────────── */
+/* ── Left-side layout overrides ─────────────────────────────────────────────── */
 .left-side .history-panel {
     right: auto;
     left: 68px;
@@ -297,9 +352,9 @@ body {
     left: 0;
 }
 
-/* ── Upward layout overrides ────────────────────────────────────────────── */
-/* When body has .up-side the window grows upward: the button is bottom-anchored
-   and the menu / panel stack above it instead of below. */
+/* ── Upward layout overrides ────────────────────────────────────────────────── */
+/* With .up-side the window grows upward: the button is bottom-anchored and the menu and
+   panel stack above it instead of below. */
 .up-side .widget-container {
     justify-content: flex-end;
 }
@@ -314,20 +369,19 @@ body {
     bottom: 10px;
 }
 
-/* ── Widget Button Column ───────────────────────────────────────────────── */
+/* ── Widget button column ───────────────────────────────────────────────────── */
 .widget-container {
     position: absolute;
     right: 0;
     top: 0;
+    z-index: 10;
     width: 68px;
     height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 10px;
-    gap: 10px;
-    box-sizing: border-box;
-    z-index: 10;
+    gap: var(--sp-5);
+    padding: var(--sp-5);
 }
 
 .widget-btn {
@@ -335,37 +389,39 @@ body {
     height: 48px;
     flex-shrink: 0;
     /* PREVENT SQUASHING */
-    border-radius: 50%;
-    background: var(--bg-elev);
-    border: 1px solid var(--border-strong);
     display: flex;
     justify-content: center;
     align-items: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    background: var(--btn-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-md);
     cursor: pointer;
-    /* Flat: a single soft drop shadow for float, no inset bevel highlight. */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
-        box-shadow 0.22s ease, background 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
     -webkit-app-region: no-drag;
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+        box-shadow var(--dur-med) var(--ease-standard),
+        background var(--dur-med) var(--ease-standard),
+        border-color var(--dur-med) var(--ease-standard),
+        filter var(--dur-med) var(--ease-standard);
 }
 
-/*
- * Main button: tap to expand/collapse, drag to move (handled in JS).
- * The round shape is the only interactive region — corner clicks fall through
- * to the app underneath (see isOverMainButton in widget.js).
- */
+/* Main button: tap to expand/collapse, drag to move (handled in JS). The round shape is
+   the only interactive region — corner clicks fall through to the app underneath (see
+   isOverMainButton in widget.js). */
 .main-btn {
-    /* Flat: solid fill (respects the JS-set --primary) with no radial "sphere" sheen,
-       no inset bevels, and no drop shadow — a flat colored disc. Dropping the blurred
-       shadow also avoids it being clipped by the tight transparent window bounds (only
-       ~10px around the button), which showed up as shading along the window edges. */
+    z-index: 10;
+    /* Flat solid fill, honouring the JS-set --primary. No drop shadow: the transparent
+       window is only ~10px larger than the button, so a blurred shadow gets clipped and
+       shows up as shading along the window edges. */
     background: var(--primary);
     border-color: rgba(255, 255, 255, 0.18);
     box-shadow: none;
-    z-index: 10;
-    /* Keep the button on a stable compositing layer at all times so the hover scale()
-       doesn't promote-then-demote it and pixel-snap the icon 1-2px sideways on
-       enter/leave. (Fixes the icon nudging right after the shrink animation settles.) */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    /* Keep the button on a stable compositing layer so the hover scale() doesn't
+       promote-then-demote it and pixel-snap the icon sideways on enter/leave. */
     will-change: transform;
     backface-visibility: hidden;
 }
@@ -373,9 +429,8 @@ body {
 .main-btn:hover {
     transform: scale(1.08);
     filter: brightness(1.08);
-    /* Keep only a crisp, tight ring for hover feedback — it stays inside the window
-       bounds (4px < ~10px margin), so unlike the old blurred glow it never bleeds or
-       gets clipped at the edges. */
+    /* A crisp, tight ring: it stays inside the window bounds (4px < ~10px margin), so
+       unlike a blurred glow it never bleeds or gets clipped at the edges. */
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
@@ -394,12 +449,12 @@ body {
 .main-icon {
     width: 24px;
     height: 24px;
-    color: white;
-    transition: transform 0.3s ease;
+    color: #fff;
     pointer-events: none;
+    transition: transform var(--dur-slow) var(--ease-standard);
 }
 
-/* ── Pop-out Menu ───────────────────────────────────────────────────────── */
+/* ── Pop-out menu ───────────────────────────────────────────────────────────── */
 .widget-menu {
     position: absolute;
     top: 70px;
@@ -409,10 +464,10 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: var(--sp-5);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.22s ease;
+    transition: opacity var(--dur-med) var(--ease-standard);
 }
 
 .widget-menu.open {
@@ -423,8 +478,7 @@ body {
 .menu-item {
     width: 42px;
     height: 42px;
-    background: var(--bg-elev);
-    color: #ffffff;
+    color: var(--text-primary);
 }
 
 /* Staggered entrance — animation handles transform so hover transitions stay snappy */
@@ -437,13 +491,13 @@ body {
 .widget-menu.open .menu-item:nth-child(3) { animation-delay: 0.11s; }
 .widget-menu.open .menu-item:nth-child(4) { animation-delay: 0.15s; }
 .widget-menu.open .menu-item:nth-child(5) { animation-delay: 0.19s; }
-.widget-menu.open .menu-item:nth-child(6) { animation-delay: 0.23s; }
 
 @keyframes menuItemIn {
     from {
         opacity: 0;
         transform: translateY(-12px) scale(0.4);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -451,12 +505,10 @@ body {
 }
 
 .menu-item:hover {
-    background: color-mix(in srgb, var(--primary) 30%, var(--bg-elev));
+    background: color-mix(in srgb, var(--primary) 26%, var(--btn-bg));
     border-color: var(--primary);
+    color: var(--text-primary);
     transform: scale(1.12);
-    box-shadow:
-        0 6px 16px rgba(0, 0, 0, 0.36),
-        0 0 14px color-mix(in srgb, var(--primary) 50%, transparent);
 }
 
 .menu-item:active {
@@ -466,20 +518,8 @@ body {
 .menu-item svg {
     width: 18px;
     height: 18px;
-    stroke: #ffffff;
-    color: #ffffff;
     pointer-events: none;
-}
-
-/* Respect reduced-motion preferences */
-@media (prefers-reduced-motion: reduce) {
-    .widget-menu.open .menu-item {
-        animation: none;
-    }
-
-    .history-panel,
-    .widget-btn,
-    .main-icon {
-        transition-duration: 0.01ms;
-    }
+    /* Follow the button's own colour. A hard white here quietly undid the themed colour
+       above it, so in light mode these were white discs on a near-white button. */
+    stroke: currentColor;
 }

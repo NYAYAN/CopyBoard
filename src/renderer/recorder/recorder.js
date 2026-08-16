@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 const canvas = document.getElementById('screen-canvas');
 const ctx = canvas.getContext('2d');
 const selectionBox = document.getElementById('selection-box');
@@ -205,7 +206,7 @@ async function getMicTrack() {
     if (window.api.platform === 'darwin' && window.api.ensureMicPermission) {
         const granted = await window.api.ensureMicPermission();
         if (!granted) {
-            throw new Error('Mikrofon izni verilmedi. Sistem Ayarları > Gizlilik ve Güvenlik > Mikrofon.');
+            throw new Error(t('Mikrofon izni verilmedi. Sistem Ayarları > Gizlilik ve Güvenlik > Mikrofon.'));
         }
     }
     const s = await navigator.mediaDevices.getUserMedia({
@@ -237,9 +238,9 @@ async function getSystemAudioTrack() {
 function systemAudioUnavailableMsg(err) {
     const detail = err && err.message ? ' (' + err.message + ')' : '';
     if (window.api.platform === 'darwin') {
-        return 'Sistem sesi kaydedilemedi. macOS\'ta bilgisayar sesini kaydetmek için BlackHole gibi bir sanal ses aygıtı gerekebilir.' + detail;
+        return t('Sistem sesi kaydedilemedi. macOS\'ta bilgisayar sesini kaydetmek için BlackHole gibi bir sanal ses aygıtı gerekebilir.') + detail;
     }
-    return 'Sistem sesi alınamadı.' + detail;
+    return t('Sistem sesi alınamadı.') + detail;
 }
 
 // MediaRecorder encodes only ONE audio track, so when both mic and system audio are on we
@@ -426,7 +427,7 @@ async function startRecording() {
             try {
                 const micTrack = await getMicTrack();
                 if (micTrack) audioTracks.push(micTrack);
-                else audioWarnings.push('Mikrofon sesi alınamadı.');
+                else audioWarnings.push(t('Mikrofon sesi alınamadı.'));
             } catch (err) {
                 audioWarnings.push('Mikrofon sesi alınamadı: ' + (err && err.message ? err.message : err));
             }
@@ -535,7 +536,7 @@ async function startRecording() {
         window.api.setIgnoreMouseEvents(true, { forward: true });
 
     } catch (e) {
-        console.error('Kayıt hatası:', e);
+        console.error(t('Kayıt hatası:'), e);
         // Surface the failure and reset to a retryable state. The UI changes above only
         // run after a successful setup, so the Record button is still visible here.
         state.isRecording = false;
@@ -583,3 +584,7 @@ if (btnResetSize) {
 }
 btnStop.addEventListener('click', (e) => { e.stopPropagation(); stopRecording(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (state.isRecording) stopRecording(); window.api.closeSnipper(); } });
+
+// Toolbar labels are drawn in-page — the native tooltip is invisible behind an
+// always-on-top overlay. See ../shared/overlay-tooltip.js.
+window.CopyBoardOverlayTooltip.init('.toolbar');

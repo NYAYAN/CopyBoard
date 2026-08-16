@@ -1,11 +1,12 @@
 const { BrowserWindow, screen, app, dialog, globalShortcut, desktopCapturer } = require('electron');
+const { t } = require('./i18n');
 const path = require('path');
 const { state, store } = require('./state');
 const { warmPasteHelper } = require('./paste-service');
 
 // A window shown from the tray can get a 'blur' microseconds later, while macOS is still
 // handing focus back to the app that was active before the click — the blur handler would
-// hide it again and "Göster" looked like it did nothing. Blurs this soon after a
+// hide it again and t("Göster") looked like it did nothing. Blurs this soon after a
 // deliberate show are ignored.
 const SHOW_SETTLE_MS = 600;
 
@@ -70,7 +71,7 @@ function createMainWindow() {
         if (Date.now() - (state.mainWindowShownAt || 0) < SHOW_SETTLE_MS) return; // focus still settling
         // Close-on-click-away only makes sense for a window that actually HELD focus. If it
         // never got it (another app kept/stole it after the tray click), a blur here means
-        // the window never became active — hiding on it is what made "Göster" look dead.
+        // the window never became active — hiding on it is what made t("Göster") look dead.
         if (!state.mainWindowWasFocused) return;
         state.mainWindowHiddenAt = Date.now();
         state.mainWindow.webContents.send('reset-view');
@@ -385,8 +386,8 @@ function handleWidgetAction(action, data) {
     // Scaled dimensions
     const FULL_W = Math.round(418 * s);
     const COL_H = Math.round(68 * s);
-    // Menu column: 70px offset + 6 × 42px items + 5 × 10px gaps = 372, plus bottom slack.
-    const EXP_H = Math.round(402 * s);
+    // Menu column: 70px offset + 5 × 42px items + 4 × 10px gaps = 320, plus bottom slack.
+    const EXP_H = Math.round(350 * s);
     const HIS_H = Math.round(400 * s);
     const PANEL_W = Math.round(350 * s);
     const BTN_W = Math.round(68 * s);

@@ -1,9 +1,12 @@
 const { app, dialog, clipboard, screen, powerMonitor } = require('electron');
+const { t } = require('./services/i18n');
 const { state } = require('./services/state');
 const { showMain, createMainWindow, toggleWidget, handleDisplayChange, createQuickPasteWindow } = require('./services/window-manager');
 const { disposePasteHelper } = require('./services/paste-service');
 const { initTray } = require('./services/tray-manager');
 const { registerIpcHandlers } = require('./services/ipc-handlers');
+const { registerI18nHandlers } = require('./services/i18n');
+const { registerThemeHandlers } = require('./services/theme');
 const { initAutoUpdater, checkForUpdatesSilently } = require('./services/update-manager');
 const { startClipboardWatcher, flushHistorySave } = require('./services/history-manager');
 
@@ -32,13 +35,17 @@ if (!gotTheLock) {
 
     // Initialize Services with Error Handling
     try {
+      // First: every preload asks for the dictionary SYNCHRONOUSLY as its window loads,
+      // and the tray builds translated labels — both happen below.
+      registerI18nHandlers();
+      registerThemeHandlers();
       initTray();
       createMainWindow();
       registerIpcHandlers();
       initAutoUpdater();
     } catch (svcErr) {
       console.error('Service Initialization Failed:', svcErr);
-      dialog.showErrorBox('Servis Hatası', 'Uygulama servisleri başlatılamadı: ' + svcErr.message);
+      dialog.showErrorBox(t('Servis Hatası'), 'Uygulama servisleri başlatılamadı: ' + svcErr.message);
       app.quit();
     }
 

@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 // Large screenshot viewer: shows one full-resolution capture in its own resizable
 // window. The main process sends 'viewer-list' (filmstrip thumbnails) and
 // 'viewer-image' (data URL + meta) on open and on every navigation.
@@ -492,12 +493,12 @@ window.api.onViewerList((list) => {
     stripKey = key;
     strip.innerHTML = '';
     (list || []).forEach(s => {
-        const t = document.createElement('img');
-        t.src = s.thumb;
-        t.alt = t('küçük resim');
-        t.dataset.id = s.id;
-        t.addEventListener('click', () => window.api.viewerSelect(s.id));
-        strip.appendChild(t);
+        const thumb = document.createElement('img');
+        thumb.src = s.thumb;
+        thumb.alt = t('küçük resim');
+        thumb.dataset.id = s.id;
+        thumb.addEventListener('click', () => window.api.viewerSelect(s.id));
+        strip.appendChild(thumb);
     });
     markActiveThumb();
 });

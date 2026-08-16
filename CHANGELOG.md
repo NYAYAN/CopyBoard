@@ -1,3 +1,93 @@
+# CopyBoard v2.10.0 Release Notes
+
+Görüntüleyicide düzenleme ve zoom, koyu/açık tema, arayüz dili, atanabilir tüm kısayollar ve baştan düzenlenmiş Ayarlar paneli.
+
+> Dal: `feature/viewer-editing-and-native-hotkeys` — 18 commit, 56 dosya, +4302/−720.
+
+## 🖼️ Büyük görüntüleyicide düzenleme
+- **Çiz:** Snipper'ın araç seti (kalem, kare, yuvarlak, ok, metin, bulanıklaştır) artık büyük görüntüleyicide de var. Kanvas görüntünün **kendi çözünürlüğünde** tutuluyor: pencere ne kadar küçük olursa olsun kopyalanan resim tam kalitede işaretleniyor. Çizimler piksel değil **vektör işlem listesi** olarak saklanıyor — geri alma bu yüzden ucuz, ve galeride ileri geri gezerken her resim kendi çizimini koruyor.
+- **Çizilebilir alan çerçeveleniyor:** Araçlar açıkken resmin kenarına vurgu halkası ve köşe ayraçları geliyor, dışındaki letterbox koyulaşıyor. Kalemin nereye değdiği tahmine kalmıyor.
+- **Alan Seç (kırp):** Seçim dışındaki her yer soluyor, seçimin boyutu yazıyor, **Alanı Kopyala** yalnız o bölgeyi alıyor — çizimler dahil, soldurma hariç.
+- **Düzenlenmiş kopya galeriye de giriyor:** Panoya kopyalanıyor **ve** galeride kendi kaydı oluyor; görüntüleyici o yeni kayda geçiyor, yani ekranda gördüğünüz şey kopyaladığınız şey. (`addScreenshot()` artık oluşturduğu kaydın id'sini döndürüyor.)
+- **Sil:** Ekrandaki görüntüyü siliyor; `removeShot()` açık görüntüleyiciyi komşu kayda geçiriyor, sonuncuysa pencereyi kapatıyor.
+- **Başlık:** Boyutların yanında **dosya boyutu** da var. Bilgiler ayrı ayrı çipler hâlinde; pencere daraldıkça en az gereken bilgi ilk düşüyor.
+
+## 🔍 Görüntüleyicide zoom
+- **Trackpad'de pinch** veya **Ctrl/Cmd + tekerlek**. Düz tekerlek yakınlaştırılmış resmi kaydırıyor.
+- Zoom **imlece sabitleniyor**: baktığınız nokta yerinde kalıyor, resim onun etrafında büyüyor.
+- **Ctrl/Cmd +/−** adım adım, **Ctrl/Cmd+0** sığdır, **Ctrl/Cmd+1** gerçek boyut. Resme tıklamak sığdır ↔ %100 arasında geçiş yapıyor.
+- Başlıkta tek parça bir kontrol: **− · %değer · +**. Yüzdeye tıklayınca %100, tekrar tıklayınca sığdır. Aralığın uçlarında ilgili düğme kendini kapatıyor. Ölçek **%10 – %800**.
+- Sığdırma bir taban değil: altına inilebiliyor. Zoom yalnızca tam sığdırmanın üzerine denk geldiğinde oraya yapışıyor — aynı görüntüyü kaydırma çubuklarıyla gösteren ölü bir bölge kalmasın diye.
+- Çizim kanvası zoom'dan etkilenmiyor: `layoutCanvas()` resmin çizilen kutusunu takip ediyor, o kutuyu kimin belirlediği fark etmiyor.
+
+## ⌨️ Kısayollar: artık her tuş atanabiliyor
+- Kayıt eden bileşen kendi modülüne taşındı ve artık **fiziksel tuşu** (`e.code`) saklıyor, basılan karakteri değil. Global kısayollar konuma göre eşleşir; `e.key` okumak, kaydı sorunsuz alınıp **hiç tetiklenmeyen** kısayollar üretiyordu: Türkçe-Q'da Cmd+Shift+2 `'` yazdığı için ABD klavyesindeki apostrof tuşuna bağlanıyordu.
+- **Esc altındaki tuşun** (`kVK_ISO_Section` / `IntlBackslash`, Türkçe-Q'da `"`) Electron'da adı **yok**. Electron 39 `"IntlBackslash"`, `"OEM_102"` ve `"§"` değerlerini reddediyor; `"\""` ise ABD klavyesindeki tırnak konumuna, yani o düzendeki **i/İ tuşuna** çözülüyor — bağlanan kısayol sessizce yanlış tuşu dinliyordu. Yedi aday değer gerçek tuşa karşı denendi, hiçbiri ulaşmıyor.
+- `native/mac-hotkey`: bu tuşları Carbon'un `RegisterEventHotKey` çağrısıyla **ham keycode** üzerinden bağlayan yerel eklenti — Electron'un kendi kullandığı OS mekanizmasının aynısı. **Tuş dinleyici değil**: kombinasyon basılana kadar hiçbir şey çalışmıyor, yazarken sıfır maliyet.
+- Eklenti **isteğe bağlı**: Windows derlemeyi atlıyor, Xcode Command Line Tools olmayan makine hata değil uyarı alıyor; her iki durumda da uygulama Electron'a düşüyor ve tuş yalnızca "kullanılamaz" olarak raporlanıyor.
+- `ipc/shortcuts.js` artık tek kapı: `claim()` / `release()` dışından kayıt yapılmıyor.
+
+## 🌗 Koyu, Açık ve Sistem teması
+- Üç mod: **Koyu · Açık · Sistem**. Sistem, açıkken canlı olarak OS'u takip ediyor. Varsayılan koyu kalıyor — güncelleme, kullanıcının CopyBoard ile ilişkilendirmediği bir OS ayarı yüzünden kendini yeniden boyamamalı.
+- Tema değişimi **pencereleri yeniden yüklemiyor** (dilin aksine): `data-theme` anında değişiyor. Snipper kaplaması ve kayıt penceresi gibi altınızdan yeniden yüklenmesini istemeyeceğiniz yüzeyler için bu şart. Betik `<head>`'den yükleniyor, böylece ilk boyamadan önce doğru tema yerinde — gövdeden yüklense açık temaya giderken koyu bir parlama olurdu.
+- Yaklaşım: yaklaşık **95 adet `rgba(255,255,255,α)`** kaplaması `--fg-rgb` üzerinden geçiyor (koyuda 255,255,255 / açıkta 0,0,0). Açık tema tek bir token bloğu; hiçbir kural hangi temada olduğunu bilmek zorunda değil.
+- Kapsam: ana pencere, görüntüleyici, widget, hızlı yapıştır, kayıt penceresi, güncelleme kutusu, toast ve OCR paneli. Snipper koyu kalıyor — o bir pencere değil, ekranın üzerindeki bir karartma.
+- `nativeTheme` de takip ediyor, yani kaydırma çubukları ve yerel denetimler uyumlu geliyor.
+
+## 🌐 Arayüz dili (Türkçe / İngilizce)
+- Türkçe **kaynak dil** olarak kalıyor ve her Türkçe metin kendi anahtarı: `t('Kaydet')` yerini aldığı düz metin gibi okunuyor, eksik çeviri ham bir tanımlayıcı değil **Türkçeye** düşüyor.
+- Bu sayede işaretlemede `data-i18n` niteliği gerekmiyor: `shared/i18n.js` yüklenirken belgeyi bir kez dolaşıp sözlükte bulduğunu değiştiriyor. Bu dolaşma sayfa yalnızca kendi arayüzünü tutarken çalışıyor; **asla pano içeriğinin üzerinden geçmiyor** — metni "Kaydet" olan bir geçmiş satırı sessizce yeniden yazılırdı. Çalışma anında üretilen metinler `t()` üzerinden geçiyor.
+- Sözlük **194 girdi**. Dokuz pencerenin işaretlemesindeki Türkçe metinler gözle değil **betikle** çıkarıldı; ilk taramada 44 eksik bulundu. Ardından JS içindeki 71 kullanıcıya görünen metin sarmalandı (konsol/hata ayıklama satırları bilerek dışarıda).
+- Doğrulama canlı yapıldı: İngilizceye geçildiğinde ekranda kalan tek Türkçe kelime **"Türkçe"** — bir dilin kendi adı — ve kullanıcının kendi pano içeriği, ki o hiçbir zaman çevrilmemeli.
+- Dil değiştirmek her pencereyi yeniden yüklüyor ve tepsiyi yeniden kuruyor: her yüzey metinlerini yüklenirken boyadığı için yeniden yükleme **zaten** güncellemenin kendisi.
+- Varsayılan bilerek Türkçe, **OS diline bakılmıyor**: uygulama bugüne kadar yalnız Türkçeydi, sistem dilini takip etmek mevcut her kullanıcıyı güncellemede İngilizceye çevirirdi.
+
+## ⚙️ Ayarlar paneli
+- Beş katlanır grup, kullanım sıklığına göre: **Kayıt Ayarları · Video Ayarları · Yüzen Araç · Kısayollar · Diğer Ayarlar**.
+- Hepsi her açılışta **kapalı** başlıyor: bu bir tercih değil, bir açılır bölüm — Ayarlar her seferinde aynı kısa listeyle açılmalı. Panel, ne kadar ayar yapılmış olursa olsun tek ekrana sığıyor (widget açıkken önce 12 satırdı).
+- Yüzen Araç'ın **aç/kapa anahtarı başlık satırında kalıyor**: widget'ı açmak için önce grubu açmak gerekmiyor. Alt ayarları yalnız widget açıkken var olduğundan, kapalıyken grup boş değil **devre dışı**; açar açmaz kendiliğinden genişliyor.
+- Bağlantı artık genel: bir grup = `.group-header` düğmesi + `aria-controls` ile gösterdiği gövde. Yeni grup eklemek JS gerektirmiyor.
+- **Dil** satırı grupların dışında, en altta: grup başlıklarını okuyabilmek için önce gerekebilecek tek ayar o.
+- **Güncellemeleri Kontrol Et** başlıktan Ayarlar'a taşındı, **Hakkında** ise kendi paneli olmaktan çıkıp Ayarlar'ın en altına indi. Başlık altı ikondan dörde indi.
+- Başlıktaki yanan düğme artık elle değil `syncHeaderActive()` ile belirleniyor: geçmiş sekmesi — en çok vakit geçirilen görünüm — hiç yanmıyordu.
+
+## 🔄 Güncelleme kontrolü her zaman cevap veriyor
+- "Zaten en güncel sürümü kullanıyorsunuz." mesajı vardı ama yalnız `update-not-available` olayında. İki yol kullanıcıya **sessizlik** olarak ulaşıyordu ki bu ölü bir düğmeden ayırt edilemez: paketlenmemiş derleme (electron-updater hiçbir olay yaymadan geri dönüyor — geliştirme çalıştırmasında her tıklama böyle) ve `error` olayı gelmeyen bir reddedilme.
+- `manualUpdateCheck` bir jeton gibi çalışıyor: bir tıklama = tam olarak bir mesaj. `update-available` da jetonu temizliyor — aksi hâlde **bir sonraki sessiz arka plan kontrolü** durup dururken "günceldesiniz" diyordu.
+
+## 🧰 Yüzen araç (widget)
+- **Düğme ipuçları görünüyor:** Widget normal pencere seviyesinin üstünde yüzdüğü için Chromium'un yerel ipucu **arkasında** kalıyordu; sadece ikonlu düğmelerin okunur bir etiketi yoktu. Artık `aria-label` + widget'ın kendi penceresi içinde yaşayan sayfa-içi ipucu.
+- **Hızlı Yapıştır düğmesi menüden kaldırıldı.** Özellik duruyor: global kısayolu ve tepsi menüsü girişi yerinde. macOS Secure Event Input kısayolu yuttuğunda fareyle giriş yolu da tepsi menüsü.
+
+## ♿ Kontrast ve renk düzeltmeleri
+Bu turda renkler gözle değil **ölçülerek** denetlendi: her ögenin efektif zeminini atalarından besteleyip WCAG oranını hesaplayan, `:hover` durumunu CDP ile zorlayan bir denetleyici yazıldı. Gözden kaçmış olanlar:
+- Widget menü ikonları **1.21:1** (açık panelde sabit beyaz), aktif sekmesi 2.31, Geçmişi Temizle düğmesi 3.46.
+- Açık temada **favori yıldızı 1.1:1** — `--warning`, açık blokta yeniden tanımlanmayan tek anlam taşıyan token'dı; yıldız pratikte boştu.
+- Widget satır düğmelerinin arkasındaki tabla sabit koyuydu: açık temada koyu ikonlar görünecek yer bulamıyordu.
+- Odaklanan alanlar (widget araması, not alanı) odakta %30-40 siyaha iniyordu: açık temada koyu gri zemin üstünde siyaha yakın metin.
+- Güncelleme kutusunun sürüm notları alanı (%25 siyah) ve Hızlı Yapıştır'ın kapat düğmesi (**1.5:1**).
+- Görüntüleyicinin Sil/Kapat düğmeleri koyu metinle kırmızıya dönüyordu; navigasyon okları, kırpma çubuğu ve metin kutusu hiç temalanmayan koyu çipllerdi.
+- Çiz'e basınca resmin arka planı simsiyah oluyordu (letterbox `#0a0a0b` sabitti); soluk bir ekran görüntüsü soluk sahnede kenarsız kalıyordu (açık temada saç teli çerçeve eklendi); "1 / 30" çipi açık mor üstünde açık mordu.
+- Hover'da vurgu rengi artık **koyulaşıyor**, açılmıyor: 11px beyaz etiketler açılan morda ve hover kırmızısında 4.5:1'in altındaydı.
+- **Koyu temada** seçili sekme ikonu 2.6:1'deydi — seçili hâl en az görünen hâldi.
+- Sonuç: dört pencere, iki tema, durgun ve hover hâlleri ölçülerek temiz.
+
+## 🐞 Düzeltmeler
+- **Görüntüleyici tamamen ölmüştü:** Film şeridini kuran kodda yerel bir `const t = document.createElement('img')` vardı; `t()` sarmalama betiği alt satırı `t.alt = t('küçük resim')` hâline getirip bir `<img>`'yi fonksiyon gibi çağırdı — üstelik betiğin "t zaten kapsamda mı?" kontrolü de aynı bildirime takılıp yardımcıyı hiç eklemedi. `viewer.js` en üstteki ilk `t()` çağrısında hata verince ondan sonra kaydedilen **her dinleyici** kayboldu: kapatma yok, oklar yok, resim yok. Aynı biçim için tüm renderer dosyaları tarandı.
+- **Zoom'da resim çerçevenin tepesine yapışıyordu:** Sığdırma modundan çıkarken sahne flex'ten `display: block`'a geçiyor, dikey ortalama tam da o anda kayboluyordu. Sahne artık flex kalıyor ve ortalamayı `margin: auto` yapıyor — taşma başlayınca bu marjlar sıfırlandığı için resmin sol üst köşesi kaydırmayla erişilebilir kalıyor; ortalama anahtar kelimeleri kullanılsaydı o köşe kaydırma alanının dışında kalırdı.
+- **Snipper:** Geri alma ve resmi kopyalama yalnız Ctrl'e bağlıydı; macOS'ta refleks Cmd. İkisi de kabul ediliyor.
+- Yüzde göstergesi bir ara sığdırma modunda **%124** yazıyordu: `object-fit: contain` resmi eleman kutusunun içinde harflendirdiği için kutuyu ölçmek resmi değil kutuyu bildiriyor. Gösterge artık ölçülen değil, istenen ölçekten türetiliyor.
+
+## 🧪 Test ve araçlar
+- Kısayol kaydının klavye düzeni durumları için birim testleri; `test:electron` her kayıt çıktısını **gerçek** `globalShortcut.register()` çağrısına veriyor.
+- Kontrast denetleyicisi ve metin çıkarıcılar bu turda yazıldı; denetleyici hesaplanan renkleri metin olarak ayrıştırdığı (`color-mix` çıktısı `oklab()` gelince açık lavantayı siyah sanıyordu) ve odakta olmayan pencerede yarım kalmış geçişleri okuduğu için iki kez yanlış sonuç verdi — ikisi de düzeltildi. Odakta olmayan pencerede compositor tıklamadığı için bir renk **geldiği** değeri bildirir; bu, hover taramasını farkında olmadan hover **öncesi** renklerin taramasına çeviriyordu.
+
+## 📦 Kurulum & Güncelleme
+1. CopyBoard-Setup-2.10.0.exe dosyasını indirip kurun; veya
+2. Açık uygulamada otomatik güncelleme bildirimiyle geçin.
+
+---
+
 # CopyBoard v2.9.5 Release Notes
 
 OCR'ın hiç çalışmaması, Secure Input altında hızlı yapıştırma ve widget menüsü.

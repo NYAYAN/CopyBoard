@@ -15,6 +15,31 @@
     <div class="toolbar">
         <div class="title" id="viewer-title">Ekran Görüntüsü</div>
         <div class="toolbar-actions">
+            <!-- One segmented control: out · readout (click = 1:1) · in. Label and
+                 disabled states are filled by viewer.js. -->
+            <div class="tb-zoom" role="group" aria-label="Yakınlaştırma">
+                <button id="zoom-out" class="tb-btn zoom-step" title="Uzaklaştır (Ctrl/Cmd −)"
+                    aria-label="Uzaklaştır">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round">
+                        <path d="M5 12h14" />
+                    </svg>
+                </button>
+                <button id="zoom-btn" class="tb-btn zoom" title="Gerçek boyut (%100) — tekrar tıkla: sığdır">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="M20 20l-4.4-4.4" />
+                    </svg>
+                    <span id="zoom-label">100%</span>
+                </button>
+                <button id="zoom-in" class="tb-btn zoom-step" title="Yakınlaştır (Ctrl/Cmd +)"
+                    aria-label="Yakınlaştır">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                </button>
+            </div>
             <button id="draw-btn" class="tb-btn" title="Çizim Araçları">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">

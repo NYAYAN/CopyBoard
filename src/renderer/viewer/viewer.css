@@ -101,16 +101,6 @@ body {
     color: var(--pos-chip-text);
 }
 
-.ti-zoom {
-    font-variant-numeric: tabular-nums;
-}
-
-/* Lit only while the zoom is manual, so "100%" from fitting doesn't look like a mode. */
-.ti-zoom-on {
-    background: var(--pos-chip-bg);
-    color: var(--pos-chip-text);
-}
-
 .ti-time {
     flex: 0 1 auto;
     overflow: hidden;
@@ -157,7 +147,9 @@ body {
 
 .tb-btn.close:hover,
 .tb-btn.danger:hover {
-    background: #e5534b;
+    /* A shade deeper than the obvious #e5534b: white on that measured 3.7:1, under the
+       4.5:1 that 11px label text needs. */
+    background: #d32f2f;
     /* On red, always white: inheriting the theme text colour put dark grey on the
        danger button in light mode. */
     color: #fff;
@@ -170,13 +162,66 @@ body {
     color: #fff;
 }
 
+/* Hover DEEPENS the accent instead of lightening it — the lighter purple dropped white
+   11px labels to 3.7:1. */
 .tb-btn.active:hover {
-    background: #9a6bf0;
+    background: #7a45de;
 }
 
 .tb-btn svg {
     width: 14px;
     height: 14px;
+}
+
+/* −, readout, + read as one control, so they share a single pill and lose their inner
+   corners rather than sitting as three separate buttons. */
+.tb-zoom {
+    display: flex;
+    gap: 1px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(var(--fg-rgb), 0.08);
+}
+
+.tb-zoom .tb-btn {
+    border-radius: 0;
+    background: transparent;
+}
+
+.tb-btn.zoom-step {
+    padding: 6px 7px;
+}
+
+.tb-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.tb-btn:disabled:hover {
+    background: transparent;
+}
+
+/* The zoom readout changes on every wheel notch, so the digits are fixed-width and the
+   label has a floor: a button that resizes under the cursor is a button you misclick. */
+.tb-btn.zoom {
+    padding-right: 8px;
+}
+
+.tb-btn.zoom span {
+    min-width: 34px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Lit while the zoom is manual, so the fit percentage doesn't look like a mode. */
+.tb-btn.zoom.on {
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
+}
+
+.tb-btn.zoom.on:hover {
+    background: var(--accent);
+    color: #fff;
 }
 
 /* ── Annotation toolbar (second row, only while drawing is on) ─────────────── */
@@ -313,10 +358,18 @@ body {
     cursor: zoom-in;
 }
 
+/* Stays a flex container while zoomed. Dropping to `display: block` here top-left
+   aligned the image the instant zoom left fit mode, which reads as the picture jumping
+   to the ceiling — worst in a tall window, where there is the most slack to lose.
+   The centering comes from auto margins on the image instead of the container's
+   centering keywords: auto margins collapse to zero once the image overflows, so its
+   top-left corner stays reachable by scrolling, whereas `justify-content: center`
+   would centre the overflow and put that corner outside the scrollable area. Auto
+   margins beat align-items on their own, but not justify-content, so that one is
+   turned off explicitly. */
 .stage.zoomed {
-    display: block;
     overflow: auto;
-    text-align: center;
+    justify-content: flex-start;
 }
 
 .stage.zoomed img {
@@ -324,7 +377,14 @@ body {
     max-height: none;
     /* width comes from viewer.js as a pixel value — height follows the aspect. */
     height: auto;
+    flex: none; /* keep that width: a flex item would otherwise shrink back to fitting */
+    margin: auto;
     cursor: zoom-out;
+}
+
+/* Zoomed out past fit: the next click enlarges. */
+.stage.zoomed.shrunk img {
+    cursor: zoom-in;
 }
 
 /* The annotation layer is parked exactly on top of the rendered image (viewer.js

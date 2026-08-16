@@ -29,6 +29,10 @@ const textWrap = document.getElementById('text-wrap');
 const textInput = document.getElementById('text-input');
 const cropBar = document.getElementById('crop-bar');
 const copyLabel = document.getElementById('copy-label');
+const zoomBtn = document.getElementById('zoom-btn');
+const zoomLabel = document.getElementById('zoom-label');
+const zoomOutBtn = document.getElementById('zoom-out');
+const zoomInBtn = document.getElementById('zoom-in');
 
 let shotId = null;
 let stripKey = ''; // id fingerprint of the rendered strip — skip rebuilds when unchanged
@@ -97,10 +101,12 @@ function renderTitle(data) {
 // canvas needs no special handling — layoutCanvas() tracks the image's rendered box,
 // whatever produced it.
 const ZOOM_MAX = 8;
+const ZOOM_MIN = 0.1;
+const ZOOM_STEP = 1.25;
 let zoom = 0;
 
-// What fit mode is actually showing right now — the floor for zooming out, and the
-// number the % readout compares against.
+// What fit mode is actually showing right now — the number the % readout compares
+// against, and the scale the zoom snaps back to when it lands on top of it.
 function fitScale() {
     if (!img.naturalWidth) return 1;
     return Math.min(1, stage.clientWidth / img.naturalWidth, stage.clientHeight / img.naturalHeight);
@@ -118,17 +124,25 @@ function applyZoom() {
         img.style.width = '';
         img.style.height = '';
     }
+    // Below fit, a click makes the picture BIGGER — the zoom-out cursor would lie.
+    stage.classList.toggle('shrunk', !!zoom && zoom < fitScale());
     layoutCanvas();
     paint(); // crop chrome is sized in inverse display scale
-    updateZoomChip();
+    updateZoomLabel();
 }
 
 // anchor: a viewport point to keep still (the cursor), so zooming goes where you look.
 function setZoom(next, anchor) {
     const fit = fitScale();
-    // Anything at or below fit snaps back to fit — no dead zone where a "zoom" shows
-    // the same thing as fitting but with scrollbars.
-    const target = next <= fit * 1.01 ? 0 : Math.min(ZOOM_MAX, next);
+    let target;
+    if (next === 0) {
+        target = 0; // an explicit "fit the window"
+    } else {
+        const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+        // Landing on fit IS fit: don't leave a scrollable stage showing exactly what
+        // fitting shows. Passing through it, in either direction, is allowed.
+        target = Math.abs(clamped - fit) < fit * 0.01 ? 0 : clamped;
+    }
     if (target === zoom) return;
 
     const before = img.getBoundingClientRect();
@@ -149,23 +163,26 @@ function setZoom(next, anchor) {
     }
 }
 
-// Shown only while the zoom is manual. In fit mode the honest number is "whatever
-// fits", and measuring it off the element box reports the box, not the painted image
-// (object-fit: contain letterboxes inside it) — a readout that lies is worse than none.
-function updateZoomChip() {
-    const chip = title.querySelector('.ti-zoom');
-    if (!zoom) {
-        if (chip) chip.remove();
-        return;
-    }
-    const el = chip || Object.assign(document.createElement('span'), { className: 'ti-chip ti-zoom ti-zoom-on' });
-    el.textContent = Math.round(zoom * 100) + '%';
-    if (!chip) title.appendChild(el);
+// The header readout. Derived from the scale we asked for, never measured off the
+// element box: with object-fit: contain the box can be larger than the painted image,
+// and an early cut of this read 124% on an image that was plainly fitted.
+function updateZoomLabel() {
+    const scale = currentScale();
+    zoomLabel.textContent = Math.round(scale * 100) + '%';
+    zoomBtn.classList.toggle('on', !!zoom); // lit only while the zoom is the user's
+    zoomOutBtn.disabled = scale <= ZOOM_MIN * 1.001;
+    zoomInBtn.disabled = scale >= ZOOM_MAX * 0.999;
 }
 
 // Click still toggles the two useful extremes — fit and actual size.
 function toggleActualSize(anchor) {
     setZoom(zoom ? 0 : 1, anchor);
+}
+
+// The header button always goes to 1:1 first, whatever the current scale — that's the
+// number on it. Only when 1:1 is already on screen does it hand back fit.
+function zoomButtonClick() {
+    setZoom(Math.abs(currentScale() - 1) < 0.005 ? 0 : 1);
 }
 
 function updateZoomable() {
@@ -610,7 +627,18 @@ img.addEventListener('load', () => {
     repaint();
 });
 
-window.addEventListener('resize', () => { updateZoomable(); layoutCanvas(); updateZoomChip(); });
+window.addEventListener('resize', () => {
+    // Resizing moves fit onto the current scale often enough that leaving a manual
+    // zoom there would mean scrollbars around a picture that already fits. Only the
+    // coincidence collapses — a deliberate zoom-out below fit is left alone.
+    if (zoom && Math.abs(zoom - fitScale()) < fitScale() * 0.01) {
+        zoom = 0;
+        applyZoom();
+    }
+    updateZoomable();
+    layoutCanvas();
+    updateZoomLabel(); // the fit percentage moves with the window
+});
 // Safety net for anything the explicit calls miss. Kept in a variable on purpose:
 // an observer nobody holds a reference to gets garbage-collected and silently stops.
 const imgObserver = new ResizeObserver(layoutCanvas);
@@ -619,6 +647,9 @@ imgObserver.observe(img);
 // Click toggles fit ↔ actual size, anchored where you clicked. Not while drawing —
 // the canvas owns the pointer then.
 img.addEventListener('click', (e) => toggleActualSize({ x: e.clientX, y: e.clientY }));
+zoomBtn.addEventListener('click', zoomButtonClick);
+zoomOutBtn.addEventListener('click', () => setZoom(currentScale() / ZOOM_STEP));
+zoomInBtn.addEventListener('click', () => setZoom(currentScale() * ZOOM_STEP));
 
 // Trackpad pinch arrives as a wheel event with ctrlKey set; Cmd/Ctrl+wheel is the
 // mouse equivalent. A plain wheel keeps scrolling the zoomed image.
@@ -651,8 +682,8 @@ document.addEventListener('keydown', (e) => {
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
     else if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); copyCurrent(); }
     // Zoom: the shortcuts every image viewer has. '=' is what Cmd++ reports unshifted.
-    else if (mod && (e.key === '+' || e.key === '=')) { e.preventDefault(); setZoom(currentScale() * 1.25); }
-    else if (mod && e.key === '-') { e.preventDefault(); setZoom(currentScale() / 1.25); }
+    else if (mod && (e.key === '+' || e.key === '=')) { e.preventDefault(); setZoom(currentScale() * ZOOM_STEP); }
+    else if (mod && e.key === '-') { e.preventDefault(); setZoom(currentScale() / ZOOM_STEP); }
     else if (mod && e.key === '0') { e.preventDefault(); setZoom(0); }
     else if (mod && e.key === '1') { e.preventDefault(); setZoom(1); }
     // Esc unwinds one step at a time — closing the window would take the drawing with it.

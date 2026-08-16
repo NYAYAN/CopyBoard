@@ -2,7 +2,6 @@ const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? win
 const mainBtn = document.getElementById('widget-main');
 const menu = document.getElementById('widget-menu');
 const btnSnippet = document.getElementById('btn-snippet');
-const btnQuickPaste = document.getElementById('btn-quickpaste');
 const btnScreenshot = document.getElementById('btn-screenshot');
 const btnOcr = document.getElementById('btn-ocr');
 const btnVideo = document.getElementById('btn-video');
@@ -574,14 +573,6 @@ btnSnippet.addEventListener('click', async () => {
             historyTimeout = null;
         }, 300);
     }
-});
-
-// Mouse-driven Quick Paste. This is the ONLY way in when macOS Secure Event Input is
-// active (any focused password field): the OS then hands keystrokes exclusively to that
-// app, so our global accelerator never fires — but mouse events are untouched.
-btnQuickPaste.addEventListener('click', () => {
-    window.api.widgetAction('quickpaste');
-    closeAll();
 });
 
 btnScreenshot.addEventListener('click', () => window.api.widgetAction('capture-draw'));

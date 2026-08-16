@@ -17,27 +17,33 @@ const widgetSearch = document.getElementById('widget-search');
 // list search predicate — both come from the shared classic script loaded before this one
 // (see ../shared/render-utils.js and the <script> tag in widget.html). The widget's row
 // actions use exactly the 4 shared icons, so ICONS is that shared set verbatim.
-const { ICONS, matchesSearch } = window.CopyBoardShared;
+const { ICONS, matchesSearch, fold } = window.CopyBoardShared;
 
 // DISPLAY-only caps: rows and the hover tooltip clip what goes into the DOM — a copied
 // item can be hundreds of KB. Copy/search always use the full in-memory item.content.
 // Rows are single-line ellipsized, so ~300 chars covers any width.
-const PREVIEW_CHARS = 300;
+const PREVIEW_CHARS = 220;
 const TOOLTIP_CHARS = 500;
 const TOOLTIP_DELAY_MS = 500;
 // Shorter than the history-row delay: these are icon-only buttons, so the label is the
 // only way to tell them apart and waiting half a second to find out is too slow.
 const BTN_TOOLTIP_DELAY_MS = 300;
-const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
 
-// Same date/time presentation as the main-window list, so the two designs match.
-// Cached formatters — constructing Intl.DateTimeFormat per row per render is costly.
-const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' });
+// Content classification, row-text clipping and time formatting are shared with the main
+// window and the quick-paste picker (see ../shared/content-type.js) — three windows render
+// rows of clipboard entries and they should not each have their own idea of what a URL
+// looks like or how to write a timestamp.
+const C = window.CopyBoardContent;
+
+// The panel is 350px wide, so the row can't spell out a full date. It shows what the
+// main window's day headings would otherwise have said: a clock time for today and
+// yesterday, a weekday name this week, a date before that.
 const formatMeta = (ts) => {
     if (!ts) return '';
     const d = new Date(ts);
-    return isNaN(d) ? '' : `${DATE_FMT.format(d)} ${TIME_FMT.format(d)}`;
+    if (isNaN(d)) return '';
+    const now = new Date();
+    return C.shortTime(d, C.groupKey(d, now), now);
 };
 
 let isOpen = false;
@@ -242,7 +248,7 @@ historyItemsContainer.addEventListener('scroll', hideTooltip, { passive: true })
 // --- Virtual Scroll ---
 // Must equal the fixed .history-item height in widget.css — the virtual list
 // positions rows purely by arithmetic on this constant.
-const ITEM_HEIGHT = 44;
+const ITEM_HEIGHT = 38;
 const BUFFER = 4;
 
 function renderVirtualList(items) {
@@ -272,16 +278,35 @@ function renderVirtualList(items) {
         const div = document.createElement('div');
         div.className = 'history-item';
 
+        // Leading glyph — or, for a colour, the colour itself. Same anatomy as the main
+        // window's rows.
+        const type = C.classify(item.content);
+        const iconEl = document.createElement('span');
+        iconEl.className = 'row-icon';
+        const colour = type === 'color' ? C.cssColor(item.content) : null;
+        if (colour) {
+            const swatch = document.createElement('span');
+            swatch.className = 'row-swatch';
+            swatch.style.background = colour;
+            iconEl.appendChild(swatch);
+        } else {
+            iconEl.innerHTML = C.iconFor(type);
+        }
+        div.appendChild(iconEl);
+
         const textEl = document.createElement('div');
-        textEl.className = 'history-item-text';
-        textEl.textContent = clip(item.content, PREVIEW_CHARS);
+        textEl.className = C.MONO_TYPES.has(type) ? 'history-item-text mono' : 'history-item-text';
+        textEl.textContent = C.previewText(item.content, PREVIEW_CHARS);
         div.appendChild(textEl);
 
-        // Timestamp inline at the right — mirrors the main-window row design
+        // Trailing slot: the timestamp, replaced in place by the actions on hover.
+        const trail = document.createElement('div');
+        trail.className = 'row-trail';
+
         const metaEl = document.createElement('div');
         metaEl.className = 'history-item-meta';
         metaEl.textContent = formatMeta(item.timestamp);
-        div.appendChild(metaEl);
+        trail.appendChild(metaEl);
 
         // Row actions (favorite / copy / delete) — mirrors the main window's row
         const actions = document.createElement('div');
@@ -319,28 +344,30 @@ function renderVirtualList(items) {
             closeAll();
         };
 
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'action-btn del';
-        deleteBtn.innerHTML = ICONS.trash;
-        deleteBtn.title = isInFavoritesTab ? t('Favorilerden Çıkar') : t('Sil');
-        deleteBtn.setAttribute('aria-label', deleteBtn.title);
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            hideTooltip();
-            if (isInFavoritesTab) {
-                window.api.removeFromFavorites(item.id);
-                allFavoriteItems = allFavoriteItems.filter(f => f.id !== item.id);
-            } else {
-                window.api.deleteHistoryItem(item.id);
-                allHistoryItems = allHistoryItems.filter(h => h.id !== item.id);
-            }
-            renderHistory(allHistoryItems, allFavoriteItems);
-        };
-
         actions.appendChild(starBtn);
         actions.appendChild(copyBtn);
-        actions.appendChild(deleteBtn);
-        div.appendChild(actions);
+
+        // Only the history tab gets a delete button. In favourites the star above it
+        // already IS the removal control — the two were wired to the same call, so the
+        // row carried the same action twice.
+        if (!isInFavoritesTab) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'action-btn del';
+            deleteBtn.innerHTML = ICONS.trash;
+            deleteBtn.title = t('Sil');
+            deleteBtn.setAttribute('aria-label', deleteBtn.title);
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                hideTooltip();
+                window.api.deleteHistoryItem(item.id);
+                allHistoryItems = allHistoryItems.filter(h => h.id !== item.id);
+                renderHistory(allHistoryItems, allFavoriteItems);
+            };
+            actions.appendChild(deleteBtn);
+        }
+
+        trail.appendChild(actions);
+        div.appendChild(trail);
 
         div.addEventListener('click', () => {
             window.api.copyItem(item.content);
@@ -349,7 +376,7 @@ function renderVirtualList(items) {
 
         div.addEventListener('mouseenter', () => {
             tooltipTimeout = setTimeout(() => {
-                showTooltip(clip(item.content, TOOLTIP_CHARS), div.getBoundingClientRect());
+                showTooltip(C.clip(item.content, TOOLTIP_CHARS), div.getBoundingClientRect());
             }, TOOLTIP_DELAY_MS);
         });
         div.addEventListener('mouseleave', () => {
@@ -377,7 +404,9 @@ function renderHistory(history, favorites) {
 
     // Apply Search Filter
     if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+        // Folded, not lowercased: plain toLowerCase cannot match Turkish (see
+        // CopyBoardShared.fold).
+        const q = fold(searchQuery);
         displayItems = displayItems.filter(item => matchesSearch(item, q));
     }
 
@@ -389,7 +418,14 @@ function renderHistory(history, favorites) {
 
     if (displayItems.length === 0) {
         const msg = searchQuery ? t('Eşleşen sonuç bulunamadı') : (activeTab === 'favorites' ? t('Favori öğe yok') : t('Geçmiş boş'));
-        historyItemsContainer.innerHTML = `<div style="padding: 20px; text-align: center; opacity: 0.5; font-size: 13px;">${msg}</div>`;
+        // textContent, not an innerHTML string with an inline style: the message can
+        // contain a search term, and the class carries the styling so the window needs no
+        // 'unsafe-inline' in its CSP.
+        historyItemsContainer.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.className = 'history-empty';
+        empty.textContent = msg;
+        historyItemsContainer.appendChild(empty);
         return;
     }
 

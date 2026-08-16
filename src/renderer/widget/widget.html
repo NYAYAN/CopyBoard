@@ -4,21 +4,35 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CopyBoard Widget</title>
+    <link rel="stylesheet" href="../shared/tokens.css">
     <link rel="stylesheet" href="widget.css">
     <script src="../shared/theme.js"></script>
 </head>
 
 <body>
     <div id="history-panel" class="history-panel">
-        <div class="panel-tabs">
-            <button class="tab-btn active" id="tab-history">Geçmiş</button>
-            <button class="tab-btn" id="tab-favorites">⭐ Favoriler</button>
-        </div>
-        <div class="search-container">
-            <input type="text" id="widget-search" placeholder="Ara..." autocomplete="off">
+        <!-- The main window's filter bar, verbatim: search on the left, a compact
+             segmented control on the right, one row. This panel used to stack the tabs
+             and the search box as two separate full-width rows, which read as a different
+             app to the one behind the same shortcut. The tab labels match too ("Tümü",
+             not "Geçmiş") — they are the same two lists. -->
+        <div class="filterbar">
+            <div class="search">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="7.5" />
+                    <path d="m20.5 20.5-4.2-4.2" />
+                </svg>
+                <input type="text" id="widget-search" placeholder="Ara" autocomplete="off" spellcheck="false"
+                    aria-label="Geçmişte ara">
+            </div>
+            <div class="segmented" role="tablist" aria-label="Liste">
+                <button class="tab-btn active" id="tab-history" role="tab" aria-selected="true">Tümü</button>
+                <button class="tab-btn" id="tab-favorites" role="tab" aria-selected="false">Favoriler</button>
+            </div>
         </div>
         <div id="history-items" class="history-items">
             <!-- Items will be injected -->
@@ -88,7 +102,8 @@
         </div>
     </div>
     <script src="../shared/i18n.js"></script>
-<script src="../shared/render-utils.js"></script>
+    <script src="../shared/render-utils.js"></script>
+    <script src="../shared/content-type.js"></script>
     <script src="widget.js"></script>
 </body>
 

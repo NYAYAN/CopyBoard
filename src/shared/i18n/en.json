@@ -89,5 +89,9 @@
   "Kısayol kaydedilemedi - başka bir uygulama kullanıyor olabilir": "Could not register the shortcut — another app may be using it",
   "Bu tuş bu sürümde kısayol olarak kullanılamıyor ({reason}).": "This key can't be used as a shortcut in this build ({reason}).",
   "Güncellemeler:": "Updates:",
-  "Kontrol Et": "Check Now"
+  "Kontrol Et": "Check Now",
+  "Zaten en güncel sürümü kullanıyorsunuz.": "You are already on the latest version.",
+  "Güncelleme kontrolü başarısız oldu": "Update check failed",
+  "Güncelleme indirildi! Uygulamayı yeniden başlatın.": "Update downloaded — restart the app.",
+  "Bu sürümde güncelleme kontrolü yapılamıyor (paketlenmemiş uygulama).": "Update checks are unavailable in this build (app is not packaged)."
 }

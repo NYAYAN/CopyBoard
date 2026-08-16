@@ -1,5 +1,6 @@
 const { autoUpdater } = require('electron-updater');
 const { state } = require('./state');
+const { t } = require('./i18n');
 const { showToast } = require('./window-manager');
 const { app, BrowserWindow, screen } = require('electron');
 const path = require('path');
@@ -69,13 +70,14 @@ function initAutoUpdater() {
 
     autoUpdater.on('update-available', (info) => {
         console.log('Update available:', info.version);
+        state.manualUpdateCheck = false; // answered by the dialog itself
         createUpdateWindow(info);
     });
 
     autoUpdater.on('update-not-available', (info) => {
         console.log('No updates available');
         if (state.manualUpdateCheck) {
-            showToast('Zaten en güncel sürümü kullanıyorsunuz.', 'info');
+            showToast(t('Zaten en güncel sürümü kullanıyorsunuz.'), 'info');
             state.manualUpdateCheck = false;
         }
     });
@@ -88,7 +90,7 @@ function initAutoUpdater() {
         // }
 
         if (state.manualUpdateCheck) {
-            showToast('Güncelleme kontrolü başarısız oldu', 'error');
+            showToast(t('Güncelleme kontrolü başarısız oldu'), 'error');
             state.manualUpdateCheck = false;
         }
         // Notify window if open
@@ -109,22 +111,41 @@ function initAutoUpdater() {
         if (updateWindow && !updateWindow.isDestroyed()) {
             updateWindow.webContents.send('update-downloaded');
         } else {
-            showToast('Güncelleme indirildi! Uygulamayı yeniden başlatın.', 'success');
+            showToast(t('Güncelleme indirildi! Uygulamayı yeniden başlatın.'), 'success');
         }
     });
 }
 
+// A manual check must ALWAYS answer — "you're up to date", "here's an update", or why
+// not. Saying nothing is indistinguishable from a dead button, and there are two paths
+// that used to say nothing: an unpacked build (electron-updater logs "Skip
+// checkForUpdates…" and hands back nothing, without ever emitting 'error'), and a
+// rejection that isn't followed by the 'error' event.
+//
+// manualUpdateCheck is the token that keeps it to exactly ONE message: whoever reports
+// first clears it, so the 'error' handler and this one can't both fire for one click.
 function checkForUpdates() {
     state.manualUpdateCheck = true;
+
+    const report = (reason, err) => {
+        console.error('Check for updates failed:', err || reason);
+        if (!state.manualUpdateCheck) return;
+        state.manualUpdateCheck = false;
+        showToast(reason, 'error');
+    };
+
     try {
-        // Don't toast here: a failed check also emits autoUpdater 'error', whose handler
-        // shows the single error toast and resets manualUpdateCheck. Toasting here too
-        // would surface the same failure twice for one manual check.
-        autoUpdater.checkForUpdates().catch(err => {
-            console.error('Check for updates failed:', err);
-        });
+        const check = autoUpdater.checkForUpdates();
+        // Not a promise at all: the updater declined to run (dev build, no update config).
+        if (!check || typeof check.then !== 'function') {
+            report(t('Bu sürümde güncelleme kontrolü yapılamıyor (paketlenmemiş uygulama).'));
+            return;
+        }
+        check.then((result) => {
+            if (!result) report(t('Bu sürümde güncelleme kontrolü yapılamıyor (paketlenmemiş uygulama).'));
+        }).catch((err) => report(t('Güncelleme kontrolü başarısız oldu'), err));
     } catch (err) {
-        console.error('Check for updates error:', err);
+        report(t('Güncelleme kontrolü başarısız oldu'), err);
     }
 }
 

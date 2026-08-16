@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 const listEl = document.getElementById('qp-list');
 const closeBtn = document.getElementById('qp-close');
 
@@ -62,7 +63,7 @@ function render(history) {
     if (items.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'qp-empty';
-        empty.textContent = 'Geçmiş boş';
+        empty.textContent = t('Geçmiş boş');
         listEl.appendChild(empty);
         return;
     }

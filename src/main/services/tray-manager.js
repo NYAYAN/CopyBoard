@@ -79,7 +79,7 @@ function initTray() {
         // setContextMenu() makes a LEFT click open the menu on macOS, which swallowed the
         // 'click' handler below (the icon could never just show the window) and put that
         // freezing modal menu on the most common interaction. Left click toggles the
-        // window; the menu — including its own "Göster" — moves to right click.
+        // window; the menu — including its own t("Göster") — moves to right click.
         //
         // popUpContextMenu() does NOT emit the menu's will-show/will-close events, so the
         // suspend/resume pair is driven from here as well; the call itself returns once the

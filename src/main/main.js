@@ -1,4 +1,5 @@
 const { app, dialog, clipboard, screen, powerMonitor } = require('electron');
+const { t } = require('./services/i18n');
 const { state } = require('./services/state');
 const { showMain, createMainWindow, toggleWidget, handleDisplayChange, createQuickPasteWindow } = require('./services/window-manager');
 const { disposePasteHelper } = require('./services/paste-service');
@@ -44,7 +45,7 @@ if (!gotTheLock) {
       initAutoUpdater();
     } catch (svcErr) {
       console.error('Service Initialization Failed:', svcErr);
-      dialog.showErrorBox('Servis Hatası', 'Uygulama servisleri başlatılamadı: ' + svcErr.message);
+      dialog.showErrorBox(t('Servis Hatası'), 'Uygulama servisleri başlatılamadı: ' + svcErr.message);
       app.quit();
     }
 

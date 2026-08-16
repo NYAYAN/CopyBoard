@@ -205,7 +205,7 @@ function registerShortcutHandlers() {
             showToast(
                 nativeHotkey.isNative(shortcut) && !nativeHotkey.isAvailable()
                     ? `Bu tuş bu sürümde kısayol olarak kullanılamıyor (${nativeHotkey.unavailableReason()}).`
-                    : 'Kısayol kaydedilemedi - başka bir uygulama kullanıyor olabilir',
+                    : t('Kısayol kaydedilemedi - başka bir uygulama kullanıyor olabilir'),
                 'error'
             );
             if (prevShortcut) claim(prevShortcut, action);

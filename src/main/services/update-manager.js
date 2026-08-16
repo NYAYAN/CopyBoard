@@ -95,7 +95,7 @@ function initAutoUpdater() {
         }
         // Notify window if open
         if (updateWindow && !updateWindow.isDestroyed()) {
-            updateWindow.webContents.send('update-error', err.message || 'Güncelleme hatası');
+            updateWindow.webContents.send('update-error', err.message || t('Güncelleme hatası'));
         }
     });
 
@@ -173,7 +173,7 @@ function downloadUpdate() {
             downloadPromise.catch(err => {
                 console.error('Download update failed:', err);
                 if (updateWindow && !updateWindow.isDestroyed()) {
-                    updateWindow.webContents.send('update-error', err.message || 'İndirme başlatılamadı');
+                    updateWindow.webContents.send('update-error', err.message || t('İndirme başlatılamadı'));
                 }
             });
         }

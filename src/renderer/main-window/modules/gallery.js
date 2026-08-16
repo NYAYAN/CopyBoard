@@ -1,5 +1,7 @@
 import { elements } from './dom.js';
 
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
+
 // Screenshot gallery panel: a thumbnail grid of past screenshots (fed by the main
 // process's screenshot-library). Every action lives on the grid itself — plain
 // click copies the image (the same gesture as the history rows), the corner
@@ -25,7 +27,7 @@ function fmtTime(iso) {
     }
 }
 
-// Newest screenshot in the grid — the target for the toolbar's "Büyük Görüntüle",
+// Newest screenshot in the grid — the target for the toolbar's t("Büyük Görüntüle"),
 // which has no per-item selection to work from.
 let newestId = null;
 
@@ -41,7 +43,7 @@ export function renderGallery(list) {
     if (shots.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'gallery-empty';
-        empty.textContent = 'Henüz ekran görüntüsü yok. Ekran görüntüsü aracıyla kopyaladığınız veya kaydettiğiniz resimler burada birikir.';
+        empty.textContent = t('Henüz ekran görüntüsü yok. Ekran görüntüsü aracıyla kopyaladığınız veya kaydettiğiniz resimler burada birikir.');
         grid.appendChild(empty);
         return;
     }
@@ -53,7 +55,7 @@ export function renderGallery(list) {
 
         const img = document.createElement('img');
         img.src = shot.thumb;
-        img.alt = 'Ekran görüntüsü';
+        img.alt = t('Ekran görüntüsü');
 
         const time = document.createElement('div');
         time.className = 'gallery-item-time';
@@ -72,10 +74,10 @@ export function renderGallery(list) {
             b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
             actions.appendChild(b);
         };
-        mkBtn('act-zoom', 'Büyük Görüntüle', GALLERY_ICONS.zoom, () => window.api.openScreenshotViewer(shot.id));
-        mkBtn('act-copy', 'Kopyala', SHARED_ICONS.copy, () => window.api.copyScreenshot(shot.id));
-        mkBtn('act-folder', 'Klasörde Göster', GALLERY_ICONS.folder, () => window.api.showScreenshotFile(shot.id));
-        mkBtn('act-del', 'Sil', SHARED_ICONS.trash, () => window.api.deleteScreenshot(shot.id));
+        mkBtn('act-zoom', t('Büyük Görüntüle'), GALLERY_ICONS.zoom, () => window.api.openScreenshotViewer(shot.id));
+        mkBtn('act-copy', t('Kopyala'), SHARED_ICONS.copy, () => window.api.copyScreenshot(shot.id));
+        mkBtn('act-folder', t('Klasörde Göster'), GALLERY_ICONS.folder, () => window.api.showScreenshotFile(shot.id));
+        mkBtn('act-del', t('Sil'), SHARED_ICONS.trash, () => window.api.deleteScreenshot(shot.id));
 
         item.appendChild(img);
         item.appendChild(time);

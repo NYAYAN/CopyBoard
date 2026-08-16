@@ -3,6 +3,8 @@ import { openNoteModal } from './notes.js';
 import { onDragStart, onDragOver, onDrop } from './drag-drop.js';
 import { showTooltipAt, hideTooltip } from './tooltip.js';
 
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
+
 // Cached formatters — constructing Intl.DateTimeFormat per item per render is costly
 const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' });
@@ -69,7 +71,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
     }
 
     if (!items || items.length === 0) {
-        const msg = query ? 'Eşleşen sonuç bulunamadı.' : 'Liste boş.';
+        const msg = query ? t('Eşleşen sonuç bulunamadı.') : t('Liste boş.');
         elements.listElement.innerHTML = `<div class="empty-state">${msg}</div>`;
         return;
     }
@@ -127,7 +129,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
 
         // Note button (favorites only)
         if (activeTab === 'favorites') {
-            const label = item.note ? 'Notu Düzenle' : 'Not Ekle';
+            const label = item.note ? t('Notu Düzenle') : t('Not Ekle');
             const infoBtn = document.createElement('button');
             infoBtn.className = `action-btn info-btn ${item.note ? 'has-note' : ''}`;
             infoBtn.innerHTML = item.note ? ICONS.noteEdit : ICONS.noteAdd;
@@ -144,7 +146,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
             // In Favoriler: always ⭐, clicking removes from favorites
             starBtn.className = 'action-btn star-btn active';
             starBtn.innerHTML = ICONS.starFilled;
-            labelAction(starBtn, 'Favorilerden Çıkar');
+            labelAction(starBtn, t('Favorilerden Çıkar'));
             starBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 window.api.removeFromFavorites(item.id);
@@ -154,7 +156,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
             const isAlreadyFavorited = favoritedContents.has(itemContent);
             starBtn.className = `action-btn star-btn ${isAlreadyFavorited ? 'active' : ''}`;
             starBtn.innerHTML = isAlreadyFavorited ? ICONS.starFilled : ICONS.starOutline;
-            labelAction(starBtn, isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : 'Favorilere Ekle');
+            labelAction(starBtn, isAlreadyFavorited ? 'Favorilere Zaten Eklendi' : t('Favorilere Ekle'));
             starBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (!isAlreadyFavorited) {
@@ -167,7 +169,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'action-btn copy-btn';
         copyBtn.innerHTML = ICONS.copy;
-        labelAction(copyBtn, 'Kopyala');
+        labelAction(copyBtn, t('Kopyala'));
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             copyBtn.innerHTML = ICONS.check;
@@ -178,7 +180,7 @@ export function renderHistory(history, favorites, activeTab, query = '') {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn delete-btn';
         deleteBtn.innerHTML = ICONS.trash;
-        labelAction(deleteBtn, activeTab === 'favorites' ? 'Favorilerden Çıkar' : 'Sil');
+        labelAction(deleteBtn, activeTab === 'favorites' ? t('Favorilerden Çıkar') : t('Sil'));
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (activeTab === 'favorites') {

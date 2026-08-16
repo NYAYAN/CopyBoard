@@ -2,6 +2,7 @@ import { elements } from './dom.js';
 import { showModal, hideModal, resetView } from './modals.js';
 import { renderHistory } from './history-renderer.js';
 import {
+
     openNoteModal,
     closeNoteModal,
     showNoteEditMode,
@@ -9,6 +10,10 @@ import {
     getCurrentNoteItemId
 } from './notes.js';
 import { acceleratorFromEvent } from './accelerator.js';
+
+// Runtime strings go through the shared dictionary; static markup is handled by
+// shared/i18n.js at load. Guarded so the module still parses under Node (tests).
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 
 // State references
 let state = {
@@ -157,7 +162,7 @@ export function setupEventListeners() {
     const syncWidgetGroup = () => {
         const hasSettings = elements.widgetCheck.checked;
         elements.widgetToggle.disabled = !hasSettings;
-        elements.widgetToggle.title = hasSettings ? '' : 'Widget açıkken ayarları burada';
+        elements.widgetToggle.title = hasSettings ? '' : t('Widget açıkken ayarları burada');
         if (!hasSettings) setGroupOpen(elements.widgetToggle, false);
     };
     const collapseSettingsGroups = () => {
@@ -192,7 +197,7 @@ export function setupEventListeners() {
         elements.galleryBtn.classList.toggle('active');
     });
 
-    // Header "Geçmiş" button (replaces the removed manual-add "+"): closes whichever
+    // Header t("Geçmiş") button (replaces the removed manual-add "+"): closes whichever
     // panel is open (gallery/settings/about) and returns to the history list on the
     // Tümü tab — the mirror of the gallery button.
     elements.historyBtn.addEventListener('click', () => {

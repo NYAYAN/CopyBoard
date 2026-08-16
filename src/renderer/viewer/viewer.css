@@ -11,6 +11,11 @@
     --image-edge: none;
     --pos-chip-bg: rgba(137, 87, 229, 0.22);
     --pos-chip-text: #c9aefc;
+    /* Floating chrome that sits OVER the image (nav arrows, crop bar, text box):
+       its own surface, not the panel — it has to read against any screenshot. */
+    --float-bg: rgba(44, 44, 46, 0.82);
+    --float-bg-hover: rgba(85, 85, 92, 0.95);
+    --float-text: #f2f2f7;
 }
 
 :root[data-theme="light"] {
@@ -27,6 +32,9 @@
     --image-edge: 0 0 0 1px rgba(0, 0, 0, 0.18);
     --pos-chip-bg: rgba(122, 69, 222, 0.16);
     --pos-chip-text: #5a2eb0;
+    --float-bg: rgba(252, 252, 253, 0.92);
+    --float-bg-hover: rgba(236, 236, 240, 0.98);
+    --float-text: #1c1c22;
 }
 
 * {
@@ -140,6 +148,9 @@ body {
 .tb-btn.close:hover,
 .tb-btn.danger:hover {
     background: #e5534b;
+    /* On red, always white: inheriting the theme text colour put dark grey on the
+       danger button in light mode. */
+    color: #fff;
 }
 
 .tb-btn.active {
@@ -384,7 +395,7 @@ body {
     display: flex;
     gap: 6px;
     padding: 5px;
-    background: rgba(28, 28, 30, 0.95);
+    background: var(--float-bg);
     border: 1px solid rgba(var(--fg-rgb), 0.12);
     border-radius: 8px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
@@ -395,6 +406,7 @@ body {
 }
 
 .cb-btn {
+    color: var(--float-text);
     border: none;
     border-radius: 6px;
     padding: 5px 10px;
@@ -433,7 +445,7 @@ body {
 .text-wrap textarea {
     min-width: 60px;
     padding: 1px 4px;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--float-bg);
     border: 1px dashed rgba(var(--fg-rgb), 0.65);
     border-radius: 4px;
     outline: none;
@@ -462,8 +474,9 @@ body {
     justify-content: center;
     border: none;
     border-radius: 8px;
-    background: rgba(44, 44, 46, 0.78);
-    color: var(--text);
+    background: var(--float-bg);
+    color: var(--float-text);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.15s ease, background 0.15s ease;
@@ -482,7 +495,7 @@ body:hover .nav-btn:not(:disabled) {
 }
 
 .nav-btn:not(:disabled):hover {
-    background: rgba(85, 85, 92, 0.95);
+    background: var(--float-bg-hover);
 }
 
 .nav-btn:disabled {

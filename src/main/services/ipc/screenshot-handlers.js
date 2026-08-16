@@ -1,4 +1,5 @@
 const { ipcMain, clipboard, nativeImage, shell, Menu, BrowserWindow, screen } = require('electron');
+const { t } = require('../i18n');
 const fs = require('fs');
 const path = require('path');
 const { showToast } = require('../window-manager');
@@ -137,7 +138,7 @@ function copyShot(id) {
     if (!shot) return;
     try {
         const img = nativeImage.createFromPath(shot.file);
-        if (img.isEmpty()) throw new Error('Görüntü okunamadı');
+        if (img.isEmpty()) throw new Error(t('Görüntü okunamadı'));
         clipboard.writeImage(img);
         showToast('Resim Kopyalandı.', 'success');
     } catch (err) {
@@ -222,7 +223,7 @@ function registerScreenshotHandlers() {
             const buffer = Buffer.from(String(dataUrl).split(',')[1], 'base64');
             // Already at the image's native resolution — no display-scale compensation.
             const img = nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 });
-            if (img.isEmpty()) throw new Error('Görüntü oluşturulamadı');
+            if (img.isEmpty()) throw new Error(t('Görüntü oluşturulamadı'));
             clipboard.writeImage(img);
             let newId = null;
             try { newId = addScreenshot(buffer); } catch (galleryErr) { console.error('Gallery save failed:', galleryErr); }
@@ -243,11 +244,11 @@ function registerScreenshotHandlers() {
         if (!getScreenshotById(id)) return;
         const win = BrowserWindow.fromWebContents(e.sender);
         const menu = Menu.buildFromTemplate([
-            { label: 'Büyük Görüntüle', click: () => openViewer(id) },
-            { label: 'Kopyala', click: () => copyShot(id) },
-            { label: 'Klasörde Göster', click: () => revealShot(id) },
+            { label: t('Büyük Görüntüle'), click: () => openViewer(id) },
+            { label: t('Kopyala'), click: () => copyShot(id) },
+            { label: t('Klasörde Göster'), click: () => revealShot(id) },
             { type: 'separator' },
-            { label: 'Sil', click: () => removeShot(id) }
+            { label: t('Sil'), click: () => removeShot(id) }
         ]);
         menu.popup(win ? { window: win } : {});
     });

@@ -4,86 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
-    <style>
-        :root {
-            --fg-rgb: 255, 255, 255;
-            --panel-bg: rgba(28, 28, 32, 0.96);
-            --panel-text: #f2f2f7;
-        }
-
-        :root[data-theme="light"] {
-            --fg-rgb: 0, 0, 0;
-            --panel-bg: rgba(250, 250, 252, 0.97);
-            --panel-text: #1c1c22;
-        }
-
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background: transparent;
-            user-select: none;
-            cursor: none;
-        }
-
-        body.ready {
-            cursor: url('../shared/cursor.svg') 15 15, crosshair;
-        }
-
-        .overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.4);
-            z-index: 10;
-            cursor: url('../shared/cursor.svg') 15 15, crosshair;
-        }
-
-        #screen-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        /* Sade Seçim Kutusu */
-        .selection-box {
-            position: absolute;
-            border: 2px solid #00bfff;
-            /* DeepSkyBlue - Snipper tarzı */
-            background: rgba(0, 191, 255, 0.1);
-            /* Hafif Mavi Dolgu */
-            z-index: 20;
-            display: none;
-            box-shadow: 0 0 0 1px rgba(var(--fg-rgb), 0.3), 0 0 0 9999px rgba(0, 0, 0, 0.4);
-            /* Arka planı karartma efekti için 9999px shadow ekledim */
-            pointer-events: none;
-        }
-
-        .instruction {
-            position: fixed;
-            top: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--panel-bg);
-            color: var(--panel-text);
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-family: sans-serif;
-            font-size: 14px;
-            z-index: 100;
-            pointer-events: none;
-            border: 1px solid #8957e5;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        }
-
-        .hidden {
-            display: none !important;
-        }
-    </style>
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;">
+    <link rel="stylesheet" href="../shared/tokens.css">
+    <link rel="stylesheet" href="ocr.css">
     <script src="../shared/theme.js"></script>
 </head>
 
@@ -96,7 +19,7 @@
 
     <div class="instruction">Metin okumak için alanı seçin...</div>
     <script src="../shared/i18n.js"></script>
-<script src="ocr.js"></script>
+    <script src="ocr.js"></script>
 </body>
 
 </html>

@@ -20,7 +20,7 @@ const state = {
     dpr: window.devicePixelRatio || 1,
     scaleX: null,
     scaleY: null,
-    selectedColor: '#ff0000'
+    selectedColor: '#ff3b30' // matches the first swatch in the palette
 };
 
 // A capture targets a single monitor: when a selection starts on one monitor, the others
@@ -132,7 +132,7 @@ function initDrawCtx() {
 
     drawCtx.lineCap = 'round';
     drawCtx.lineJoin = 'round';
-    drawCtx.strokeStyle = drawCtx.fillStyle = state.selectedColor || '#ff0000';
+    drawCtx.strokeStyle = drawCtx.fillStyle = state.selectedColor || '#ff3b30';
     drawCtx.lineWidth = 3 * scale;
     drawCtx.font = (20 * scale) + "px Arial";
 }
@@ -731,12 +731,20 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// The colour chip on the toggle button mirrors the pen, so the current colour is legible
+// with the palette closed — which is how it sits most of the time.
+const currentColorChip = document.getElementById('current-color');
+function showCurrentColor(hex) {
+    if (currentColorChip) currentColorChip.style.background = hex;
+}
+
 document.querySelectorAll('.color-dot').forEach(d => {
     const selectColor = () => {
         document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
         d.classList.add('active');
         drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
         state.selectedColor = d.dataset.color;
+        showCurrentColor(d.dataset.color);
         // Update selection border color immediately if selection exists
         if (state.selectionRect) {
             const r = state.selectionRect;
@@ -748,6 +756,7 @@ document.querySelectorAll('.color-dot').forEach(d => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectColor(); }
     });
 });
+showCurrentColor(document.querySelector('.color-dot.active').dataset.color);
 
 // Color palette toggle
 const colorToggle = document.getElementById('color-toggle');
@@ -846,3 +855,7 @@ function updateLoupe(cx, cy) {
 window.addEventListener('mousemove', (e) => updateLoupe(e.clientX, e.clientY), { passive: true });
 window.addEventListener('mouseup', () => { if (state.selectionRect) hideLoupe(); });
 
+
+// Toolbar labels are drawn in-page — the native tooltip is invisible behind an
+// always-on-top overlay. See ../shared/overlay-tooltip.js.
+window.CopyBoardOverlayTooltip.init('.toolbar');

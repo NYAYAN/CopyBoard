@@ -5,6 +5,9 @@ body {
     height: 100vh;
     overflow: hidden;
     background: transparent;
+    /* Nothing set a face here, so every string in this window — the instruction banner
+       included — was rendering in the default serif. */
+    font-family: var(--font-ui);
     /* Initially hide cursor to prevent it from being baked into the screen capture */
     cursor: none;
 }
@@ -80,12 +83,12 @@ body.drawing #selection-box {
     position: absolute;
     top: -25px;
     left: 0;
-    background: rgba(137, 87, 229, 0.9);
-    color: white;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-family: 'Inter', sans-serif;
+    background: color-mix(in srgb, var(--accent) 92%, transparent);
+    color: #fff;
+    padding: 2px var(--sp-3);
+    border-radius: var(--r-xs);
+    font-size: var(--fs-xs);
+    font-family: var(--font-ui);
     white-space: nowrap;
     pointer-events: none;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -102,7 +105,7 @@ body.selecting * {
     width: 8px;
     height: 8px;
     background: #fff;
-    border: 1px solid #8957e5;
+    border: 1px solid var(--accent);
     z-index: 30;
 }
 
@@ -167,34 +170,38 @@ body.selecting * {
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
     z-index: 10;
+    padding: var(--sp-4) var(--sp-6);
+    border: 1px solid var(--overlay-border);
+    border-radius: var(--r-full);
+    background: var(--overlay-surface);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: var(--overlay-shadow);
+    color: var(--overlay-text);
+    font-family: var(--font-ui);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-medium);
     pointer-events: none;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-/* Toolbar */
+/* Toolbar. Surface, border, text and edge all come from the shared --overlay-* group, so
+   this bar, the recorder's and the OCR banner stay identical and follow the theme
+   together. The edge is the part the theme can't decide on its own: over a pale
+   screenshot a pale bar has no boundary, which is what --overlay-shadow pays for. */
 .toolbar {
     position: absolute;
+    /* display:none, not flex — snipper.js flips it on once there is a selection. */
     display: none;
-    /* CHANGED FROM FLEX TO NONE */
-    gap: 8px;
-    background: rgba(30, 30, 46, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    padding: 6px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border: 1px solid var(--overlay-border);
+    border-radius: var(--r-lg);
+    background: var(--overlay-surface);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    box-shadow: var(--overlay-shadow);
     z-index: 9999;
     pointer-events: auto;
     -webkit-app-region: no-drag;
@@ -204,13 +211,13 @@ body.selecting * {
 .tool-group,
 .action-group {
     display: flex;
-    gap: 3px;
     align-items: center;
+    gap: var(--sp-1);
 }
 
 .color-group {
     display: flex;
-    gap: 4px;
+    gap: var(--sp-3);
     align-items: center;
     max-width: 0;
     overflow: hidden;
@@ -224,46 +231,52 @@ body.selecting * {
     margin: 0 4px;
 }
 
+/* Same 18px disc the viewer's annotation bar uses, with the same active ring — one
+   capture can be marked up in either window and the palette should not change size. */
 .color-dot {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.25);
     cursor: pointer;
-    border: 2px solid transparent;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
-    /* delineate dark swatches (black/blue) on the dark toolbar */
-    transition: 0.2s;
+    transition: box-shadow var(--dur-fast) var(--ease-standard);
 }
 
-.color-dot:hover {
-    transform: scale(1.2);
-}
+.color-dot[data-color="#ff3b30"] { background: #ff3b30; }
+.color-dot[data-color="#ff9f0a"] { background: #ff9f0a; }
+.color-dot[data-color="#ffd60a"] { background: #ffd60a; }
+.color-dot[data-color="#32d74b"] { background: #32d74b; }
+.color-dot[data-color="#0a84ff"] { background: #0a84ff; }
+.color-dot[data-color="#ffffff"] { background: #ffffff; }
+.color-dot[data-color="#000000"] { background: #000000; }
 
 .color-dot.active {
-    border-color: #fff;
-    box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 0 2px var(--overlay-surface), 0 0 0 3px var(--overlay-text);
 }
 
 .divider {
     width: 1px;
-    background: rgba(255, 255, 255, 0.1);
-    margin: 0 4px;
+    height: 18px;
+    background: var(--overlay-border);
+    margin: 0 var(--sp-2);
 }
 
 button {
-    background: transparent;
-    border: 1px solid transparent;
-    color: #a0a0a0;
-    width: 28px;
-    height: 28px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1.1rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: 0.2s;
+    width: 28px;
+    height: 28px;
     padding: 0;
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--overlay-text-dim);
+    cursor: pointer;
+    /* No scale() on hover. Nothing else in the app grows under the cursor, and on a row
+       of eleven adjacent 28px targets it made the whole bar twitch. */
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
 }
 
 button svg {
@@ -273,56 +286,63 @@ button svg {
 }
 
 .color-toggle-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--overlay-hover);
+}
+
+/* The toggle shows the colour it would reveal, so the current pen colour is readable
+   without opening the group. */
+.current-color {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 
 .color-toggle-btn.active {
-    background: #8957e5;
+    background: var(--accent);
     color: #fff;
 }
 
 button:hover {
-    transform: scale(1.1);
-    background: rgba(255, 255, 255, 0.15);
-    color: #fff;
+    background: var(--overlay-hover);
+    color: var(--overlay-text);
 }
 
+button:active {
+    background: var(--overlay-active);
+}
+
+/* Solid accent for the selected tool — the same state the viewer's drawbar shows. A
+   soft tint would be too faint to read on this dark bar. */
 button.active {
-    background: #8957e5;
+    background: var(--accent);
     color: #fff;
 }
 
 button:focus-visible,
 .color-dot:focus-visible {
-    outline: 2px solid #8957e5;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
-/* Make copy and save buttons more prominent */
+/* Copy and save are the point of the whole bar, so they carry an accent wash. They used
+   to be 32px among 28px neighbours instead — hierarchy by size, which left the row
+   visibly uneven; the rest of the app does emphasis with colour. */
 #btn-copy,
 #btn-save {
-    width: 32px;
-    height: 32px;
-    background: rgba(137, 87, 229, 0.15);
-    border: 1px solid rgba(137, 87, 229, 0.3);
-}
-
-#btn-copy svg,
-#btn-save svg {
-    width: 18px;
-    height: 18px;
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+    color: var(--overlay-text);
 }
 
 #btn-copy:hover,
 #btn-save:hover {
-    background: rgba(137, 87, 229, 0.25);
-    border-color: rgba(137, 87, 229, 0.5);
-    transform: scale(1.15);
+    background: var(--accent);
+    color: #fff;
 }
 
-button.close:hover {
-    color: white;
+#btn-close:hover {
+    background: var(--danger-solid);
+    color: #fff;
 }
 
 .text-input-container {
@@ -330,11 +350,11 @@ button.close:hover {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    background: rgba(30,30,46, 0.4);
+    background: color-mix(in srgb, var(--overlay-surface) 55%, transparent);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    border: 1px dashed rgba(139, 233, 253, 0.5);
-    border-radius: 4px;
+    border: 1px dashed color-mix(in srgb, var(--accent) 75%, transparent);
+    border-radius: var(--r-xs);
     z-index: 100;
     padding: 0;
 }
@@ -346,12 +366,12 @@ button.close:hover {
     cursor: move;
     padding: 2px 10px;
     font-size: 10px;
-    color: #8be9fd;
+    color: var(--overlay-text);
     user-select: none;
-    background: rgba(30,30,46, 0.6);
-    border: 1px dashed rgba(139, 233, 253, 0.5);
+    background: var(--overlay-surface);
+    border: 1px dashed color-mix(in srgb, var(--accent) 75%, transparent);
     border-bottom: none;
-    border-radius: 4px 4px 0 0;
+    border-radius: var(--r-xs) var(--r-xs) 0 0;
     display: inline-block;
 }
 

@@ -1,482 +1,1059 @@
-:root {
-    /* Dark is the default. The light theme below only re-points these tokens, so any
-       rule written against them themes itself — that is why the overlay colours go
-       through --fg-rgb / --bg-rgb instead of literal rgba(255,255,255,…). */
-    --bg-color: #1e1e2e;
-    --bg-rgb: 30, 30, 46;
-    --fg-rgb: 255, 255, 255;
-    --card-bg: rgba(var(--fg-rgb), 0.05);
-    --card-hover: rgba(var(--fg-rgb), 0.1);
-    --text-primary: #e0e0e0;
-    --text-secondary: #a0a0a0;
-    --sunken-bg: rgba(0, 0, 0, 0.2);
-    --popover-bg: rgba(24, 24, 27, 0.98);
-    --accent: #8957e5;
-    --accent-hover: #a27bf6;
-    --danger: #ff5555;
-    --warning: #f1fa8c;
-    --danger-wash: rgba(255, 85, 85, 0.1);
-    --danger-wash-strong: rgba(255, 85, 85, 0.2);
-    --success: #50fa7b;
-    --success-wash: rgba(80, 250, 123, 0.1);
-    --border-radius: 12px;
-    --transition: 0.2s ease;
-}
-
-/* Light theme: same rules, different tokens. Accent, danger and warning keep their
-   hues — they carry meaning, not mood — but not their lightness: a colour picked to
-   glow on a near-black panel disappears on a near-white one. */
-:root[data-theme="light"] {
-    --bg-color: #f4f4f7;
-    --bg-rgb: 244, 244, 247;
-    --fg-rgb: 0, 0, 0;
-    --card-bg: rgba(0, 0, 0, 0.045);
-    --card-hover: rgba(0, 0, 0, 0.085);
-    --text-primary: #1c1c22;
-    --text-secondary: #62626b;
-    --sunken-bg: rgba(0, 0, 0, 0.045);
-    --popover-bg: rgba(252, 252, 253, 0.98);
-    --accent: #7a45de;
-    --accent-hover: #8f61ea;
-    --danger: #b3261e;
-    /* The dark theme's #f1fa8c is a pale pastel: on this background it measured 1.1:1,
-       so a favourited row's star was effectively blank. This amber clears 3:1 both on
-       the row and on the darker wash the button takes under hover. */
-    --warning: #8a6500;
-    --danger-wash: rgba(179, 38, 30, 0.09);
-    --danger-wash-strong: rgba(179, 38, 30, 0.16);
-    --success: #1a9c4b;
-    --success-wash: rgba(26, 156, 75, 0.12);
-}
+/* Main window. Colour, type, spacing, radius and motion all come from
+   ../shared/tokens.css — nothing in here should hard-code a hex value or a px font size.
+   Anything that does is a bug, not a shortcut. */
 
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    font-family: 'Inter', sans-serif;
-    user-select: none;
+}
+
+html,
+body {
+    height: 100%;
 }
 
 body {
-    background-color: var(--bg-color);
+    background: var(--bg-base);
     color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: var(--fs-md);
+    line-height: var(--lh-tight);
     overflow: hidden;
-    height: 100vh;
+    /* A clipboard manager exists to move text somewhere else; selecting text *inside* it
+       is never the point, and a stray drag-select over a row looks like a bug. Content
+       that is genuinely meant to be read and copied opts back in via .selectable. */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-.app-container {
+.selectable {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* The UA rule for [hidden] is display:none at (0,1,0), so ANY class rule here that sets
+   display beats it — .search-clear, .set-row and .danger-zone all did, and stayed on
+   screen while marked hidden. Author-level and !important, so `el.hidden = true` means
+   what it says everywhere in this window. */
+[hidden] {
+    display: none !important;
+}
+
+.app {
     display: flex;
     flex-direction: column;
     height: 100%;
 }
 
-header {
+/* ── Views ─────────────────────────────────────────────────────────────────────
+   Exactly one view is on screen, and data-view on .app names it. Previously each
+   view's visibility was expressed as the *absence* of another view's class, through
+   :has() on the container — so "which view am I in" had no single answer to read. */
+.view {
+    display: none;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+}
+
+.app[data-view="history"] .view-history,
+.app[data-view="gallery"] .view-gallery,
+.app[data-view="settings"] .view-settings {
     display: flex;
-    justify-content: space-between;
+}
+
+/* ── Title bar ─────────────────────────────────────────────────────────────────
+   The whole bar drags the window; every control inside it opts out. */
+.titlebar {
+    flex: 0 0 auto;
+    display: flex;
     align-items: center;
-    padding: 10px 14px;
-    background: rgba(var(--bg-rgb), 0.8);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
-    z-index: 10;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    height: 40px;
+    padding: 0 var(--sp-4) 0 var(--sp-5);
+    background: var(--bg-raised);
+    border-bottom: 1px solid var(--border-subtle);
     -webkit-app-region: drag;
 }
 
-.logo {
+.titlebar-lead {
     display: flex;
     align-items: center;
-    gap: 6px;
-    -webkit-app-region: no-drag;
-    position: relative;
-    z-index: 20;
+    gap: var(--sp-3);
+    min-width: 0;
 }
 
-.logo .icon {
-    font-size: 0.9rem;
+.titlebar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
 }
 
-h1 {
-    font-size: 0.85rem;
-    font-weight: 600;
-    letter-spacing: 0.3px;
+.brand {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+.brand-mark {
+    width: 18px;
+    height: 18px;
+    border-radius: var(--r-xs);
+    /* The icon is decorative next to the wordmark; it must not eat the drag region. */
     pointer-events: none;
 }
 
-
-
-.actions {
-    -webkit-app-region: no-drag;
-    display: flex;
-    gap: 4px;
-    align-items: center;
+.brand-name,
+.view-title {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
-.icon-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    transition: var(--transition);
-    width: 26px;
-    height: 26px;
+/* Sub-views swap the identity for "← <name>", so there is one way back instead of a
+   row of icons where the user has to work out which one is currently lit.
+   Scoped to .titlebar rather than written bare: a bare [data-when] selector ties with
+   .icon-btn/.brand on specificity, and whichever came last in the file would win. */
+.titlebar [data-when="sub"] {
+    display: none;
+}
+
+.app:not([data-view="history"]) .titlebar [data-when="history"] {
+    display: none;
+}
+
+.app:not([data-view="history"]) .titlebar .back-btn[data-when="sub"] {
     display: flex;
-    justify-content: center;
+}
+
+.app:not([data-view="history"]) .titlebar .view-title[data-when="sub"] {
+    display: block;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────────- */
+.icon-btn {
+    display: flex;
     align-items: center;
-    border-radius: 50%;
-    outline: none;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
+}
+
+.icon-btn svg {
+    width: 16px;
+    height: 16px;
 }
 
 .icon-btn:hover {
+    background: var(--surface-hover);
     color: var(--text-primary);
-    background: var(--card-hover);
 }
 
-.icon-btn.active {
-    background: var(--card-hover);
-    /* The lighter accent, not the base one: on the raised background the base accent
-       measured 2.6:1 in dark mode — the selected tab was the one you could see least. */
-    color: var(--accent-hover);
-    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.05);
+.icon-btn:active {
+    background: var(--surface-active);
 }
 
-/* Keyboard focus visibility (WCAG 2.4.7) — shows only on keyboard nav, not mouse click */
-.icon-btn:focus-visible,
-.tab-btn:focus-visible,
-.action-btn:focus-visible,
-.modal-btn:focus-visible,
-.danger-btn:focus-visible,
-.settings-select:focus-visible,
-.shortcut-input:focus-visible,
-input[type="number"]:focus-visible,
-input[type="checkbox"]:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    height: 28px;
+    padding: 0 var(--sp-5);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    background: var(--bg-inset);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+        border-color var(--dur-fast) var(--ease-standard);
+}
+
+.btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.btn:hover {
+    background: var(--surface-active);
+    border-color: var(--border-strong);
+}
+
+.btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-on-accent);
+}
+
+.btn.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.btn.danger {
+    background: var(--danger-soft);
+    border-color: var(--danger-soft-strong);
+    color: var(--danger);
+}
+
+.btn.danger:hover {
+    background: var(--danger-soft-strong);
+}
+
+.btn.danger-solid {
+    background: var(--danger-solid);
+    border-color: var(--danger-solid);
+    color: #fff;
+}
+
+.btn.danger-solid:hover {
+    filter: brightness(1.08);
 }
 
 .icon-btn.spinning svg,
-.settings-action-btn.spinning svg {
+.btn.spinning svg {
     animation: spin 0.8s linear infinite;
 }
 
-/* An action, not a value: sits in a setting row where a select or a switch usually is. */
-.settings-action-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border: 1px solid rgba(var(--fg-rgb), 0.12);
-    border-radius: 6px;
-    background: rgba(var(--fg-rgb), 0.06);
-    color: var(--text-primary);
-    font-family: inherit;
-    font-size: 0.72rem;
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-
-.settings-action-btn:hover {
-    background: rgba(var(--fg-rgb), 0.14);
-}
-
-.settings-action-btn svg {
-    width: 13px;
-    height: 13px;
-}
-
 @keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
     to {
         transform: rotate(360deg);
     }
 }
 
-/* Tabs */
-.tabs-container {
+/* ── Filter bar (search + segmented control) ──────────────────────────────────- */
+.filterbar {
+    flex: 0 0 auto;
     display: flex;
-    background: var(--sunken-bg);
-    padding: 3px;
-    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
 }
 
-.tab-btn {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    padding: 6px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    border-radius: 8px;
-    transition: var(--transition);
-}
-
-.tab-btn:hover {
-    color: var(--text-primary);
-    background: rgba(var(--fg-rgb), 0.05);
-}
-
-.tab-btn.active {
-    color: white;
-    background: var(--accent);
-    font-weight: 500;
-}
-
-/* Search */
-.search-container {
-    padding: 8px 14px;
-    background: rgba(0, 0, 0, 0.1);
-    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
-}
-
-.search-wrapper {
+.search {
     position: relative;
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .search-icon {
     position: absolute;
-    left: 10px;
+    left: 9px;
     width: 14px;
     height: 14px;
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     pointer-events: none;
 }
 
-#search-input {
+.search input {
     width: 100%;
-    background: rgba(var(--fg-rgb), 0.05);
-    border: 1px solid rgba(var(--fg-rgb), 0.1);
-    border-radius: 8px;
-    padding: 8px 10px 8px 32px;
+    height: 30px;
+    padding: 0 26px 0 29px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    background: var(--bg-inset);
     color: var(--text-primary);
-    font-size: 0.8rem;
+    font-family: inherit;
+    font-size: var(--fs-sm);
     outline: none;
-    transition: var(--transition);
+    transition: border-color var(--dur-fast) var(--ease-standard),
+        box-shadow var(--dur-fast) var(--ease-standard),
+        background var(--dur-fast) var(--ease-standard);
 }
 
-#search-input:focus {
-    background: rgba(var(--fg-rgb), 0.08);
+.search input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.search input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(137, 87, 229, 0.2);
+    background: var(--bg-raised);
+    box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
-#search-input::placeholder {
-    color: var(--text-secondary);
-}
-
-/* Settings & About */
-.settings-panel {
-    background: var(--sunken-bg);
-    padding: 10px 16px;
-    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
+.search-clear {
+    position: absolute;
+    right: 5px;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    transition: all 0.3s ease;
-    /* When open, fill the area below the search bar (the history list is hidden while a
-       panel is open — see rule below) and scroll inside if the content is taller than the
-       window. flex + min-height:0 lets the panel shrink under its content so overflow-y
-       can take over instead of the content spilling out. */
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: var(--r-xs);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+}
+
+.search-clear svg {
+    width: 12px;
+    height: 12px;
+}
+
+.search-clear:hover {
+    background: var(--surface-active);
+    color: var(--text-primary);
+}
+
+/* The selected pill is an accent tint, not a block of solid accent. Both themes read it
+   the same way, and it stops the filter from being the loudest thing in the window. */
+.segmented {
+    flex: 0 0 auto;
+    display: flex;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+    background: var(--bg-inset);
+}
+
+.seg {
+    height: 24px;
+    padding: 0 var(--sp-4);
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
+}
+
+.seg:hover {
+    color: var(--text-primary);
+}
+
+.seg.active {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
+    color: var(--accent-text);
+    font-weight: var(--fw-semibold);
+}
+
+/* ── History list ─────────────────────────────────────────────────────────────- */
+.list {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding-bottom: var(--sp-4);
+    outline: none;
 }
 
-/* While a panel (settings or about) is open, show ONLY the panel: hide all the
-   history-view chrome — the tabs, the search bar and the list — so nothing
-   history-related (search box or copied items) peeks through. The tabs/search sit
-   BEFORE the panel in the DOM, so :has() on the container is used instead of a
-   sibling combinator. */
-.app-container:has(.settings-panel:not(.hidden)) .tabs-container,
-.app-container:has(.settings-panel:not(.hidden)) .search-container,
-.app-container:has(.settings-panel:not(.hidden)) .history-list {
+/* Day headings, so a wall of identical "16.08.2026 14:17" stamps can collapse into a
+   heading plus a bare clock time per row. Sticky, because the heading is only useful
+   while you can still see which group you are scrolled into. */
+.list-group {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: var(--sp-5) var(--sp-5) var(--sp-2);
+    background: var(--bg-base);
+    color: var(--text-tertiary);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    height: 34px;
+    margin: 0 var(--sp-3);
+    padding: 0 var(--sp-4);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    position: relative;
+    transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.row:hover {
+    background: var(--surface-hover);
+}
+
+/* Keyboard selection. Deliberately louder than hover: it is the thing Enter will act on,
+   and it has to be findable after the list scrolls under it. */
+.row.selected {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
+.row.copied,
+.row.copied:hover {
+    background: var(--success-soft);
+    box-shadow: inset 0 0 0 1px var(--success);
+}
+
+.row.dragging {
+    opacity: 0.45;
+}
+
+.row.drop-target {
+    box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* Leading slot: what KIND of thing this is. A list where a URL, a password, a hex colour
+   and a paragraph of prose are all rendered as identical grey text makes the user read
+   every row to find the one they want. */
+.row-icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--text-tertiary);
+}
+
+.row-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.row.selected .row-icon {
+    color: var(--accent-text);
+}
+
+/* A colour is the one content type that can show itself. */
+.row-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: var(--r-xs);
+    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.25);
+}
+
+.row-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+}
+
+/* Structured content reads better in mono: a hex colour, a path or a code fragment is
+   scanned character by character, not word by word. */
+.row-text.mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+}
+
+.row-note {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    color: var(--accent-text);
+}
+
+.row-note svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Trailing slot. Fixed width so swapping the timestamp for the action buttons on hover
+   doesn't re-flow the row text — the old markup solved that with an opaque gradient
+   plate that slid over the content instead. */
+.row-trail {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 66px;
+}
+
+.row-time {
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.row-actions {
+    display: none;
+    gap: var(--sp-1);
+}
+
+.row:hover .row-actions,
+.row.selected .row-actions,
+.row:focus-within .row-actions {
+    display: flex;
+}
+
+.row:hover .row-time,
+.row.selected .row-time,
+.row:focus-within .row-time {
     display: none;
 }
 
-.settings-panel.hidden {
-    max-height: 0;
-    padding: 0 16px;
-    border-bottom: none;
-    opacity: 0;
-}
-
-.setting-item {
+.action-btn {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    font-size: 0.75rem;
-}
-
-/* A setting that sits outside every group (the language picker) — ruled off so it reads
-   as its own thing rather than a heading that forgot its chevron. */
-.settings-panel>.setting-item {
-    padding-top: 10px;
-    border-top: 1px solid rgba(var(--fg-rgb), 0.07);
-}
-
-/* About: three read-only lines, right-aligned like every other row's value. */
-.about-row {
-    align-items: flex-start;
-}
-
-.about-info {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: var(--r-xs);
+    background: transparent;
     color: var(--text-secondary);
-    font-size: 0.7rem;
-    text-align: right;
-    user-select: text;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
 }
 
-.about-info span:first-child {
+.action-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.action-btn:hover {
+    background: var(--surface-active);
     color: var(--text-primary);
-    font-weight: 600;
 }
 
-/* Collapsible group inside the settings panel (the shortcut rows). Closed by default,
-   and closed again every time Settings is opened — six rows otherwise bury the handful
-   of settings people actually come here for. */
-.settings-group {
+.action-btn.star.on {
+    color: var(--warning);
+}
+
+.action-btn.note.on {
+    color: var(--accent-text);
+}
+
+.action-btn.delete:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.drag-handle {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 20px;
+    margin-left: calc(var(--sp-4) * -1);
+    color: var(--text-tertiary);
+    opacity: 0;
+    cursor: grab;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.row:hover .drag-handle {
+    opacity: 0.7;
+}
+
+.drag-handle svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* ── Empty states ─────────────────────────────────────────────────────────────- */
+.empty {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: 56px var(--sp-8) var(--sp-8);
+    text-align: center;
+    color: var(--text-tertiary);
 }
 
-/* Header row: the disclosure button, plus whatever control belongs to the group as a
-   whole (the widget's on/off switch) kept reachable without opening it. */
-.group-header-row {
+.empty svg {
+    width: 30px;
+    height: 30px;
+    opacity: 0.45;
+}
+
+.empty-title {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--text-secondary);
+}
+
+.empty-desc {
+    font-size: var(--fs-xs);
+    line-height: var(--lh-normal);
+    max-width: 30ch;
+}
+
+/* ── Status bar ───────────────────────────────────────────────────────────────-
+   Half live count, half the keyboard contract. The shortcuts are new; one nobody can
+   see is one nobody uses. */
+.statusbar {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--sp-4);
+    height: 26px;
+    padding: 0 var(--sp-5);
+    background: var(--bg-raised);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--fs-2xs);
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
 }
 
-.group-header {
+.hints {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-4);
+}
+
+.hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border: 1px solid var(--border-default);
+    border-bottom-width: 2px;
+    border-radius: var(--r-xs);
+    background: var(--bg-inset);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 9px;
+    line-height: 1;
+}
+
+kbd+kbd {
+    margin-left: 1px;
+}
+
+/* ── Settings ─────────────────────────────────────────────────────────────────- */
+.view-settings {
+    overflow-y: auto;
+    padding: var(--sp-4) var(--sp-5) var(--sp-6);
+    gap: var(--sp-3);
+}
+
+.settings-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    margin-bottom: var(--sp-2);
+}
+
+.settings-search input {
+    width: 100%;
+    height: 30px;
+    padding: 0 var(--sp-4) 0 29px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    background: var(--bg-inset);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    outline: none;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+        box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.settings-search input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.settings-search input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.settings-no-match {
+    padding: var(--sp-7) var(--sp-4);
+    text-align: center;
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+}
+
+.card {
+    flex: 0 0 auto;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg);
+    background: var(--bg-raised);
+    /* Deliberately NOT overflow:hidden. Nothing inside needs clipping to the radius (the
+       header and body are transparent), and hiding overflow makes the card a scroll
+       container: scrollIntoView on the colour popover then scrolled the CARD instead of
+       the panel, pushing the card's own heading out of sight, and the popover itself was
+       clipped at the card's edge. */
+}
+
+.card-head-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding-right: var(--sp-5);
+}
+
+.card-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
     flex: 1 1 auto;
-    padding: 4px 0;
+    min-width: 0;
+    padding: var(--sp-5);
     border: none;
     background: none;
-    color: var(--text-secondary, #98989f);
+    color: var(--text-primary);
     font-family: inherit;
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
     text-align: left;
     cursor: pointer;
-    transition: color 0.15s ease;
 }
 
-.group-header:hover:not(:disabled) {
-    color: var(--text-primary);
+.card-head:hover:not(:disabled) .chev {
+    color: var(--text-secondary);
 }
 
-/* Nothing to disclose — the widget's settings only exist while it's switched on. */
-.group-header:disabled {
+/* Nothing to disclose — the widget's settings only exist while it is switched on. */
+.card-head:disabled {
     opacity: 0.45;
     cursor: default;
 }
 
-.group-chevron {
+.chev {
+    flex: 0 0 auto;
     width: 13px;
     height: 13px;
-    flex: 0 0 auto;
-    transition: transform 0.2s ease;
+    color: var(--text-tertiary);
+    transition: transform var(--dur-med) var(--ease-out),
+        color var(--dur-fast) var(--ease-standard);
 }
 
-.group-header[aria-expanded="true"] .group-chevron {
+.card-head[aria-expanded="true"] .chev {
     transform: rotate(90deg);
 }
 
-.group-body {
+.card-body {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding-left: 19px;
-    /* aligns the rows under the header's label, past the chevron */
+    padding: 0 var(--sp-5) var(--sp-2);
 }
 
-.group-body[hidden] {
+.card-body[hidden] {
     display: none;
 }
 
-/* Shortcut row: the binding plus its own on/off switch. A disabled shortcut keeps its
-   value (so turning it back on restores it) but is greyed out and not editable. */
-.shortcut-row {
+/* A setting is a label, an explanation of what it does, and a control. The old rows were
+   "Maksimum Kayıt:" — a colon and a number, with the meaning left to the reader. */
+.set-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: var(--sp-5);
+    padding: var(--sp-4) 0;
+    border-top: 1px solid var(--border-subtle);
 }
 
-.shortcut-row .shortcut-input.disabled {
+.card-body>.set-row:first-child {
+    border-top: none;
+}
+
+.set-label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1 1 auto;
+    cursor: default;
+}
+
+.set-title {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    color: var(--text-primary);
+}
+
+.set-desc {
+    font-size: var(--fs-xs);
+    line-height: var(--lh-normal);
+    color: var(--text-tertiary);
+}
+
+.set-note {
+    padding: var(--sp-4) 0 var(--sp-5);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    line-height: var(--lh-normal);
+    color: var(--text-tertiary);
+}
+
+.shortcut-control {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    flex: 0 0 auto;
+}
+
+/* ── Form controls ────────────────────────────────────────────────────────────- */
+.control {
+    flex: 0 0 auto;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    background: var(--bg-inset);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    outline: none;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+        box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.control:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.select {
+    height: 28px;
+    padding: 0 var(--sp-4);
+    max-width: 150px;
+    cursor: pointer;
+}
+
+.number {
+    width: 68px;
+    height: 28px;
+    padding: 0 var(--sp-3);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.shortcut {
+    width: 118px;
+    height: 28px;
+    padding: 0 var(--sp-3);
+    text-align: center;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+}
+
+/* Keeps its binding when switched off (so turning it back on restores it), but reads
+   as inert and can't be re-recorded. */
+.shortcut.disabled {
     opacity: 0.4;
     pointer-events: none;
 }
 
-/* Inputs */
-input[type="number"],
-.shortcut-input,
-.settings-select {
-    background: rgba(var(--fg-rgb), 0.1);
-    border: 1px solid rgba(var(--fg-rgb), 0.1);
-    color: var(--text-primary);
-    padding: 3px 6px;
-    border-radius: 6px;
-    outline: none;
-    font-size: 0.75rem;
-    text-align: center;
+/* ── Colour picker ────────────────────────────────────────────────────────────
+   In-window, because the OS colour panel steals focus and this window hides on blur.
+   See modules/color-picker.js. */
+.color-row {
+    position: relative;
+    /* the popover anchors to this row */
 }
 
-input[type="number"] {
-    width: 50px;
-}
-
-.shortcut-input,
-.settings-select {
-    width: 130px;
+.color-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 28px;
+    padding: 0;
     cursor: pointer;
 }
 
-.settings-select option {
-    background-color: var(--bg-color);
-    /* Fallback */
-    background-color: var(--bg-color);
-    color: var(--text-primary);
+.color-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: var(--r-xs);
+    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.25);
 }
 
-input[type="checkbox"] {
-    accent-color: var(--accent);
-    width: 16px;
+.color-popover {
+    position: absolute;
+    top: calc(100% - var(--sp-2));
+    right: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    width: 188px;
+    padding: var(--sp-5);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
+    background: var(--bg-overlay);
+    box-shadow: var(--shadow-lg);
+}
+
+.cp-swatches {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: var(--sp-3);
+}
+
+.cp-swatch {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: var(--r-sm);
+    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.2);
+    cursor: pointer;
+    transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.cp-swatch:hover {
+    transform: scale(1.12);
+}
+
+/* A ring in the popover's own background so it reads on any swatch colour. */
+.cp-swatch.active {
+    box-shadow: 0 0 0 2px var(--bg-overlay), 0 0 0 4px var(--accent);
+}
+
+.cp-hue {
+    width: 100%;
     height: 16px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
     cursor: pointer;
 }
 
-/* Settings toggles are rendered as sliding switches. Purely visual: the elements stay
-   real checkboxes, so .checked / change events / labels keep working untouched. The
-   type selector above is more specific than a bare class, hence input[...]. */
-.settings-panel input[type="checkbox"] {
+.cp-hue::-webkit-slider-runnable-track {
+    height: 10px;
+    border-radius: var(--r-full);
+    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.15);
+    background: linear-gradient(to right,
+            hsl(0 62% 58%), hsl(60 62% 58%), hsl(120 62% 58%),
+            hsl(180 62% 58%), hsl(240 62% 58%), hsl(300 62% 58%), hsl(359 62% 58%));
+}
+
+.cp-hue::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -2px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.cp-hex {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    height: 26px;
+    padding: 0 var(--sp-3);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    background: var(--bg-inset);
+}
+
+.cp-hash {
+    color: var(--text-tertiary);
+    font-size: var(--fs-sm);
+}
+
+.cp-hex input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    outline: none;
+}
+
+.range {
+    width: 110px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.range:focus {
+    box-shadow: none;
+}
+
+.range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: var(--r-full);
+    background: var(--surface-active);
+}
+
+.range::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: var(--shadow-sm);
+}
+
+.range:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* Sliding switch. Purely visual — it stays a real checkbox, so .checked, change events
+   and <label for> keep working untouched. */
+.switch {
     appearance: none;
     -webkit-appearance: none;
     position: relative;
-    flex-shrink: 0;
+    flex: 0 0 auto;
     width: 34px;
     height: 20px;
-    border-radius: 999px;
-    background: rgba(var(--fg-rgb), 0.16);
-    border: 1px solid rgba(var(--fg-rgb), 0.12);
-    transition: background var(--transition), border-color var(--transition);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-full);
+    background: var(--surface-active);
+    cursor: pointer;
+    transition: background var(--dur-med) var(--ease-standard),
+        border-color var(--dur-med) var(--ease-standard);
 }
 
-.settings-panel input[type="checkbox"]::after {
+.switch::after {
     content: '';
     position: absolute;
     top: 2px;
@@ -484,576 +1061,389 @@ input[type="checkbox"] {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #f2f2f7;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-    transition: transform var(--transition);
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--dur-med) var(--ease-out);
 }
 
-.settings-panel input[type="checkbox"]:hover {
-    border-color: rgba(var(--fg-rgb), 0.28);
+.switch:hover {
+    border-color: var(--border-strong);
 }
 
-.settings-panel input[type="checkbox"]:checked {
+.switch:checked {
     background: var(--accent);
     border-color: var(--accent);
 }
 
-.settings-panel input[type="checkbox"]:checked::after {
+.switch:checked::after {
     transform: translateX(14px);
 }
 
-.danger-btn {
-    background: var(--danger-wash);
-    color: var(--danger);
-    border: 1px solid var(--danger-wash-strong);
-    padding: 8px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    width: 100%;
-    transition: var(--transition);
+.switch.sm {
+    width: 28px;
+    height: 17px;
 }
 
-.danger-btn:hover {
-    background: var(--danger-wash-strong);
+.switch.sm::after {
+    width: 11px;
+    height: 11px;
 }
 
-.about-content {
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-    line-height: 1.5;
-    padding: 8px 0;
+.switch.sm:checked::after {
+    transform: translateX(11px);
 }
 
-.about-content h3 {
-    color: var(--text-primary);
-    margin-bottom: 6px;
-    font-size: 0.78rem;
-    font-weight: 500;
-}
-
-.about-content strong {
-    color: var(--text-primary);
-    font-weight: 500;
-}
-
-.about-content p {
-    margin-bottom: 2px;
-}
-
-/* Screenshot Gallery */
-.gallery-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-}
-
-.gallery-item {
-    position: relative;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid rgba(var(--fg-rgb), 0.08);
-    cursor: pointer;
-    background: rgba(0, 0, 0, 0.3);
-    transition: border-color var(--transition), transform var(--transition);
-}
-
-.gallery-item:hover {
-    border-color: var(--accent);
-    transform: translateY(-1px);
-}
-
-.gallery-item img {
-    width: 100%;
-    height: 90px;
-    object-fit: cover;
-    display: block;
-}
-
-.gallery-item-time {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    font-size: 0.62rem;
-    color: #fff;
-    padding: 10px 6px 3px;
-    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
-    pointer-events: none;
-}
-
-/* Corner action column on each grid thumbnail: large viewer, copy, folder, delete
-   — the full detail-view action set without leaving the grid. Sized to fit the
-   90px-tall thumbnails (4 × 20px + gaps). */
-.gallery-item-actions {
-    position: absolute;
-    top: 2px;
-    right: 2px;
+/* ── Danger zone ──────────────────────────────────────────────────────────────- */
+.danger-zone {
+    flex: 0 0 auto;
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-5);
+    margin-top: var(--sp-3);
+    padding: var(--sp-5);
+    border: 1px solid var(--danger-soft-strong);
+    border-radius: var(--r-lg);
+    background: var(--danger-soft);
 }
 
-.gallery-item-actions button {
-    width: 20px;
-    height: 20px;
+.danger-zone .set-title {
+    color: var(--danger);
+}
+
+/* ── Screenshot gallery ───────────────────────────────────────────────────────- */
+.gallery-toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-4) var(--sp-5);
+}
+
+.btn-group {
+    display: flex;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+    background: var(--bg-inset);
+}
+
+.btn-group button {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 28px;
+    height: 24px;
     border: none;
-    border-radius: 5px;
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    cursor: pointer;
-    padding: 0;
-    transition: background var(--transition), transform var(--transition);
-}
-
-.gallery-item-actions button:hover {
-    background: var(--accent);
-    transform: scale(1.1);
-}
-
-.gallery-item-actions button.act-del:hover {
-    background: #d32f2f;
-}
-
-.gallery-item-actions button svg {
-    width: 12px;
-    height: 12px;
-}
-
-.gallery-empty {
-    grid-column: 1 / -1;
-    text-align: center;
+    border-radius: var(--r-sm);
+    background: transparent;
     color: var(--text-secondary);
-    font-size: 0.72rem;
-    line-height: 1.5;
-    padding: 24px 8px;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
 }
 
-/* Plain click on a thumbnail copies it — brief green flash as feedback. */
-.gallery-item.copied {
-    border-color: #3fb950;
+.btn-group button svg {
+    width: 14px;
+    height: 14px;
 }
 
-/* Layout switcher above the grid: single-column or two-column. */
-.gallery-toolbar {
-    display: flex;
-    justify-content: space-between; /* actions on the left, layout toggle on the right */
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.gallery-layout-toggle,
-.gallery-actions-group {
-    display: flex;
-    gap: 2px;
-    background: rgba(var(--fg-rgb), 0.06);
-    border-radius: 6px;
-    padding: 2px;
-}
-
-/* Gallery-wide actions (open the folder, view the newest large). Greyed out and inert
-   while the gallery is empty — there'd be nothing to open. */
-.gallery-actions-group button:disabled {
+.btn-group button:disabled {
     opacity: 0.35;
     cursor: default;
 }
 
-.gallery-actions-group button:not(:disabled):hover {
-    background: rgba(var(--fg-rgb), 0.12);
+.btn-group button:not(:disabled):hover {
+    background: var(--surface-hover);
     color: var(--text-primary);
 }
 
-.gallery-layout-toggle button,
-.gallery-actions-group button {
-    width: 26px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 5px;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 0;
-    transition: background var(--transition), color var(--transition);
+.btn-group button.active {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
+    color: var(--accent-text);
 }
 
-.gallery-layout-toggle button.active {
-    background: var(--accent);
-    color: #fff;
+.gallery-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    /* Rows keep their content height and the grid scrolls. Without this the grid has a
+       definite height from the flex column, and because .gallery-item is overflow:hidden
+       (which zeroes a grid item's automatic minimum size) the rows were squeezed to fit —
+       fifteen 20px slivers instead of five 92px thumbnails. */
+    align-content: start;
+    grid-auto-rows: min-content;
+    gap: var(--sp-4);
+    padding: 0 var(--sp-5) var(--sp-6);
+    outline: none;
 }
 
-.gallery-layout-toggle button svg,
-.gallery-actions-group button svg {
-    width: 13px;
-    height: 13px;
-}
-
-/* Single-column view: one large thumbnail per row. */
 .gallery-grid.single {
     grid-template-columns: 1fr;
 }
 
-.gallery-grid.single .gallery-item img {
-    height: 160px;
-}
-
-/* History List */
-.history-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0;
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.history-list.tab-switching {
-    opacity: 0;
-    transform: translateY(8px);
-}
-
-.history-list::-webkit-scrollbar,
-.settings-panel::-webkit-scrollbar {
-    width: 4px;
-}
-
-.history-list::-webkit-scrollbar-thumb,
-.settings-panel::-webkit-scrollbar-thumb {
-    background: rgba(var(--fg-rgb), 0.1);
-    border-radius: 2px;
-}
-
-.history-item {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
-    cursor: pointer;
-    transition: background 0.1s;
-    font-size: 0.8rem;
-    gap: 8px;
+.gallery-item {
     position: relative;
-}
-
-.history-item:hover {
-    background: rgba(var(--fg-rgb), 0.03);
-}
-
-/* Favorites rows carrying a note get a faint accent wash so annotated entries read as
-   such while scanning — the note icon alone sits in the actions column, which only
-   fades in on hover. Declared after :hover, so both states need their own rule. */
-.history-item.has-note {
-    background: rgba(137, 87, 229, 0.09);
-}
-
-.history-item.has-note:hover {
-    background: rgba(137, 87, 229, 0.15);
-}
-
-/* Copy flash wins over the note wash in both states (hence the :hover selector). */
-.history-item.copied,
-.history-item.copied:hover {
-    background: var(--success-wash);
-}
-
-.history-item.dragging {
-    opacity: 0.5;
-    background: rgba(var(--fg-rgb), 0.05);
-}
-
-.drag-handle {
-    cursor: grab;
-    color: rgba(var(--fg-rgb), 0.15);
-    font-size: 1rem;
-    padding: 0 2px;
-}
-
-/* Single-line rows: content text ellipsizes on one line with the timestamp inline at
-   the right. Full content appears in the custom hover tooltip (500ms) instead — far
-   less text in the DOM and no multi-line wrap layout per row. */
-.history-content {
-    flex: 1;
+    border-radius: var(--r-md);
     overflow: hidden;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    padding-right: 0;
+    background: var(--bg-inset);
+    box-shadow: inset 0 0 0 1px var(--border-subtle);
+    cursor: pointer;
+    transition: box-shadow var(--dur-fast) var(--ease-standard),
+        transform var(--dur-fast) var(--ease-standard);
 }
 
-.history-item.favorites-tab .history-content {
-    padding-right: 15px;
+.gallery-item:hover {
+    transform: translateY(-1px);
 }
 
-.history-text {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.35;
+/* Ring rather than border: a 1px border would change the box and shift the image by a
+   pixel every time the ring thickens on selection. */
+.gallery-item:hover,
+.gallery-item.selected {
+    box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-.history-meta {
-    font-size: 0.65rem;
-    color: var(--text-secondary);
-    flex-shrink: 0;
+.gallery-item.copied {
+    box-shadow: inset 0 0 0 2px var(--success);
 }
 
-/* Shared in-page tooltip (see modules/tooltip.js). Replaces native title tooltips, which
-   are drawn in their own OS window at normal level and therefore end up BEHIND this
-   always-on-top window — invisible. Also used for the 500ms row content preview. */
-.app-tooltip {
-    position: fixed;
-    max-width: 300px;
-    max-height: 260px;
-    overflow: hidden;
-    background: var(--popover-bg);
-    border: 1px solid rgba(var(--fg-rgb), 0.16);
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--text-primary);
-    white-space: pre-wrap;
-    word-break: break-word;
-    z-index: 9999;
-    pointer-events: none;
+.gallery-item img {
+    display: block;
+    width: 100%;
+    height: 92px;
+    object-fit: cover;
+}
+
+.gallery-grid.single .gallery-item img {
+    height: 170px;
+}
+
+/* The action buttons used to sit on every thumbnail permanently — four opaque chips
+   covering the right-hand third of every screenshot in the grid, so the grid showed you
+   less of the thing you were trying to identify than it hid. They come out on hover now,
+   over a scrim that keeps white icons legible on a pale screenshot. */
+.gallery-item::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.62), transparent 55%);
     opacity: 0;
-    transition: opacity 0.12s ease;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.app-tooltip.visible {
+.gallery-item:hover::after,
+.gallery-item.selected::after {
     opacity: 1;
 }
 
-.history-actions {
-    display: flex;
-    gap: 3px;
-    opacity: 0;
-    transition: opacity 0.2s;
+.shot-actions {
     position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: linear-gradient(90deg, transparent, var(--bg-color) 20%, var(--bg-color));
-    padding-left: 20px;
+    top: var(--sp-2);
+    right: var(--sp-2);
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    opacity: 0;
     pointer-events: none;
+    transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.history-item:hover .history-actions,
-.history-item:focus-within .history-actions {
+.gallery-item:hover .shot-actions,
+.gallery-item.selected .shot-actions {
     opacity: 1;
     pointer-events: auto;
 }
 
-.action-btn {
-    background: rgba(var(--bg-rgb), 0.9);
-    border: none;
-    cursor: pointer;
-    color: var(--text-secondary);
-    width: 24px;
-    height: 24px;
+.shot-actions button {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 22px;
+    height: 22px;
     padding: 0;
-    border-radius: 4px;
-    transition: var(--transition);
+    border: none;
+    border-radius: var(--r-xs);
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard);
 }
 
-.action-btn svg {
-    width: 15px;
-    height: 15px;
+.shot-actions button svg {
+    width: 13px;
+    height: 13px;
 }
 
-.action-btn:hover {
-    background: rgba(var(--fg-rgb), 0.1);
-    color: var(--text-primary);
+.shot-actions button:hover {
+    background: var(--accent);
 }
 
-.star-btn.active {
-    color: var(--warning);
-    opacity: 1 !important;
+.shot-actions button.act-del:hover {
+    background: var(--danger);
 }
 
-.action-btn.has-note {
-    color: var(--accent);
+/* A chip, not a full-width gradient bar: the timestamp is a label on the picture, not a
+   caption that earns a sixth of its height. */
+.shot-time {
+    position: absolute;
+    left: var(--sp-2);
+    bottom: var(--sp-2);
+    z-index: 1;
+    padding: 2px var(--sp-3);
+    border-radius: var(--r-xs);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #fff;
+    font-size: var(--fs-2xs);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
 }
 
-/* Modals */
+.gallery-empty {
+    grid-column: 1 / -1;
+}
+
+/* ── Modals ───────────────────────────────────────────────────────────────────- */
 .modal-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    inset: 0;
     z-index: 2000;
-    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-6);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: opacity var(--dur-med) var(--ease-standard);
 }
 
 .modal-overlay.hidden {
+    display: flex !important;
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
 }
 
 .modal {
-    background: var(--bg-color);
-    padding: 16px;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 280px;
-    text-align: left;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(var(--fg-rgb), 0.08);
-    position: relative;
+    width: 100%;
+    max-width: 300px;
+    padding: var(--sp-6);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
+    background: var(--bg-overlay);
+    box-shadow: var(--shadow-lg);
 }
 
-/* Copy-the-note icon, parked in the modal's top-right corner on the title's baseline.
-   Absolute rather than in the actions row: it acts on the note being read, not on the
-   modal's open/edit/close flow, and the actions row is already the primary choice. */
-.note-copy-btn {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 26px;
-    height: 26px;
+.modal-head {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: var(--transition);
-}
-
-.note-copy-btn svg {
-    width: 15px;
-    height: 15px;
-}
-
-.note-copy-btn:hover {
-    background: rgba(var(--fg-rgb), 0.1);
-    color: var(--text-primary);
-}
-
-/* Confirmation: the icon swaps to a check and goes green for 800ms, matching the row
-   copy button — the modal stays open, so the button is the only place to say "done". */
-.note-copy-btn.copied {
-    color: var(--success);
+    justify-content: space-between;
+    gap: var(--sp-4);
 }
 
 .modal h3 {
-    font-size: 0.95rem;
-    margin-bottom: 12px;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
     color: var(--text-primary);
-    font-weight: 500;
-    text-align: left;
-    opacity: 0.9;
 }
 
-.modal textarea {
+.modal-text {
+    margin-top: var(--sp-4);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-normal);
+    color: var(--text-secondary);
+    /* The dialog quotes the item being removed, and a clipboard entry is often one
+       unbroken token — an API key, a URL — with nowhere to wrap. */
+    overflow-wrap: anywhere;
+}
+
+/* Confirmation for "note copied": the modal stays open, so the button itself is the
+   only place that can say it worked. */
+.icon-btn.copied {
+    color: var(--success);
+}
+
+.note-view,
+.note-input {
     width: 100%;
-    margin: 8px 0;
-    background: var(--sunken-bg) !important;
-    color: var(--text-primary) !important;
-    border: 1px solid rgba(var(--fg-rgb), 0.08) !important;
-    border-radius: 6px !important;
-    padding: 8px !important;
-    resize: none;
-    font-size: 0.8rem;
-    line-height: 1.4;
-    transition: 0.2s;
-}
-
-.modal textarea:focus {
-    border-color: var(--accent) !important;
-    /* Deepen the sunken wash rather than paint it black: a literal 30% black put
-       near-black note text on a dark grey field in the light theme. */
-    background: rgba(var(--fg-rgb), 0.1) !important;
+    margin: var(--sp-5) 0 0;
+    padding: var(--sp-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-sm);
+    background: var(--bg-inset);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    line-height: var(--lh-normal);
 }
 
 .note-view {
-    width: 100%;
-    margin: 8px 0;
-    color: var(--text-primary);
-    padding: 8px;
-    font-size: 0.85rem;
-    line-height: 1.5;
+    min-height: 72px;
+    max-height: 220px;
+    overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-word;
-    min-height: 60px;
-    max-height: 200px;
-    overflow-y: auto;
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 6px;
-    border: 1px solid transparent;
-    /* Match layout */
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.note-input {
+    resize: none;
+    outline: none;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+        box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.note-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .modal-actions {
     display: flex;
-    gap: 8px;
-    margin-top: 12px;
+    gap: var(--sp-4);
+    margin-top: var(--sp-5);
 }
 
-.modal-btn {
+.modal-actions .btn {
     flex: 1;
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-size: 0.75rem;
-    font-weight: 500;
-    transition: var(--transition);
+    height: 30px;
 }
 
-.modal-btn:not(.danger) {
-    background: rgba(var(--fg-rgb), 0.1);
+/* ── Shared in-page tooltip ───────────────────────────────────────────────────-
+   Native `title` tooltips are drawn by the OS in their own window at the normal window
+   level; this window is always-on-top, so they render BEHIND it and are never seen. */
+.app-tooltip {
+    position: fixed;
+    z-index: 9999;
+    max-width: 300px;
+    max-height: 260px;
+    overflow: hidden;
+    padding: var(--sp-4) var(--sp-5);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    background: var(--bg-overlay);
+    box-shadow: var(--shadow-md);
     color: var(--text-primary);
-}
-
-.modal-btn:not(.danger):hover {
-    background: rgba(var(--fg-rgb), 0.15);
-}
-
-.modal-btn.danger {
-    background: var(--danger);
-    color: white;
-}
-
-.modal-btn.danger:hover {
-    filter: brightness(1.1);
-}
-
-.empty-state {
-    text-align: center;
-    margin-top: 50px;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    opacity: 0.6;
-}
-
-.hidden {
-    display: none !important;
-    opacity: 0;
+    font-size: var(--fs-sm);
+    line-height: var(--lh-normal);
+    white-space: pre-wrap;
+    word-break: break-word;
     pointer-events: none;
-    visibility: hidden;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.app-tooltip.visible {
+    opacity: 1;
 }

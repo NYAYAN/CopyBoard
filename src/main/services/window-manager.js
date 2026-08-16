@@ -386,8 +386,8 @@ function handleWidgetAction(action, data) {
     // Scaled dimensions
     const FULL_W = Math.round(418 * s);
     const COL_H = Math.round(68 * s);
-    // Menu column: 70px offset + 6 × 42px items + 5 × 10px gaps = 372, plus bottom slack.
-    const EXP_H = Math.round(402 * s);
+    // Menu column: 70px offset + 5 × 42px items + 4 × 10px gaps = 320, plus bottom slack.
+    const EXP_H = Math.round(350 * s);
     const HIS_H = Math.round(400 * s);
     const PANEL_W = Math.round(350 * s);
     const BTN_W = Math.round(68 * s);

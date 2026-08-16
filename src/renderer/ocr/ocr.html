@@ -6,6 +6,18 @@
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <style>
+        :root {
+            --fg-rgb: 255, 255, 255;
+            --panel-bg: rgba(28, 28, 32, 0.96);
+            --panel-text: #f2f2f7;
+        }
+
+        :root[data-theme="light"] {
+            --fg-rgb: 0, 0, 0;
+            --panel-bg: rgba(250, 250, 252, 0.97);
+            --panel-text: #1c1c22;
+        }
+
         body {
             margin: 0;
             padding: 0;
@@ -46,7 +58,7 @@
             /* Hafif Mavi Dolgu */
             z-index: 20;
             display: none;
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3), 0 0 0 9999px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 0 1px rgba(var(--fg-rgb), 0.3), 0 0 0 9999px rgba(0, 0, 0, 0.4);
             /* Arka planı karartma efekti için 9999px shadow ekledim */
             pointer-events: none;
         }
@@ -56,8 +68,8 @@
             top: 50px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(30, 30, 46, 0.9);
-            color: #fff;
+            background: var(--panel-bg);
+            color: var(--panel-text);
             padding: 8px 16px;
             border-radius: 8px;
             font-family: sans-serif;

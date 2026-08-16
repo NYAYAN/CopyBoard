@@ -15,6 +15,8 @@
     --accent-hover: #a27bf6;
     --danger: #ff5555;
     --warning: #f1fa8c;
+    --success: #50fa7b;
+    --success-wash: rgba(80, 250, 123, 0.1);
     --border-radius: 12px;
     --transition: 0.2s ease;
 }
@@ -34,6 +36,8 @@
     --accent: #7a45de;
     --accent-hover: #8f61ea;
     --danger: #d93636;
+    --success: #1a9c4b;
+    --success-wash: rgba(26, 156, 75, 0.12);
 }
 
 * {
@@ -153,7 +157,7 @@ input[type="checkbox"]:focus-visible {
     border: 1px solid rgba(var(--fg-rgb), 0.12);
     border-radius: 6px;
     background: rgba(var(--fg-rgb), 0.06);
-    color: var(--text);
+    color: var(--text-primary);
     font-family: inherit;
     font-size: 0.72rem;
     cursor: pointer;
@@ -251,7 +255,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 #search-input::placeholder {
-    color: #8b8b9a;
+    color: var(--text-secondary);
 }
 
 /* Settings & About */
@@ -341,7 +345,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 .group-header:hover:not(:disabled) {
-    color: var(--text, #f2f2f7);
+    color: var(--text-primary);
 }
 
 /* Nothing to disclose — the widget's settings only exist while it's switched on. */
@@ -723,7 +727,7 @@ input[type="checkbox"] {
 /* Copy flash wins over the note wash in both states (hence the :hover selector). */
 .history-item.copied,
 .history-item.copied:hover {
-    background: rgba(80, 250, 123, 0.1);
+    background: var(--success-wash);
 }
 
 .history-item.dragging {
@@ -767,7 +771,7 @@ input[type="checkbox"] {
 
 .history-meta {
     font-size: 0.65rem;
-    color: #9a9aae;
+    color: var(--text-secondary);
     flex-shrink: 0;
 }
 
@@ -785,7 +789,7 @@ input[type="checkbox"] {
     padding: 10px 12px;
     font-size: 12px;
     line-height: 1.5;
-    color: #e6e6ec;
+    color: var(--text-primary);
     white-space: pre-wrap;
     word-break: break-word;
     z-index: 9999;
@@ -921,7 +925,7 @@ input[type="checkbox"] {
 /* Confirmation: the icon swaps to a check and goes green for 800ms, matching the row
    copy button — the modal stays open, so the button is the only place to say "done". */
 .note-copy-btn.copied {
-    color: #50fa7b;
+    color: var(--success);
 }
 
 .modal h3 {

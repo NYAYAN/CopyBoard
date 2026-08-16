@@ -1,40 +1,31 @@
+/* Screenshot viewer. Palette, type, spacing, radius and motion come from
+   ../shared/tokens.css — this window used to carry a fourth private copy of the app's
+   colours, which is how its purple drifted from the main window's.
+ *
+ * What stays local is what genuinely has no app-wide meaning: the letterbox behind a
+ * picture, the outline that keeps a pale screenshot's edge visible, and the surface used
+ * by chrome that floats OVER arbitrary image content. */
 :root {
-    --fg-rgb: 255, 255, 255;
-    --bg: #1c1c1e;
-    --panel: #2c2c2e;
-    --text: #f2f2f7;
-    --text-secondary: #98989f;
-    --accent: #8957e5;
+    --panel: var(--bg-raised);
     /* Letterbox while drawing: a shade away from the panel so the image pops, not a
        hard black — in the light theme that read as the screen suddenly going dark. */
     --stage-dim: #0f0f11;
     --image-edge: none;
-    --pos-chip-bg: rgba(137, 87, 229, 0.22);
-    --pos-chip-text: #c9aefc;
-    /* Floating chrome that sits OVER the image (nav arrows, crop bar, text box):
-       its own surface, not the panel — it has to read against any screenshot. */
-    --float-bg: rgba(44, 44, 46, 0.82);
-    --float-bg-hover: rgba(85, 85, 92, 0.95);
-    --float-text: #f2f2f7;
+    --pos-chip-bg: var(--accent-soft);
+    --pos-chip-text: var(--accent-text);
+    /* Floating chrome that sits OVER the image (nav arrows, crop bar, text box): its own
+       surface, not the panel — it has to read against any screenshot. */
+    --float-bg: color-mix(in srgb, var(--bg-overlay) 86%, transparent);
+    --float-bg-hover: var(--bg-overlay);
+    --float-text: var(--text-primary);
 }
 
 :root[data-theme="light"] {
-    --bg: #e9e9ec;
-    --panel: #f7f7f9;
-    --text: #1c1c1e;
-    --text-secondary: #63636b;
-    --accent: #7a45de;
-    --fg-rgb: 0, 0, 0;
     --stage-dim: #d7d7de;
     /* A pale screenshot on a pale stage has no visible edge — outline it so you can
        always tell where the image ends. Costs nothing on dark, where the near-black
        surround already does the framing. */
     --image-edge: 0 0 0 1px rgba(0, 0, 0, 0.18);
-    --pos-chip-bg: rgba(122, 69, 222, 0.16);
-    --pos-chip-text: #5a2eb0;
-    --float-bg: rgba(252, 252, 253, 0.92);
-    --float-bg-hover: rgba(236, 236, 240, 0.98);
-    --float-text: #1c1c22;
 }
 
 * {
@@ -50,9 +41,9 @@ body {
 }
 
 body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -66,7 +57,7 @@ body {
     justify-content: space-between;
     gap: 10px;
     padding: 0 10px 0 14px;
-    background: var(--panel);
+    background: var(--bg-raised);
     border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
     -webkit-app-region: drag;
 }
@@ -76,7 +67,7 @@ body {
     align-items: center;
     gap: 6px;
     min-width: 0;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
@@ -86,9 +77,9 @@ body {
 .ti-chip {
     flex: 0 0 auto;
     padding: 2px 7px;
-    border-radius: 5px;
+    border-radius: var(--r-xs);
     background: rgba(var(--fg-rgb), 0.08);
-    color: var(--text);
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
 }
 
@@ -132,11 +123,11 @@ body {
     gap: 6px;
     border: none;
     background: rgba(var(--fg-rgb), 0.08);
-    color: var(--text);
-    font-size: 0.72rem;
+    color: var(--text-primary);
+    font-size: var(--fs-xs);
     font-family: inherit;
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     transition: background 0.15s ease;
 }
@@ -147,9 +138,9 @@ body {
 
 .tb-btn.close:hover,
 .tb-btn.danger:hover {
-    /* A shade deeper than the obvious #e5534b: white on that measured 3.7:1, under the
-       4.5:1 that 11px label text needs. */
-    background: #d32f2f;
+    /* The solid danger token, not --danger: white on the text-tuned red measures 3.4:1,
+       under the 4.5:1 that an 11px label needs. */
+    background: var(--danger-solid);
     /* On red, always white: inheriting the theme text colour put dark grey on the
        danger button in light mode. */
     color: #fff;
@@ -162,10 +153,11 @@ body {
     color: #fff;
 }
 
-/* Hover DEEPENS the accent instead of lightening it — the lighter purple dropped white
-   11px labels to 3.7:1. */
+/* Hover DEEPENS the accent rather than lightening it: white 11px labels on a lighter
+   purple drop to 3.7:1. A filter says that once for both themes — the light theme's
+   --accent-hover is already the darker step, the dark theme's is the lighter one. */
 .tb-btn.active:hover {
-    background: #7a45de;
+    filter: brightness(0.9);
 }
 
 .tb-btn svg {
@@ -178,7 +170,7 @@ body {
 .tb-zoom {
     display: flex;
     gap: 1px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     overflow: hidden;
     background: rgba(var(--fg-rgb), 0.08);
 }
@@ -232,7 +224,7 @@ body {
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    background: var(--panel);
+    background: var(--bg-raised);
     border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
 }
 
@@ -259,9 +251,9 @@ body {
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     background: transparent;
-    color: var(--text);
+    color: var(--text-primary);
     cursor: pointer;
     transition: background 0.15s ease;
 }
@@ -318,7 +310,7 @@ body {
 }
 
 .swatch.active {
-    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--text);
+    box-shadow: 0 0 0 2px var(--bg-raised), 0 0 0 3px var(--text-primary);
 }
 
 /* Custom colour: the native picker sits invisibly over a rainbow dot. */
@@ -469,7 +461,7 @@ body {
     padding: 5px;
     background: var(--float-bg);
     border: 1px solid rgba(var(--fg-rgb), 0.12);
-    border-radius: 8px;
+    border-radius: var(--r-md);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
@@ -480,12 +472,12 @@ body {
 .cb-btn {
     color: var(--float-text);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     padding: 5px 10px;
     background: rgba(var(--fg-rgb), 0.1);
-    color: var(--text);
+    color: var(--text-primary);
     font-family: inherit;
-    font-size: 0.72rem;
+    font-size: var(--fs-xs);
     white-space: nowrap;
     cursor: pointer;
     transition: background 0.15s ease;
@@ -501,7 +493,7 @@ body {
 }
 
 .cb-btn.primary:hover {
-    background: #9a6bf0;
+    filter: brightness(0.9);
 }
 
 /* Live text entry: sized/coloured to match what the canvas will render. */
@@ -519,13 +511,13 @@ body {
     padding: 1px 4px;
     background: var(--float-bg);
     border: 1px dashed rgba(var(--fg-rgb), 0.65);
-    border-radius: 4px;
+    border-radius: var(--r-xs);
     outline: none;
     resize: none;
     overflow: hidden;
     white-space: pre;
     line-height: 1.25;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-ui);
     user-select: text;
 }
 
@@ -545,7 +537,7 @@ body {
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--r-md);
     background: var(--float-bg);
     color: var(--float-text);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
@@ -588,7 +580,7 @@ body:hover .nav-btn:not(:disabled) {
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    background: var(--panel);
+    background: var(--bg-raised);
     border-top: 1px solid rgba(var(--fg-rgb), 0.08);
     overflow-x: auto;
     overflow-y: hidden;
@@ -600,18 +592,25 @@ body:hover .nav-btn:not(:disabled) {
 
 .strip::-webkit-scrollbar-thumb {
     background: rgba(var(--fg-rgb), 0.18);
-    border-radius: 3px;
+    border-radius: var(--r-xs);
 }
 
 .strip img {
     flex: 0 0 auto;
     height: 46px;
-    border-radius: 4px;
+    border-radius: var(--r-xs);
     border: 2px solid transparent;
     opacity: 0.55;
     cursor: pointer;
     transition: opacity 0.15s ease, border-color 0.15s ease;
     -webkit-user-drag: none;
+}
+
+/* Locked while the drawing tools are open — the arrows are hidden for the same reason
+   (see syncNav in viewer.js), and a live filmstrip would just be the same trapdoor. */
+.strip.locked {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 .strip img:hover {

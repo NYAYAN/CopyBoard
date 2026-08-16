@@ -1,6 +1,107 @@
-# CopyBoard v2.10.0 - Tema, Dil ve Resim Düzenleme 🌗🌐🖼️
+# CopyBoard v2.10.0 - Baştan Tasarlanmış Arayüz 🎨🌗🌐
 
-Açık tema, İngilizce arayüz, ekran görüntülerini büyük görüntüleyicide düzenleyip kırpma ve artık gerçekten atanabilen kısayollar.
+Uygulamanın tamamı yeniden tasarlandı. Bunun yanında açık tema, İngilizce arayüz, ekran
+görüntülerini büyük görüntüleyicide düzenleme ve artık gerçekten atanabilen kısayollar.
+
+## 🎨 Yeni arayüz
+
+- **Liste ön planda.** Başlık, sekmeler ve arama üç ayrı çubuktu — 550px'lik pencerenin
+  132px'i ilk satırı görmeden gidiyordu. Şimdi 86px: bir başlık çubuğu, altında arama ve
+  yanında kompakt sekme kontrolü. Kalan yer satırlara gitti.
+- **İçerik türü artık görünüyor.** Link, e-posta, dosya, yol, kod ve çok satırlı metin
+  kendi simgesini alıyor; renk kodları gerçek rengiyle çiziliyor; kod ve yol gibi yapılı
+  içerik eşit genişlikli yazıyla diziliyor. Aradığınız satırı okumadan bulabiliyorsunuz.
+- **Tarihler tekrar etmiyor.** Her satırda `16.08.2026 14:17` yazıyordu. Artık satırlar
+  **Bugün / Dün / Bu hafta / Daha eski** başlıkları altında toplanıyor ve yalnızca
+  başlığın söylemediğini yazıyor: bugün için saat, bu hafta için gün adı, öncesi için
+  tarih.
+- **Tema, tipografi ve aralıklar tek yerden.** Dokuz pencere kendi renk setini taşıyordu;
+  aynı mor beş ayrı yerde elle yazılıydı ve dördünde kaymıştı. Hepsi tek bir tasarım
+  dosyasına bağlandı. Kontrastlar göz kararı değil ölçülerek seçildi.
+- **Yazı tipi artık internetten inmiyor.** Ana pencere her açılışta Google Fonts'tan Inter
+  çekiyordu; diğer sekiz pencere zaten sistem yazı tipine düşmüştü. Hepsi sistemin kendi
+  yazı tipini kullanıyor — daha hızlı açılış, tutarlı görünüm.
+
+## ⌨️ Klavye ile kullanım
+
+Pencere yalnızca Esc tuşunu tanıyordu. Artık elleriniz klavyeden kalkmadan çalışıyor:
+
+| Tuş | İş |
+|---|---|
+| `↑` `↓` | Satırlar arasında gez |
+| `Enter` | Kopyala ve pencereyi kapat |
+| `Ctrl/Cmd + Enter` | Kopyala, pencere açık kalsın |
+| `Ctrl/Cmd + ⌫` | Sil |
+| `Ctrl/Cmd + D` | Favorilere ekle / çıkar |
+| `Ctrl/Cmd + 1` `2` | Tümü / Favoriler |
+| `Ctrl/Cmd + F` | Aramaya odaklan |
+| `Esc` | Sırayla: pencereyi kapat → alt görünümden çık → aramayı temizle → gizle |
+
+Pencere açıldığında imleç doğrudan aramada ve ilk satır seçili. Alttaki durum çubuğu
+kısayolları yazıyor — görünmeyen kısayolu kimse kullanmaz.
+
+## 🔎 Türkçe arama
+
+Arama Türkçe karakterlerde çalışmıyordu ve bunlar istisna değil, dilin en sık harfleriydi:
+
+- `İSTANBUL` içindeki kayıt **"istanbul"** aramasıyla bulunamıyordu
+- `IŞIK` → **"isik"** bulamıyordu, `Güneş` → **"gunes"** bulamıyordu
+
+Artık hem yazdığınız hem de kayıtlar aynı şekilde sadeleştiriliyor: **"sarki"** yazınca
+`ŞARKI` geliyor, **"ŞARKI"** yazınca `sarki` geliyor. `ı` tuşu olmayan bir klavyede
+"isik" yazan da `ışık`ı buluyor. Ayarlar araması da aynı şekilde çalışıyor.
+
+## ⚙️ Ayarlar
+
+- Her satır artık bir başlık, **ne işe yaradığını söyleyen bir açıklama** ve sağda
+  kontrolden oluşuyor. "Maksimum Kayıt:" gibi iki nokta üst üstelü form etiketleri gitti.
+- Bölümler **açık/kapalı durumunu hatırlıyor**. Widget'ın opaklığını ayarlamak için her
+  seferinde aynı grubu açmıyorsunuz.
+- Üstte **ayar araması** var: "opak" yazınca yalnızca Opaklık satırı kalıyor, bölümü de
+  kendiliğinden açılıyor.
+- İlk açılışta tüm bölümler kapalı — panel tek ekranda okunabilir bir başlık listesi
+  olarak açılıyor.
+- **Widget rengi seçici artık çalışıyor.** İşletim sisteminin renk paneli açıldığında
+  odak ona geçtiği için pencere kendini gizliyordu; seçici ortada kalıyordu. Yerine
+  uygulama içinde bir seçici geldi: 12 hazır renk, ton kaydırıcısı ve hex alanı.
+
+## 🖼️ Galeri
+
+- Her küçük resmin üzerinde duran 4 düğme **fareyle üzerine gelince** çıkıyor. Önceden
+  tanımaya çalıştığınız resmin üçte birini kapatıyorlardı.
+- Zaman damgası tam genişlikte bir bant değil, köşede küçük bir rozet.
+- Izgarada da klavye çalışıyor: oklar, `Enter` kopyala, `O` büyük görüntüle,
+  `Ctrl/Cmd + ⌫` sil.
+
+## 🧰 Yakalama araçları
+
+- **Araç çubuğu ipuçları ilk kez görünüyor.** Ekran alıntısı ve video kayıt araçlarındaki
+  düğmelerin etiketleri, bu pencereler her şeyin üstünde durduğu için işletim sistemi
+  tarafından hep arkalarında çiziliyordu — snipper'da 11, kayıtta 7 düğme etiketsizdi.
+- **Üç yakalama yüzeyi tek araç çubuğu** oldu. Üç ayrı koyu ton, iki ayrı düğme boyutu ve
+  imleçle büyüyen düğmeler vardı; hepsi tek ölçüye indi.
+- Araç çubukları **temayı takip ediyor**. Açık temada açık, koyu temada koyu — açık temada
+  kenarı kaybolmasın diye ince bir çerçeve ve daha belirgin gölge alıyorlar.
+- Ekran alıntısındaki renk paleti görüntüleyicidekiyle **aynı yedi renk**; renk düğmesi
+  seçili rengi gösteriyor.
+
+## 🛟 Kaybolan veriye karşı
+
+- **Favoriden klavyeyle çıkarma artık onay soruyor.** Favori bir kayıt notunu ve elle
+  verdiğiniz sırayı taşıyor; aynı metni sonradan yeniden yıldızlamak ikisini de geri
+  getirmiyor. Onay kutusu kaydı adıyla söylüyor, notu varsa onun da gideceğini yazıyor.
+- **Ekran görüntüsünü klavyeyle silmek** de onay soruyor — o bir dosya.
+- **Çizim yaptıktan sonra kopyalama** düzeldi. Çizim yeni bir kayda gömülüyordu ama
+  orijinalin üzerinde de bekliyordu; kopyayı silip orijinale dönünce çizim geri geliyor,
+  yanlış resim silinmiş gibi görünüyordu.
+- **Çizim modunda oklar** artık resim değiştirmiyor. Elinizde kalemken ok tuşu "beni başka
+  bir resme götür" demek değil; ekrandaki ‹ › düğmeleri ve film şeridi de kilitli.
+
+## ⚡ Hız ve güvenlik
+
+- Sekme geçişindeki **150ms yapay gecikme** kaldırıldı.
+- Arama artık her tuş vuruşunda 500 satırı baştan çizmiyor.
+- Hiçbir pencerede `unsafe-inline` içerik güvenliği politikası kalmadı.
 
 ## 🖼️ Ekran görüntülerini görüntüleyicide düzenleyin
 - **Büyük Görüntüle** ekranında artık **Çiz** var: kalem, kare, yuvarlak, ok, metin ve bulanıklaştırma. Snipper'daki araçların aynısı.

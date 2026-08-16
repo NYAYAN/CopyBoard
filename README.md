@@ -1,8 +1,8 @@
-# CopyBoard v2.9.5
+# CopyBoard v2.10.0
 
 > **Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR (Resimden Yazıya Çevirme) Uygulaması**
 
-![Version](https://img.shields.io/badge/version-2.9.5-blue)
+![Version](https://img.shields.io/badge/version-2.10.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-ISC-green)
 

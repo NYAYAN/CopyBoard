@@ -25,12 +25,8 @@ import { keycapFor, applyLayoutMap } from './modules/accelerator.js';
     elements.widgetOpacityInput.value = settings.widgetOpacity !== undefined ? settings.widgetOpacity : 100;
     elements.widgetScaleInput.value = settings.widgetScale !== undefined ? settings.widgetScale : 100;
 
-    // Toggle extra settings visibility on load
-    if (settings.showWidget) {
-        elements.widgetExtraSettings.style.display = 'flex';
-    } else {
-        elements.widgetExtraSettings.style.display = 'none';
-    }
+    // The widget's settings start folded away (setupEventListeners wires the disclosure
+    // and syncs it to the checkbox above).
 
     // Formatting Helpers for Shortcuts
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;

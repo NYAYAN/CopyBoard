@@ -501,8 +501,23 @@ function setDrawMode(on) {
     drawbar.hidden = !on;
     drawFrame.hidden = !on;
     stage.classList.toggle('drawing', on);
+    syncNav(); // leaving the picture is off while there is a pen in hand
     updateZoomable(); // the drawbar took a strip of the stage's height
     layoutCanvas();
+}
+
+// Where this shot sits in the gallery, kept so the nav state can be recomputed when
+// drawing is toggled and not only when a new image arrives.
+let navPos = { pos: 0, total: 0 };
+
+// Every way OUT of the current picture, in one place: the ‹ › buttons, the filmstrip and
+// (in the keydown handler) the arrow keys. All of them are off while the drawing tools are
+// open — mid-annotation, a click on an arrow is never a request to abandon the drawing and
+// go somewhere else. Esc or the Çiz button closes the tools and puts navigation back.
+function syncNav() {
+    prevBtn.disabled = drawMode || !(navPos.pos > 1);
+    nextBtn.disabled = drawMode || !(navPos.pos && navPos.total && navPos.pos < navPos.total);
+    strip.classList.toggle('locked', drawMode);
 }
 
 drawBtn.addEventListener('click', () => setDrawMode(!drawMode));
@@ -572,6 +587,17 @@ function copyCurrent() {
     octx.drawImage(img, x, y, w, h, 0, 0, w, h);
     octx.drawImage(base, x, y, w, h, 0, 0, w, h);
     window.api.viewerCopyAnnotated(out.toDataURL('image/png'));
+
+    // The marks have just been BAKED into a new gallery entry, so they stop being a
+    // pending edit on this one. Leaving them here meant the same drawing existed twice —
+    // flattened into the copy, and still floating on the original — and the second one
+    // came back the moment the viewer landed on the original again. That is what made
+    // deleting look like it had removed the wrong picture: you deleted the copy, the
+    // viewer moved to the neighbour (the original), and your drawing reappeared on it.
+    shapesById.delete(shotId);
+    shapes = [];
+    repaint();
+
     // The edit is done and filed: main will swap the viewer to the new copy, so drop the
     // tools (and the selection with them) rather than hanging them over a fresh image.
     setDrawMode(false);
@@ -580,6 +606,11 @@ function copyCurrent() {
 // ── Main-process traffic ─────────────────────────────────────────────────────
 
 window.api.onViewerList((list) => {
+    // Forget the drawings of shots that no longer exist, so the map cannot outlive the
+    // gallery and resurrect marks onto something that replaced them.
+    const live = new Set((list || []).map(s => s.id));
+    for (const id of [...shapesById.keys()]) if (!live.has(id)) shapesById.delete(id);
+
     const key = (list || []).map(s => s.id).join(',');
     if (key === stripKey) { markActiveThumb(); return; } // same set — keep DOM, avoid flicker
     stripKey = key;
@@ -611,8 +642,8 @@ window.api.onViewerImage((data) => {
 
     renderTitle(data);
 
-    prevBtn.disabled = !(data.pos > 1);
-    nextBtn.disabled = !(data.pos && data.total && data.pos < data.total);
+    navPos = { pos: data.pos, total: data.total };
+    syncNav();
     markActiveThumb();
 });
 
@@ -692,6 +723,8 @@ document.addEventListener('keydown', (e) => {
         else if (drawMode) setDrawMode(false);
         else window.api.viewerClose();
     }
-    else if (e.key === 'ArrowLeft') window.api.viewerNav('prev');
-    else if (e.key === 'ArrowRight') window.api.viewerNav('next');
+    // ←/→ page through the gallery — but not while the drawing tools are open. See
+    // syncNav(): the ‹ › buttons and the filmstrip are locked for the same reason.
+    else if (e.key === 'ArrowLeft' && !drawMode) window.api.viewerNav('prev');
+    else if (e.key === 'ArrowRight' && !drawMode) window.api.viewerNav('next');
 });

@@ -8,6 +8,7 @@ export const elements = {
     aboutPanel: document.getElementById('about-panel'),
     shortcutsToggle: document.getElementById('shortcuts-toggle'),
     shortcutsBody: document.getElementById('shortcuts-body'),
+    widgetToggle: document.getElementById('widget-toggle'),
 
     // Screenshot gallery
     galleryBtn: document.getElementById('gallery-btn'),

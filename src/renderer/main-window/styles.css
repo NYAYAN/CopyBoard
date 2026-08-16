@@ -257,11 +257,20 @@ input[type="checkbox"]:focus-visible {
     gap: 8px;
 }
 
+/* Header row: the disclosure button, plus whatever control belongs to the group as a
+   whole (the widget's on/off switch) kept reachable without opening it. */
+.group-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 .group-header {
     display: flex;
     align-items: center;
     gap: 6px;
-    width: 100%;
+    flex: 1 1 auto;
     padding: 4px 0;
     border: none;
     background: none;
@@ -274,8 +283,14 @@ input[type="checkbox"]:focus-visible {
     transition: color 0.15s ease;
 }
 
-.group-header:hover {
+.group-header:hover:not(:disabled) {
     color: var(--text, #f2f2f7);
+}
+
+/* Nothing to disclose — the widget's settings only exist while it's switched on. */
+.group-header:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 
 .group-chevron {

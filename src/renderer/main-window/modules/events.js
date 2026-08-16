@@ -138,8 +138,8 @@ export function setupEventListeners() {
         elements.galleryBtn.classList.remove('active');
     };
 
-    // The shortcut group is a disclosure, not a remembered preference: every visit to
-    // Settings starts with it closed, so the panel opens on the settings people came for.
+    // The setting groups are disclosures, not remembered preferences: every visit to
+    // Settings starts them closed, so the panel opens on the settings people came for.
     const setShortcutsOpen = (open) => {
         elements.shortcutsBody.hidden = !open;
         elements.shortcutsToggle.setAttribute('aria-expanded', String(open));
@@ -148,6 +148,22 @@ export function setupEventListeners() {
         setShortcutsOpen(elements.shortcutsBody.hidden);
     });
 
+    // The widget group has nothing inside while the widget is off, so the disclosure is
+    // disabled there rather than opening onto an empty box. Switching the widget on
+    // expands it right away — that's what checking the box used to do.
+    const setWidgetOpen = (open) => {
+        const hasSettings = elements.widgetCheck.checked;
+        const show = open && hasSettings;
+        elements.widgetExtraSettings.hidden = !show;
+        elements.widgetToggle.disabled = !hasSettings;
+        elements.widgetToggle.setAttribute('aria-expanded', String(show));
+        elements.widgetToggle.title = hasSettings ? '' : 'Widget açıkken ayarları burada';
+    };
+    elements.widgetToggle.addEventListener('click', () => {
+        setWidgetOpen(elements.widgetExtraSettings.hidden);
+    });
+    setWidgetOpen(false);
+
     elements.settingsBtn.addEventListener('click', () => {
         elements.aboutPanel.classList.add('hidden');
         elements.aboutBtn.classList.remove('active');
@@ -155,6 +171,7 @@ export function setupEventListeners() {
         elements.settingsPanel.classList.toggle('hidden');
         elements.settingsBtn.classList.toggle('active');
         setShortcutsOpen(false);
+        setWidgetOpen(false);
     });
 
     elements.aboutBtn.addEventListener('click', () => {
@@ -201,7 +218,7 @@ export function setupEventListeners() {
     elements.incognitoCheck.addEventListener('change', (e) => window.api.setClipboardPaused(e.target.checked));
     elements.widgetCheck.addEventListener('change', (e) => {
         window.api.setShowWidget(e.target.checked);
-        elements.widgetExtraSettings.style.display = e.target.checked ? 'flex' : 'none';
+        setWidgetOpen(e.target.checked); // on reveals its settings, off folds them away
     });
     elements.widgetTransparentCheck.addEventListener('change', (e) => window.api.setWidgetTransparent(e.target.checked));
     elements.widgetColorInput.addEventListener('input', (e) => window.api.setWidgetColor(e.target.value));

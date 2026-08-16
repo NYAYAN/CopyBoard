@@ -153,14 +153,16 @@
             <!-- Six shortcut rows would otherwise dominate the panel, so they live in a
                  group that starts collapsed every time Settings opens. -->
             <div class="settings-group">
-                <button type="button" id="shortcuts-toggle" class="group-header" aria-expanded="false"
-                    aria-controls="shortcuts-body">
-                    <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 18l6-6-6-6" />
-                    </svg>
-                    <span>Kısayollar</span>
-                </button>
+                <div class="group-header-row">
+                    <button type="button" id="shortcuts-toggle" class="group-header" aria-expanded="false"
+                        aria-controls="shortcuts-body">
+                        <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Kısayollar</span>
+                    </button>
+                </div>
                 <div id="shortcuts-body" class="group-body" hidden>
                     <div class="setting-item">
                         <label for="shortcut-input">Liste Kısayolu:</label>
@@ -231,28 +233,39 @@
                 <label for="autostart-check">Başlangıçta Çalıştır:</label>
                 <input type="checkbox" id="autostart-check">
             </div>
-            <div class="setting-item">
-                <label for="widget-check">Yüzen Araç (Widget):</label>
-                <input type="checkbox" id="widget-check">
-            </div>
-            <div id="widget-extra-settings"
-                style="display: none; padding-left: 20px; flex-direction: column; gap: 8px;">
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-transparent-check">Widget Saydamlığı:</label>
-                    <input type="checkbox" id="widget-transparent-check">
+            <!-- Same disclosure as Kısayollar, except the on/off switch stays on the header
+                 row: turning the widget on shouldn't require opening the group first. -->
+            <div class="settings-group">
+                <div class="group-header-row">
+                    <button type="button" id="widget-toggle" class="group-header" aria-expanded="false"
+                        aria-controls="widget-extra-settings">
+                        <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Yüzen Araç (Widget)</span>
+                    </button>
+                    <input type="checkbox" id="widget-check" title="Yüzen aracı aç/kapa">
                 </div>
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-color-input">Widget Rengi:</label>
-                    <input type="color" id="widget-color-input" value="#8957e5">
-                </div>
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-opacity-input">Opaklık:</label>
-                    <input type="range" id="widget-opacity-input" min="10" max="100" value="100" style="width: 100px;">
-                </div>
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-scale-input">Widget Boyutu:</label>
-                    <input type="range" id="widget-scale-input" min="50" max="150" value="100" style="width: 100px;"
-                        title="%50 ile %150 arası">
+                <div id="widget-extra-settings" class="group-body" hidden>
+                    <div class="setting-item">
+                        <label for="widget-transparent-check">Widget Saydamlığı:</label>
+                        <input type="checkbox" id="widget-transparent-check">
+                    </div>
+                    <div class="setting-item">
+                        <label for="widget-color-input">Widget Rengi:</label>
+                        <input type="color" id="widget-color-input" value="#8957e5">
+                    </div>
+                    <div class="setting-item">
+                        <label for="widget-opacity-input">Opaklık:</label>
+                        <input type="range" id="widget-opacity-input" min="10" max="100" value="100"
+                            style="width: 100px;">
+                    </div>
+                    <div class="setting-item">
+                        <label for="widget-scale-input">Widget Boyutu:</label>
+                        <input type="range" id="widget-scale-input" min="50" max="150" value="100"
+                            style="width: 100px;" title="%50 ile %150 arası">
+                    </div>
                 </div>
             </div>
             <button id="clear-history-btn" class="danger-btn">Geçmişi Temizle</button>

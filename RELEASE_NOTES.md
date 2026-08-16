@@ -134,12 +134,10 @@ Artık hem yazdığınız hem de kayıtlar aynı şekilde sadeleştiriliyor: **"
 - macOS'ta **Esc'in altındaki tuş** (Türkçe-Q'da `"`) dahil, daha önce atanamayan tuşlar artık atanabiliyor.
 - Bu tuşlar için gereken yerel bileşen isteğe bağlıdır: yoksa uygulama normal çalışır, yalnız o tuş kullanılamaz olarak görünür.
 
-## ⚙️ Yeniden düzenlenmiş Ayarlar
-- Her şey beş katlanır başlık altında: **Kayıt Ayarları · Video Ayarları · Yüzen Araç · Kısayollar · Diğer Ayarlar**.
-- Ayarlar artık kaç ayarınız olursa olsun **tek ekrana** sığıyor; aradığınızı açarsınız.
-- Yüzen Araç'ın aç/kapa anahtarı başlık satırında kaldı — açmak için grubu açmanız gerekmiyor.
-- **Güncellemeleri Kontrol Et** ve **Hakkında** buraya taşındı; üstteki ikon sırası altıdan dörde indi.
+## ⚙️ Ayarlar'a taşınanlar
+- **Güncellemeleri Kontrol Et** ve **Hakkında** üstteki ikon sırasından Ayarlar'a taşındı.
 - Güncelleme kontrolü artık **her zaman cevap veriyor**: güncelleme yoksa da bunu söylüyor, sessiz kalmıyor.
+- Yüzen Araç'ın aç/kapa anahtarı bölüm başlığında — açmak için grubu açmanız gerekmiyor.
 
 ## 🧰 Yüzen araç (widget)
 - Düğmelerin **ipuçları artık görünüyor** — önceden widget'ın arkasında kalıyorlardı.
@@ -148,7 +146,6 @@ Artık hem yazdığınız hem de kayıtlar aynı şekilde sadeleştiriliyor: **"
 ## 🎨 Görünüm düzeltmeleri
 - Açık temada okunmayan renkler tek tek ölçülerek düzeltildi: favori yıldızı, widget menü ikonları, satır düğmeleri, odaklanan arama ve not alanları, güncelleme kutusu ve hızlı yapıştır kapatma düğmesi.
 - Koyu temada seçili sekmenin ikonu artık belirgin.
-- Geçmiş sekmesindeyken üstteki geçmiş düğmesi de seçili görünüyor.
 - Görüntüleyicide Çiz'e basınca resmin arka planının siyaha dönmesi düzeltildi; soluk ekran görüntülerinin kenarı artık belli.
 
 ## 🐞 Diğer düzeltmeler

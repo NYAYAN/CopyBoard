@@ -217,6 +217,9 @@ export function setupEventListeners() {
     // Inputs
     // Main reloads every window (and rebuilds the tray) — each surface paints its own
     // strings at load, so there's no live re-render path to keep correct.
+    // No reload for this one: the stylesheets are token-driven, so main just tells every
+    // window to flip data-theme (see shared/theme.js) — instant, and safe mid-capture.
+    elements.themeSelect.addEventListener('change', (e) => window.api.setTheme(e.target.value));
     elements.languageSelect.addEventListener('change', (e) => window.api.setLanguage(e.target.value));
     elements.autostartCheck.addEventListener('change', (e) => window.api.setAutoStart(e.target.checked));
     elements.incognitoCheck.addEventListener('change', (e) => window.api.setClipboardPaused(e.target.checked));

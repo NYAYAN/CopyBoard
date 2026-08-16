@@ -67,6 +67,7 @@ export const elements = {
 
     // Other
     tabBtns: document.querySelectorAll('.tab-btn'),
+    themeSelect: document.getElementById('theme-select'),
     languageSelect: document.getElementById('language-select'),
     autostartCheck: document.getElementById('autostart-check'),
     incognitoCheck: document.getElementById('incognito-check'),

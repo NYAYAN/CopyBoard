@@ -93,5 +93,8 @@
   "Zaten en güncel sürümü kullanıyorsunuz.": "You are already on the latest version.",
   "Güncelleme kontrolü başarısız oldu": "Update check failed",
   "Güncelleme indirildi! Uygulamayı yeniden başlatın.": "Update downloaded — restart the app.",
-  "Bu sürümde güncelleme kontrolü yapılamıyor (paketlenmemiş uygulama).": "Update checks are unavailable in this build (app is not packaged)."
+  "Bu sürümde güncelleme kontrolü yapılamıyor (paketlenmemiş uygulama).": "Update checks are unavailable in this build (app is not packaged).",
+  "Tema:": "Theme:",
+  "Koyu": "Dark",
+  "Açık": "Light"
 }

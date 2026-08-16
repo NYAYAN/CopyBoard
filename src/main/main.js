@@ -5,6 +5,7 @@ const { disposePasteHelper } = require('./services/paste-service');
 const { initTray } = require('./services/tray-manager');
 const { registerIpcHandlers } = require('./services/ipc-handlers');
 const { registerI18nHandlers } = require('./services/i18n');
+const { registerThemeHandlers } = require('./services/theme');
 const { initAutoUpdater, checkForUpdatesSilently } = require('./services/update-manager');
 const { startClipboardWatcher, flushHistorySave } = require('./services/history-manager');
 
@@ -36,6 +37,7 @@ if (!gotTheLock) {
       // First: every preload asks for the dictionary SYNCHRONOUSLY as its window loads,
       // and the tray builds translated labels — both happen below.
       registerI18nHandlers();
+      registerThemeHandlers();
       initTray();
       createMainWindow();
       registerIpcHandlers();

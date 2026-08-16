@@ -12,6 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"
         media="print" onload="this.media='all'">
     <link rel="stylesheet" href="styles.css">
+    <script src="../shared/theme.js"></script>
 </head>
 
 <body>
@@ -309,6 +310,13 @@
             <!-- Outside the groups on purpose: the language picker is the one setting
                  someone may need BEFORE they can read the group headings, and the update
                  check is a plain action rather than something to configure. -->
+            <div class="setting-item">
+                <label for="theme-select">Tema:</label>
+                <select id="theme-select" class="settings-select">
+                    <option value="dark">Koyu</option>
+                    <option value="light">Açık</option>
+                </select>
+            </div>
             <div class="setting-item">
                 <label for="language-select">Dil:</label>
                 <select id="language-select" class="settings-select">

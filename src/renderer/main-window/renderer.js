@@ -17,6 +17,7 @@ import { keycapFor, applyLayoutMap } from './modules/accelerator.js';
     elements.maxItemsInput.value = settings.maxItems;
     elements.quickPasteCountInput.value = settings.quickPasteCount;
     if (settings.appVersion && elements.aboutVersion) elements.aboutVersion.textContent = `CopyBoard v${settings.appVersion}`;
+    elements.themeSelect.value = window.api.theme || 'dark';
     elements.languageSelect.value = (window.api.i18n && window.api.i18n.lang) || 'tr';
     elements.autostartCheck.checked = settings.autoStart;
     elements.incognitoCheck.checked = settings.clipboardPaused || false;

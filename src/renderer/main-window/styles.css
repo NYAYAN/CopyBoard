@@ -1,15 +1,39 @@
 :root {
+    /* Dark is the default. The light theme below only re-points these tokens, so any
+       rule written against them themes itself — that is why the overlay colours go
+       through --fg-rgb / --bg-rgb instead of literal rgba(255,255,255,…). */
     --bg-color: #1e1e2e;
-    --card-bg: rgba(255, 255, 255, 0.05);
-    --card-hover: rgba(255, 255, 255, 0.1);
+    --bg-rgb: 30, 30, 46;
+    --fg-rgb: 255, 255, 255;
+    --card-bg: rgba(var(--fg-rgb), 0.05);
+    --card-hover: rgba(var(--fg-rgb), 0.1);
     --text-primary: #e0e0e0;
     --text-secondary: #a0a0a0;
+    --sunken-bg: rgba(0, 0, 0, 0.2);
+    --popover-bg: rgba(24, 24, 27, 0.98);
     --accent: #8957e5;
     --accent-hover: #a27bf6;
     --danger: #ff5555;
     --warning: #f1fa8c;
     --border-radius: 12px;
     --transition: 0.2s ease;
+}
+
+/* Light theme: same rules, different tokens. Accent, danger and warning keep their
+   hues — they carry meaning, not mood. */
+:root[data-theme="light"] {
+    --bg-color: #f4f4f7;
+    --bg-rgb: 244, 244, 247;
+    --fg-rgb: 0, 0, 0;
+    --card-bg: rgba(0, 0, 0, 0.045);
+    --card-hover: rgba(0, 0, 0, 0.085);
+    --text-primary: #1c1c22;
+    --text-secondary: #62626b;
+    --sunken-bg: rgba(0, 0, 0, 0.045);
+    --popover-bg: rgba(252, 252, 253, 0.98);
+    --accent: #7a45de;
+    --accent-hover: #8f61ea;
+    --danger: #d93636;
 }
 
 * {
@@ -38,9 +62,9 @@ header {
     justify-content: space-between;
     align-items: center;
     padding: 10px 14px;
-    background: rgba(30, 30, 46, 0.8);
+    background: rgba(var(--bg-rgb), 0.8);
     backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
     z-index: 10;
     -webkit-app-region: drag;
 }
@@ -98,7 +122,7 @@ h1 {
 .icon-btn.active {
     background: var(--card-hover);
     color: var(--accent);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.05);
 }
 
 /* Keyboard focus visibility (WCAG 2.4.7) — shows only on keyboard nav, not mouse click */
@@ -126,9 +150,9 @@ input[type="checkbox"]:focus-visible {
     align-items: center;
     gap: 6px;
     padding: 5px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(var(--fg-rgb), 0.12);
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--fg-rgb), 0.06);
     color: var(--text);
     font-family: inherit;
     font-size: 0.72rem;
@@ -137,7 +161,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 .settings-action-btn:hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(var(--fg-rgb), 0.14);
 }
 
 .settings-action-btn svg {
@@ -158,9 +182,9 @@ input[type="checkbox"]:focus-visible {
 /* Tabs */
 .tabs-container {
     display: flex;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--sunken-bg);
     padding: 3px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
 }
 
 .tab-btn {
@@ -177,7 +201,7 @@ input[type="checkbox"]:focus-visible {
 
 .tab-btn:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(var(--fg-rgb), 0.05);
 }
 
 .tab-btn.active {
@@ -190,7 +214,7 @@ input[type="checkbox"]:focus-visible {
 .search-container {
     padding: 8px 14px;
     background: rgba(0, 0, 0, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
 }
 
 .search-wrapper {
@@ -210,8 +234,8 @@ input[type="checkbox"]:focus-visible {
 
 #search-input {
     width: 100%;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.05);
+    border: 1px solid rgba(var(--fg-rgb), 0.1);
     border-radius: 8px;
     padding: 8px 10px 8px 32px;
     color: var(--text-primary);
@@ -221,7 +245,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 #search-input:focus {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--fg-rgb), 0.08);
     border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(137, 87, 229, 0.2);
 }
@@ -232,9 +256,9 @@ input[type="checkbox"]:focus-visible {
 
 /* Settings & About */
 .settings-panel {
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--sunken-bg);
     padding: 10px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -278,7 +302,7 @@ input[type="checkbox"]:focus-visible {
    as its own thing rather than a heading that forgot its chevron. */
 .settings-panel>.setting-item {
     padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-top: 1px solid rgba(var(--fg-rgb), 0.07);
 }
 
 /* Collapsible group inside the settings panel (the shortcut rows). Closed by default,
@@ -366,8 +390,8 @@ input[type="checkbox"]:focus-visible {
 input[type="number"],
 .shortcut-input,
 .settings-select {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
+    border: 1px solid rgba(var(--fg-rgb), 0.1);
     color: var(--text-primary);
     padding: 3px 6px;
     border-radius: 6px;
@@ -387,7 +411,7 @@ input[type="number"] {
 }
 
 .settings-select option {
-    background-color: #1e1e2e;
+    background-color: var(--bg-color);
     /* Fallback */
     background-color: var(--bg-color);
     color: var(--text-primary);
@@ -411,8 +435,8 @@ input[type="checkbox"] {
     width: 34px;
     height: 20px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.16);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(var(--fg-rgb), 0.16);
+    border: 1px solid rgba(var(--fg-rgb), 0.12);
     transition: background var(--transition), border-color var(--transition);
 }
 
@@ -430,7 +454,7 @@ input[type="checkbox"] {
 }
 
 .settings-panel input[type="checkbox"]:hover {
-    border-color: rgba(255, 255, 255, 0.28);
+    border-color: rgba(var(--fg-rgb), 0.28);
 }
 
 .settings-panel input[type="checkbox"]:checked {
@@ -493,7 +517,7 @@ input[type="checkbox"] {
     position: relative;
     border-radius: 8px;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(var(--fg-rgb), 0.08);
     cursor: pointer;
     background: rgba(0, 0, 0, 0.3);
     transition: border-color var(--transition), transform var(--transition);
@@ -590,7 +614,7 @@ input[type="checkbox"] {
 .gallery-actions-group {
     display: flex;
     gap: 2px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--fg-rgb), 0.06);
     border-radius: 6px;
     padding: 2px;
 }
@@ -603,7 +627,7 @@ input[type="checkbox"] {
 }
 
 .gallery-actions-group button:not(:disabled):hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(var(--fg-rgb), 0.12);
     color: var(--text-primary);
 }
 
@@ -665,7 +689,7 @@ input[type="checkbox"] {
 
 .history-list::-webkit-scrollbar-thumb,
 .settings-panel::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
     border-radius: 2px;
 }
 
@@ -673,7 +697,7 @@ input[type="checkbox"] {
     display: flex;
     align-items: center;
     padding: 8px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.05);
     cursor: pointer;
     transition: background 0.1s;
     font-size: 0.8rem;
@@ -682,7 +706,7 @@ input[type="checkbox"] {
 }
 
 .history-item:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(var(--fg-rgb), 0.03);
 }
 
 /* Favorites rows carrying a note get a faint accent wash so annotated entries read as
@@ -704,12 +728,12 @@ input[type="checkbox"] {
 
 .history-item.dragging {
     opacity: 0.5;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(var(--fg-rgb), 0.05);
 }
 
 .drag-handle {
     cursor: grab;
-    color: rgba(255, 255, 255, 0.15);
+    color: rgba(var(--fg-rgb), 0.15);
     font-size: 1rem;
     padding: 0 2px;
 }
@@ -755,8 +779,8 @@ input[type="checkbox"] {
     max-width: 300px;
     max-height: 260px;
     overflow: hidden;
-    background: rgba(24, 24, 27, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: var(--popover-bg);
+    border: 1px solid rgba(var(--fg-rgb), 0.16);
     border-radius: 10px;
     padding: 10px 12px;
     font-size: 12px;
@@ -796,7 +820,7 @@ input[type="checkbox"] {
 }
 
 .action-btn {
-    background: rgba(30, 30, 46, 0.9);
+    background: rgba(var(--bg-rgb), 0.9);
     border: none;
     cursor: pointer;
     color: var(--text-secondary);
@@ -816,7 +840,7 @@ input[type="checkbox"] {
 }
 
 .action-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
     color: var(--text-primary);
 }
 
@@ -852,14 +876,14 @@ input[type="checkbox"] {
 }
 
 .modal {
-    background: #1e1e2e;
+    background: var(--bg-color);
     padding: 16px;
     border-radius: 12px;
     width: 90%;
     max-width: 280px;
     text-align: left;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(var(--fg-rgb), 0.08);
     position: relative;
 }
 
@@ -890,7 +914,7 @@ input[type="checkbox"] {
 }
 
 .note-copy-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
     color: var(--text-primary);
 }
 
@@ -912,9 +936,9 @@ input[type="checkbox"] {
 .modal textarea {
     width: 100%;
     margin: 8px 0;
-    background: rgba(0, 0, 0, 0.2) !important;
+    background: var(--sunken-bg) !important;
     color: var(--text-primary) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(var(--fg-rgb), 0.08) !important;
     border-radius: 6px !important;
     padding: 8px !important;
     resize: none;
@@ -964,12 +988,12 @@ input[type="checkbox"] {
 }
 
 .modal-btn:not(.danger) {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
     color: var(--text-primary);
 }
 
 .modal-btn:not(.danger):hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(var(--fg-rgb), 0.15);
 }
 
 .modal-btn.danger {

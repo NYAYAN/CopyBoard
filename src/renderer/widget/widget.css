@@ -7,6 +7,10 @@
     --text-dim: rgba(var(--fg-rgb), 0.55);
     --border: rgba(var(--fg-rgb), 0.12);
     --border-strong: rgba(var(--fg-rgb), 0.2);
+    --tooltip-bg: rgba(24, 24, 27, 0.98);
+    --tooltip-text: #f2f2f7;
+    --field-bg: rgba(0, 0, 0, 0.28);
+    --tab-active-text: #fff;
 }
 
 :root[data-theme="light"] {
@@ -17,6 +21,12 @@
     --border: rgba(0, 0, 0, 0.12);
     --border-strong: rgba(0, 0, 0, 0.2);
     --fg-rgb: 0, 0, 0;
+    --tooltip-bg: rgba(252, 252, 253, 0.98);
+    --tooltip-text: #1c1c22;
+    --field-bg: rgba(0, 0, 0, 0.06);
+    /* The active tab is a 32% wash of the accent — white on that is unreadable once
+       the panel is pale, so the label takes the accent itself, darkened. */
+    --tab-active-text: #4a2596;
 }
 
 body {
@@ -94,7 +104,7 @@ body {
 }
 
 .tab-btn.active {
-    color: #fff;
+    color: var(--tab-active-text);
     background: color-mix(in srgb, var(--primary) 32%, transparent);
     border-color: color-mix(in srgb, var(--primary) 55%, transparent);
 }
@@ -107,7 +117,7 @@ body {
 #widget-search {
     width: 100%;
     box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--field-bg);
     border: 1px solid var(--border);
     border-radius: 9px;
     padding: 8px 10px;
@@ -269,7 +279,7 @@ body {
 .history-tooltip {
     position: fixed;
     max-width: 300px;
-    background: rgba(24, 24, 27, 0.98);
+    background: var(--tooltip-bg);
     border: 1px solid var(--border-strong);
     border-radius: 10px;
     padding: 10px 12px;
@@ -299,7 +309,7 @@ body {
    of the button column and it has to flip sides with the widget. */
 .btn-tooltip {
     position: fixed;
-    background: rgba(24, 24, 27, 0.98);
+    background: var(--tooltip-bg);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     padding: 6px 10px;
@@ -462,7 +472,8 @@ body {
     width: 42px;
     height: 42px;
     background: var(--bg-elev);
-    color: #ffffff;
+    /* Was a hard white: on the light panel that left the icons all but invisible. */
+    color: var(--text);
 }
 
 /* Staggered entrance — animation handles transform so hover transitions stay snappy */

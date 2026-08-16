@@ -1,4 +1,5 @@
 const { desktopCapturer, screen, systemPreferences, dialog, shell } = require('electron');
+const { t } = require('./i18n');
 const { state } = require('./state');
 const { createCapture, showToast, closeAllCaptureWindows } = require('./window-manager');
 
@@ -64,9 +65,9 @@ async function startCapture(mode) {
                 if (status !== 'granted') {
                     const { response } = await dialog.showMessageBox({
                         type: 'warning',
-                        buttons: ['Ayarları Aç', 'İptal'],
+                        buttons: [t('Ayarları Aç'), t('İptal')],
                         defaultId: 0,
-                        message: 'Ekran Kaydı İzni Gerekli',
+                        message: t('Ekran Kaydı İzni Gerekli'),
                         detail: 'CopyBoard ekran görüntüsü alabilmek için "Ekran Kaydı" iznine ihtiyaç duyar.\n\nSistem Ayarları > Gizlilik ve Güvenlik > Ekran Kaydı bölümünden uygulamaya izin verin.'
                     });
 
@@ -145,7 +146,7 @@ async function startCapture(mode) {
 
         if (!createdAny) {
             closeAllCaptureWindows();
-            throw new Error('Ekran kaynakları alınamadı');
+            throw new Error(t('Ekran kaynakları alınamadı'));
         }
 
     } catch (e) {

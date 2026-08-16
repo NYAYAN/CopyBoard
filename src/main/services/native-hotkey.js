@@ -51,9 +51,9 @@ function unregisterAll() {
 
 function unavailableReason() {
     if (isAvailable()) return null;
-    if (process.platform !== 'darwin') return 'yalnızca macOS';
+    if (process.platform !== 'darwin') return t('yalnızca macOS');
     if (loadError) return loadError.message;
-    return (addon && addon.loadError && addon.loadError.message) || 'derlenmemiş';
+    return (addon && addon.loadError && addon.loadError.message) || t('derlenmemiş');
 }
 
 module.exports = { isNative, isAvailable, register, unregister, unregisterAll, unavailableReason };

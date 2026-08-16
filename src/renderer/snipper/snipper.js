@@ -216,7 +216,7 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
     // click anywhere to copy that pixel's hex.
     state.colorMode = (mode === 'color');
     document.body.classList.toggle('color-mode', state.colorMode);
-    if (loupeHint) loupeHint.textContent = state.colorMode ? 'Tıkla: rengi kopyala' : 'C: rengi kopyala';
+    if (loupeHint) loupeHint.textContent = state.colorMode ? t('Tıkla: rengi kopyala') : 'C: rengi kopyala';
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -601,7 +601,7 @@ function getFinalImage() {
     tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, cropW, cropH);
 
     if (isBlankCrop(tctx, cropW, cropH)) {
-        throw new Error('Seçilen alanda ekran görüntüsü yok — kopyalansaydı siyah yapışırdı. ESC ile kapatıp tekrar deneyin.');
+        throw new Error(t('Seçilen alanda ekran görüntüsü yok — kopyalansaydı siyah yapışırdı. ESC ile kapatıp tekrar deneyin.'));
     }
 
     return tc.toDataURL('image/png');

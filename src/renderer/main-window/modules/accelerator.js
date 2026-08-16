@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 // Keyboard event → Electron accelerator translation for the settings dialog.
 //
 // Deliberately free of DOM/Electron imports so it can be unit-tested in plain Node
@@ -126,7 +127,7 @@ export function acceleratorFromEvent(e, isMac) {
     // (binding bare "A" steals the letter A from every app). Function keys are
     // the standard standalone exception.
     const isFKey = /^F([1-9]|1\d|2[0-4])$/.test(key);
-    if (keys.length === 0 && !isFKey) return { error: 'Ctrl, Alt veya Shift ile birlikte kullanın' };
+    if (keys.length === 0 && !isFKey) return { error: t('Ctrl, Alt veya Shift ile birlikte kullanın') };
 
     // A lone Cmd/Ctrl + a clipboard/editing key (Cmd+C, Ctrl+V, …) can't work as a
     // GLOBAL shortcut: the focused app consumes the keystroke, and binding it would

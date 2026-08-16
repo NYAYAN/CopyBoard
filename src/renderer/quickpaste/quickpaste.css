@@ -5,6 +5,8 @@
     --text: #ffffff;
     --text-dim: rgba(var(--fg-rgb), 0.5);
     --border: rgba(var(--fg-rgb), 0.12);
+    --tooltip-bg: rgba(24, 24, 27, 0.98);
+    --tooltip-text: #f2f2f7;
 }
 
 :root[data-theme="light"] {
@@ -13,6 +15,8 @@
     --text-dim: rgba(0, 0, 0, 0.5);
     --border: rgba(0, 0, 0, 0.12);
     --fg-rgb: 0, 0, 0;
+    --tooltip-bg: rgba(252, 252, 253, 0.98);
+    --tooltip-text: #1c1c22;
 }
 
 * {
@@ -132,7 +136,7 @@ body {
     max-width: 276px;
     max-height: 200px;
     overflow: hidden;
-    background: rgba(24, 24, 27, 0.98);
+    background: var(--tooltip-bg);
     border: 1px solid rgba(var(--fg-rgb), 0.16);
     border-radius: 9px;
     padding: 8px 10px;

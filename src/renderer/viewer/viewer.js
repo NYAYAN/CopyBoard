@@ -255,7 +255,7 @@ function rectFromDrag(s) {
 
 function setCrop(rect) {
     crop = rect && rect[2] >= MIN_CROP && rect[3] >= MIN_CROP ? rect : null;
-    copyLabel.textContent = crop ? 'Alanı Kopyala' : 'Kopyala';
+    copyLabel.textContent = crop ? t('Alanı Kopyala') : t('Kopyala');
     layoutCropBar();
     paint();
 }
@@ -441,7 +441,7 @@ COLORS.forEach((c, i) => {
 
 const customSwatch = document.createElement('label');
 customSwatch.className = 'swatch custom';
-customSwatch.title = 'Özel renk';
+customSwatch.title = t('Özel renk');
 const customInput = document.createElement('input');
 customInput.type = 'color';
 customInput.value = '#8957e5';
@@ -494,7 +494,7 @@ window.api.onViewerList((list) => {
     (list || []).forEach(s => {
         const t = document.createElement('img');
         t.src = s.thumb;
-        t.alt = 'küçük resim';
+        t.alt = t('küçük resim');
         t.dataset.id = s.id;
         t.addEventListener('click', () => window.api.viewerSelect(s.id));
         strip.appendChild(t);

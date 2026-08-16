@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 const mainBtn = document.getElementById('widget-main');
 const menu = document.getElementById('widget-menu');
 const btnSnippet = document.getElementById('btn-snippet');
@@ -291,7 +292,7 @@ function renderVirtualList(items) {
         const starBtn = document.createElement('button');
         starBtn.className = 'action-btn star-btn' + (isFav ? ' active' : '');
         starBtn.innerHTML = isFav ? ICONS.starFilled : ICONS.starOutline;
-        starBtn.title = isInFavoritesTab ? 'Favorilerden Çıkar' : (isFav ? 'Zaten Favorilerde' : 'Favorilere Ekle');
+        starBtn.title = isInFavoritesTab ? t('Favorilerden Çıkar') : (isFav ? 'Zaten Favorilerde' : t('Favorilere Ekle'));
         starBtn.setAttribute('aria-label', starBtn.title);
         starBtn.onclick = (e) => {
             e.stopPropagation();
@@ -311,8 +312,8 @@ function renderVirtualList(items) {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'action-btn';
         copyBtn.innerHTML = ICONS.copy;
-        copyBtn.title = 'Kopyala';
-        copyBtn.setAttribute('aria-label', 'Kopyala');
+        copyBtn.title = t('Kopyala');
+        copyBtn.setAttribute('aria-label', t('Kopyala'));
         copyBtn.onclick = (e) => {
             e.stopPropagation();
             window.api.copyItem(item.content);
@@ -322,7 +323,7 @@ function renderVirtualList(items) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn del';
         deleteBtn.innerHTML = ICONS.trash;
-        deleteBtn.title = isInFavoritesTab ? 'Favorilerden Çıkar' : 'Sil';
+        deleteBtn.title = isInFavoritesTab ? t('Favorilerden Çıkar') : t('Sil');
         deleteBtn.setAttribute('aria-label', deleteBtn.title);
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
@@ -388,7 +389,7 @@ function renderHistory(history, favorites) {
     if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
 
     if (displayItems.length === 0) {
-        const msg = searchQuery ? 'Eşleşen sonuç bulunamadı' : (activeTab === 'favorites' ? 'Favori öğe yok' : 'Geçmiş boş');
+        const msg = searchQuery ? t('Eşleşen sonuç bulunamadı') : (activeTab === 'favorites' ? t('Favori öğe yok') : t('Geçmiş boş'));
         historyItemsContainer.innerHTML = `<div style="padding: 20px; text-align: center; opacity: 0.5; font-size: 13px;">${msg}</div>`;
         return;
     }

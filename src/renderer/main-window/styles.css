@@ -15,6 +15,8 @@
     --accent-hover: #a27bf6;
     --danger: #ff5555;
     --warning: #f1fa8c;
+    --danger-wash: rgba(255, 85, 85, 0.1);
+    --danger-wash-strong: rgba(255, 85, 85, 0.2);
     --success: #50fa7b;
     --success-wash: rgba(80, 250, 123, 0.1);
     --border-radius: 12px;
@@ -35,7 +37,9 @@
     --popover-bg: rgba(252, 252, 253, 0.98);
     --accent: #7a45de;
     --accent-hover: #8f61ea;
-    --danger: #d93636;
+    --danger: #b3261e;
+    --danger-wash: rgba(179, 38, 30, 0.09);
+    --danger-wash-strong: rgba(179, 38, 30, 0.16);
     --success: #1a9c4b;
     --success-wash: rgba(26, 156, 75, 0.12);
 }
@@ -471,9 +475,9 @@ input[type="checkbox"] {
 }
 
 .danger-btn {
-    background: rgba(255, 85, 85, 0.1);
+    background: var(--danger-wash);
     color: var(--danger);
-    border: 1px solid rgba(255, 85, 85, 0.2);
+    border: 1px solid var(--danger-wash-strong);
     padding: 8px;
     border-radius: 6px;
     cursor: pointer;
@@ -483,7 +487,7 @@ input[type="checkbox"] {
 }
 
 .danger-btn:hover {
-    background: rgba(255, 85, 85, 0.2);
+    background: var(--danger-wash-strong);
 }
 
 .about-content {

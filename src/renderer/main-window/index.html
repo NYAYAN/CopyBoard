@@ -39,13 +39,6 @@
                         <path d="m21 15-5-5L5 21" />
                     </svg>
                 </button>
-                <button id="about-btn" class="icon-btn" title="Hakkında" aria-label="Hakkında">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        style="width: 16px; height: 16px;">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 16v-4m0-4h.01" />
-                    </svg>
-                </button>
                 <button id="settings-btn" class="icon-btn" title="Ayarlar" aria-label="Ayarlar">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                         style="width: 16px; height: 16px;">
@@ -77,14 +70,6 @@
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
                 <input type="text" id="search-input" placeholder="Geçmişte ara..." autocomplete="off">
-            </div>
-        </div>
-
-        <div id="about-panel" class="settings-panel hidden">
-            <div class="about-content">
-                <h3 id="about-version">CopyBoard</h3>
-                <p><strong>Geliştirici:</strong> Nurullah YAYAN</p>
-                <p><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-1px;margin-right:4px"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>nurullah.yayan@gmail.com</p>
             </div>
         </div>
 
@@ -335,6 +320,14 @@
                     </svg>
                     Kontrol Et
                 </button>
+            </div>
+            <div class="setting-item about-row">
+                <label>Hakkında:</label>
+                <div class="about-info">
+                    <span id="about-version">CopyBoard</span>
+                    <span>Nurullah YAYAN</span>
+                    <span>nurullah.yayan@gmail.com</span>
+                </div>
             </div>
             <button id="clear-history-btn" class="danger-btn">Geçmişi Temizle</button>
         </div>

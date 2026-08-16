@@ -171,47 +171,45 @@ export function setupEventListeners() {
     };
     collapseSettingsGroups();
 
+    // Exactly one header button is lit: whichever panel is open, or the history button
+    // when the list itself is showing. Each handler used to set this by hand, and the
+    // history button was the one nobody lit — so the list looked like no view at all.
+    const syncHeaderActive = () => {
+        const settingsOpen = !elements.settingsPanel.classList.contains('hidden');
+        const galleryOpen = !elements.galleryPanel.classList.contains('hidden');
+        elements.settingsBtn.classList.toggle('active', settingsOpen);
+        elements.galleryBtn.classList.toggle('active', galleryOpen);
+        elements.historyBtn.classList.toggle('active', !settingsOpen && !galleryOpen);
+    };
+
     elements.settingsBtn.addEventListener('click', () => {
-        elements.aboutPanel.classList.add('hidden');
-        elements.aboutBtn.classList.remove('active');
         closeGalleryPanel();
         elements.settingsPanel.classList.toggle('hidden');
-        elements.settingsBtn.classList.toggle('active');
         collapseSettingsGroups();
-    });
-
-    elements.aboutBtn.addEventListener('click', () => {
-        elements.settingsPanel.classList.add('hidden');
-        elements.settingsBtn.classList.remove('active');
-        closeGalleryPanel();
-        elements.aboutPanel.classList.toggle('hidden');
-        elements.aboutBtn.classList.toggle('active');
+        syncHeaderActive();
     });
 
     elements.galleryBtn.addEventListener('click', () => {
         elements.settingsPanel.classList.add('hidden');
-        elements.settingsBtn.classList.remove('active');
-        elements.aboutPanel.classList.add('hidden');
-        elements.aboutBtn.classList.remove('active');
         elements.galleryPanel.classList.toggle('hidden');
-        elements.galleryBtn.classList.toggle('active');
+        syncHeaderActive();
     });
 
-    // Header t("Geçmiş") button (replaces the removed manual-add "+"): closes whichever
-    // panel is open (gallery/settings/about) and returns to the history list on the
-    // Tümü tab — the mirror of the gallery button.
+    // Header "Geçmiş" button (replaces the removed manual-add "+"): closes whichever
+    // panel is open and returns to the history list on the Tümü tab — the mirror of the
+    // gallery button.
     elements.historyBtn.addEventListener('click', () => {
         elements.settingsPanel.classList.add('hidden');
-        elements.settingsBtn.classList.remove('active');
-        elements.aboutPanel.classList.add('hidden');
-        elements.aboutBtn.classList.remove('active');
         closeGalleryPanel();
         if (state.activeTab !== 'all') {
             elements.tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === 'all'));
             state.activeTab = 'all';
             renderHistory(state.history, state.favorites, state.activeTab, state.searchQuery);
         }
+        syncHeaderActive();
     });
+
+    syncHeaderActive(); // the app opens on the history list
 
     elements.updateBtn.addEventListener('click', () => {
         elements.updateBtn.classList.add('spinning');

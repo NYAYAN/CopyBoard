@@ -313,6 +313,27 @@ input[type="checkbox"]:focus-visible {
     border-top: 1px solid rgba(var(--fg-rgb), 0.07);
 }
 
+/* About: three read-only lines, right-aligned like every other row's value. */
+.about-row {
+    align-items: flex-start;
+}
+
+.about-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    text-align: right;
+    user-select: text;
+}
+
+.about-info span:first-child {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
 /* Collapsible group inside the settings panel (the shortcut rows). Closed by default,
    and closed again every time Settings is opened — six rows otherwise bury the handful
    of settings people actually come here for. */

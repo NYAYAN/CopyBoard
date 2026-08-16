@@ -1,11 +1,9 @@
 export const elements = {
     listElement: document.getElementById('history-list'),
     settingsBtn: document.getElementById('settings-btn'),
-    aboutBtn: document.getElementById('about-btn'),
     updateBtn: document.getElementById('update-btn'),
     historyBtn: document.getElementById('history-btn'),
     settingsPanel: document.getElementById('settings-panel'),
-    aboutPanel: document.getElementById('about-panel'),
     widgetToggle: document.getElementById('widget-toggle'), // the one group with a condition
 
     // Screenshot gallery

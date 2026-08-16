@@ -584,3 +584,7 @@ if (btnResetSize) {
 }
 btnStop.addEventListener('click', (e) => { e.stopPropagation(); stopRecording(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (state.isRecording) stopRecording(); window.api.closeSnipper(); } });
+
+// Toolbar labels are drawn in-page — the native tooltip is invisible behind an
+// always-on-top overlay. See ../shared/overlay-tooltip.js.
+window.CopyBoardOverlayTooltip.init('.toolbar');

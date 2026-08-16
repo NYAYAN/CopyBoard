@@ -70,12 +70,35 @@ function render(history) {
 
     // Rows clip what goes into the DOM (a copied item can be hundreds of KB); the click
     // handler passes the full item.content, so what gets pasted is never truncated.
-    const PREVIEW_CHARS = 300; // single-line rows — this covers any realistic width
-    const clip = (s, max) => (s && s.length > max ? s.slice(0, max) + '…' : s);
+    const PREVIEW_CHARS = 220; // single-line rows — this covers any realistic width
+    const C = window.CopyBoardContent;
+
     for (const item of items) {
         const div = document.createElement('div');
         div.className = 'qp-item';
-        div.textContent = clip(item.content, PREVIEW_CHARS);
+
+        // Same leading glyph as the main list — a picker you are scanning under time
+        // pressure benefits from it more than the list does, not less.
+        const type = C.classify(item.content);
+        const icon = document.createElement('span');
+        icon.className = 'qp-icon';
+        const colour = type === 'color' ? C.cssColor(item.content) : null;
+        if (colour) {
+            const swatch = document.createElement('span');
+            swatch.className = 'qp-swatch';
+            // Through the CSSOM: this window's CSP has no 'unsafe-inline' for styles.
+            swatch.style.background = colour;
+            icon.appendChild(swatch);
+        } else {
+            icon.innerHTML = C.iconFor(type);
+        }
+
+        const text = document.createElement('span');
+        text.className = C.MONO_TYPES.has(type) ? 'qp-text mono' : 'qp-text';
+        text.textContent = C.previewText(item.content, PREVIEW_CHARS);
+
+        div.appendChild(icon);
+        div.appendChild(text);
         div.addEventListener('mouseenter', () => scheduleTip(item.content, div));
         div.addEventListener('mouseleave', hideTip);
         div.addEventListener('click', () => {

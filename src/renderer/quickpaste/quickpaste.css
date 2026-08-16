@@ -1,29 +1,6 @@
-:root {
-    --fg-rgb: 255, 255, 255;
-    --primary: #8957e5;
-    --bg: rgba(30, 30, 34, 0.98);
-    --text: #ffffff;
-    --text-dim: rgba(var(--fg-rgb), 0.5);
-    --border: rgba(var(--fg-rgb), 0.12);
-    --tooltip-bg: rgba(24, 24, 27, 0.98);
-    --tooltip-text: #f2f2f7;
-    --danger: #ff9a9a;
-    --danger-wash: rgba(255, 80, 80, 0.22);
-}
-
-:root[data-theme="light"] {
-    --bg: rgba(250, 250, 252, 0.98);
-    --text: #1c1c22;
-    --text-dim: rgba(0, 0, 0, 0.5);
-    --border: rgba(0, 0, 0, 0.12);
-    --fg-rgb: 0, 0, 0;
-    --tooltip-bg: rgba(252, 252, 253, 0.98);
-    --tooltip-text: #1c1c22;
-    /* The dark theme's pink sits at 1.5:1 on a pale red wash — this is the same red
-       the rest of the app uses for danger in light mode. */
-    --danger: #b3261e;
-    --danger-wash: rgba(179, 38, 30, 0.14);
-}
+/* Quick-paste picker. Colour, type and spacing come from ../shared/tokens.css; this file
+   only describes the panel. It used to carry its own --primary/--bg/--danger set, which
+   is why its violet and the main window's had drifted apart. */
 
 * {
     box-sizing: border-box;
@@ -31,47 +8,50 @@
 
 html,
 body {
-    margin: 0;
-    padding: 0;
     width: 100%;
     height: 100%;
-    background: transparent;
+    margin: 0;
+    padding: 0;
     overflow: hidden;
-    color: var(--text);
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    /* The window is transparent so the panel can have rounded corners — the background
+       belongs to .qp-panel, not here. */
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: var(--fs-md);
     user-select: none;
     -webkit-user-select: none;
 }
 
-/* Flat rounded panel — no drop shadow, so nothing bleeds into the transparent
-   window corners (same reasoning as the widget fix). A crisp border gives edge
-   definition instead. */
+/* Flat rounded panel — no drop shadow, so nothing bleeds into the transparent window
+   corners. A crisp border gives the edge definition instead. */
 .qp-panel {
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 14px;
     overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-xl);
+    /* Slightly sheer over whatever it is floating above, like the widget's panel. */
+    background: color-mix(in srgb, var(--bg-overlay) 94%, transparent);
     backdrop-filter: blur(18px) saturate(1.3);
     -webkit-backdrop-filter: blur(18px) saturate(1.3);
 }
 
 .qp-header {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 9px 10px 8px 14px;
-    flex-shrink: 0;
-    border-bottom: 1px solid rgba(var(--fg-rgb), 0.06);
+    padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-5);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .qp-title {
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.01em;
 }
 
 .qp-close {
@@ -81,105 +61,124 @@ body {
     width: 24px;
     height: 24px;
     padding: 0;
-    background: rgba(var(--fg-rgb), 0.06);
     border: none;
-    border-radius: 7px;
-    color: var(--text-dim);
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-tertiary);
     cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
 }
 
 .qp-close svg {
-    width: 15px;
-    height: 15px;
+    width: 14px;
+    height: 14px;
 }
 
 .qp-close:hover {
-    background: var(--danger-wash);
+    background: var(--danger-soft);
     color: var(--danger);
 }
 
 .qp-list {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    padding: 6px 8px 8px;
+    overscroll-behavior: contain;
+    padding: var(--sp-3) var(--sp-3) var(--sp-4);
 }
 
-.qp-list::-webkit-scrollbar {
-    width: 8px;
-}
-
-.qp-list::-webkit-scrollbar-thumb {
-    background: rgba(var(--fg-rgb), 0.16);
-    border-radius: 4px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-}
-
-.qp-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(var(--fg-rgb), 0.3);
-    background-clip: padding-box;
-}
-
+/* Same row anatomy as the main window's list: type glyph, one line of content, and — for
+   a colour — the colour itself. */
 .qp-item {
-    padding: 9px 11px;
-    margin-bottom: 2px;
-    border-radius: 9px;
-    border: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    height: 32px;
+    padding: 0 var(--sp-4);
+    border-radius: var(--r-sm);
     cursor: pointer;
-    font-size: 13px;
-    line-height: 1.4;
-    /* Single line + ellipsis: the full content lives in the 500ms hover tooltip. */
+    transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.qp-item:hover {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
+.qp-item:active {
+    background: var(--surface-active);
+}
+
+.qp-icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    color: var(--text-tertiary);
+}
+
+.qp-icon svg {
+    width: 13px;
+    height: 13px;
+}
+
+.qp-item:hover .qp-icon {
+    color: var(--accent-text);
+}
+
+.qp-swatch {
+    width: 11px;
+    height: 11px;
+    border-radius: var(--r-xs);
+    box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.25);
+}
+
+.qp-text {
+    flex: 1 1 auto;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    font-size: var(--fs-sm);
+}
+
+.qp-text.mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+}
+
+.qp-empty {
+    padding: var(--sp-8) var(--sp-5);
+    text-align: center;
+    font-size: var(--fs-sm);
+    color: var(--text-tertiary);
 }
 
 /* Hover tooltip (shared singleton; built lazily after 500ms — see quickpaste.js) */
 .qp-tooltip {
     position: fixed;
+    z-index: 9999;
     max-width: 276px;
     max-height: 200px;
     overflow: hidden;
-    background: var(--tooltip-bg);
-    border: 1px solid rgba(var(--fg-rgb), 0.16);
-    border-radius: 9px;
-    padding: 8px 10px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: #e6e6ec;
+    padding: var(--sp-4) var(--sp-5);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    background: var(--bg-overlay);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-normal);
     white-space: pre-wrap;
     word-break: break-word;
-    z-index: 9999;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.12s ease;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
 .qp-tooltip.visible {
     opacity: 1;
-}
-
-.qp-item:hover {
-    background: rgba(var(--fg-rgb), 0.07);
-    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
-}
-
-.qp-item:active {
-    background: color-mix(in srgb, var(--primary) 22%, transparent);
-}
-
-.qp-empty {
-    padding: 24px 12px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 13px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .qp-item {
-        transition: none;
-    }
 }

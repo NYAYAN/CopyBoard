@@ -101,6 +101,16 @@ body {
     color: var(--pos-chip-text);
 }
 
+.ti-zoom {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Lit only while the zoom is manual, so "100%" from fitting doesn't look like a mode. */
+.ti-zoom-on {
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
+}
+
 .ti-time {
     flex: 0 1 auto;
     overflow: hidden;
@@ -312,6 +322,8 @@ body {
 .stage.zoomed img {
     max-width: none;
     max-height: none;
+    /* width comes from viewer.js as a pixel value — height follows the aspect. */
+    height: auto;
     cursor: zoom-out;
 }
 

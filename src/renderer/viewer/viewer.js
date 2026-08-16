@@ -91,11 +91,86 @@ function renderTitle(data) {
     if (data.pos && data.total) part('ti-chip ti-pos', `${data.pos} / ${data.total}`);
 }
 
-// Zoom-to-actual-size only makes sense when the image doesn't already fit.
+// ── Zoom ─────────────────────────────────────────────────────────────────────
+// zoom === 0 means "fit the window" (the CSS does it); any other value is an explicit
+// scale, applied as a pixel width so the stage can scroll around it. The annotation
+// canvas needs no special handling — layoutCanvas() tracks the image's rendered box,
+// whatever produced it.
+const ZOOM_MAX = 8;
+let zoom = 0;
+
+// What fit mode is actually showing right now — the floor for zooming out, and the
+// number the % readout compares against.
+function fitScale() {
+    if (!img.naturalWidth) return 1;
+    return Math.min(1, stage.clientWidth / img.naturalWidth, stage.clientHeight / img.naturalHeight);
+}
+
+const currentScale = () => (zoom || fitScale());
+
+function applyZoom() {
+    if (zoom) {
+        stage.classList.add('zoomed');
+        img.style.width = Math.round(img.naturalWidth * zoom) + 'px';
+        img.style.height = 'auto';
+    } else {
+        stage.classList.remove('zoomed');
+        img.style.width = '';
+        img.style.height = '';
+    }
+    layoutCanvas();
+    paint(); // crop chrome is sized in inverse display scale
+    updateZoomChip();
+}
+
+// anchor: a viewport point to keep still (the cursor), so zooming goes where you look.
+function setZoom(next, anchor) {
+    const fit = fitScale();
+    // Anything at or below fit snaps back to fit — no dead zone where a "zoom" shows
+    // the same thing as fitting but with scrollbars.
+    const target = next <= fit * 1.01 ? 0 : Math.min(ZOOM_MAX, next);
+    if (target === zoom) return;
+
+    const before = img.getBoundingClientRect();
+    const ax = anchor ? anchor.x : before.left + before.width / 2;
+    const ay = anchor ? anchor.y : before.top + before.height / 2;
+    // Where the anchor sits on the image itself, 0..1
+    const fx = before.width ? (ax - before.left) / before.width : 0.5;
+    const fy = before.height ? (ay - before.top) / before.height : 0.5;
+
+    zoom = target;
+    applyZoom();
+
+    if (zoom) {
+        const after = img.getBoundingClientRect();
+        stage.scrollLeft += (after.left + fx * after.width) - ax;
+        stage.scrollTop += (after.top + fy * after.height) - ay;
+        layoutCanvas();
+    }
+}
+
+// Shown only while the zoom is manual. In fit mode the honest number is "whatever
+// fits", and measuring it off the element box reports the box, not the painted image
+// (object-fit: contain letterboxes inside it) — a readout that lies is worse than none.
+function updateZoomChip() {
+    const chip = title.querySelector('.ti-zoom');
+    if (!zoom) {
+        if (chip) chip.remove();
+        return;
+    }
+    const el = chip || Object.assign(document.createElement('span'), { className: 'ti-chip ti-zoom ti-zoom-on' });
+    el.textContent = Math.round(zoom * 100) + '%';
+    if (!chip) title.appendChild(el);
+}
+
+// Click still toggles the two useful extremes — fit and actual size.
+function toggleActualSize(anchor) {
+    setZoom(zoom ? 0 : 1, anchor);
+}
+
 function updateZoomable() {
     const zoomable = img.naturalWidth > stage.clientWidth || img.naturalHeight > stage.clientHeight;
     stage.classList.toggle('zoomable', zoomable);
-    if (!zoomable) stage.classList.remove('zoomed');
 }
 
 function markActiveThumb() {
@@ -528,23 +603,31 @@ img.addEventListener('load', () => {
     // Assigning width/height wipes the bitmap, so the ops are replayed right after.
     canvas.width = base.width = img.naturalWidth;
     canvas.height = base.height = img.naturalHeight;
+    zoom = 0; // a new image starts fitted
+    applyZoom();
     updateZoomable();
     layoutCanvas();
     repaint();
 });
 
-window.addEventListener('resize', () => { updateZoomable(); layoutCanvas(); });
+window.addEventListener('resize', () => { updateZoomable(); layoutCanvas(); updateZoomChip(); });
 // Safety net for anything the explicit calls miss. Kept in a variable on purpose:
 // an observer nobody holds a reference to gets garbage-collected and silently stops.
 const imgObserver = new ResizeObserver(layoutCanvas);
 imgObserver.observe(img);
 
-img.addEventListener('click', () => {
-    if (stage.classList.contains('zoomable')) {
-        stage.classList.toggle('zoomed');
-        layoutCanvas();
-    }
-});
+// Click toggles fit ↔ actual size, anchored where you clicked. Not while drawing —
+// the canvas owns the pointer then.
+img.addEventListener('click', (e) => toggleActualSize({ x: e.clientX, y: e.clientY }));
+
+// Trackpad pinch arrives as a wheel event with ctrlKey set; Cmd/Ctrl+wheel is the
+// mouse equivalent. A plain wheel keeps scrolling the zoomed image.
+stage.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const step = Math.exp(-e.deltaY * 0.01); // smooth, and symmetric in both directions
+    setZoom(currentScale() * step, { x: e.clientX, y: e.clientY });
+}, { passive: false });
 
 prevBtn.addEventListener('click', () => window.api.viewerNav('prev'));
 nextBtn.addEventListener('click', () => window.api.viewerNav('next'));
@@ -567,6 +650,11 @@ document.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
     else if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); copyCurrent(); }
+    // Zoom: the shortcuts every image viewer has. '=' is what Cmd++ reports unshifted.
+    else if (mod && (e.key === '+' || e.key === '=')) { e.preventDefault(); setZoom(currentScale() * 1.25); }
+    else if (mod && e.key === '-') { e.preventDefault(); setZoom(currentScale() / 1.25); }
+    else if (mod && e.key === '0') { e.preventDefault(); setZoom(0); }
+    else if (mod && e.key === '1') { e.preventDefault(); setZoom(1); }
     // Esc unwinds one step at a time — closing the window would take the drawing with it.
     else if (e.key === 'Escape') {
         if (crop) setCrop(null);

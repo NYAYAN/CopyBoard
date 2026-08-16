@@ -2,6 +2,7 @@ const { Tray, Menu, app } = require('electron');
 const path = require('path');
 const { state } = require('./state');
 const { showMain, toggleMain, toggleQuickPaste } = require('./window-manager');
+const { t } = require('./i18n');
 
 // The tray menu carries each action's own global shortcut as its ACCELERATOR — not just
 // for discoverability. A native macOS menu runs a modal event-tracking loop in which the
@@ -16,21 +17,26 @@ let contextMenu = null;
 function buildMenu() {
     const all = state.shortcuts || {};
     const on = all.enabled || {};
+    // Lazy: shortcuts.js reaches back here to rebuild the menu, so a top-level require
+    // would be a load-order cycle.
+    const { menuAccelerator } = require('./ipc/shortcuts');
     // A switched-off shortcut isn't registered, so don't advertise it on the menu either —
     // and don't let the menu honour it while open. The item itself still works by clicking.
-    const s = new Proxy({}, { get: (_, k) => (on[k] === false ? undefined : all[k]) });
+    // menuAccelerator also drops bindings whose key has no accelerator name at all (the
+    // native-only ones) — Menu.buildFromTemplate throws on those.
+    const s = new Proxy({}, { get: (_, k) => (on[k] === false ? undefined : menuAccelerator(all[k])) });
     const menu = Menu.buildFromTemplate([
-        { label: 'Göster', accelerator: s.list, click: showMain },
+        { label: t('Göster'), accelerator: s.list, click: showMain },
         // Always-available way to open the picker even when its global hotkey is
         // claimed/blocked (another clipboard app, RDP/endpoint policy, reserved combo).
-        { label: 'Hızlı Yapıştır', accelerator: s.paste, click: () => toggleQuickPaste() },
+        { label: t('Hızlı Yapıştır'), accelerator: s.paste, click: () => toggleQuickPaste() },
         { type: 'separator' },
-        { label: 'Ekran Görüntüsü Al', accelerator: s.draw, click: () => require('./capture-service').startCapture('draw') },
-        { label: 'Metin Oku (OCR)', accelerator: s.ocr, click: () => require('./capture-service').startCapture('ocr') },
-        { label: 'Renk Kodu Al', accelerator: s.color, click: () => require('./capture-service').startCapture('color') },
-        { label: 'Video Kaydet', accelerator: s.video, click: () => require('./capture-service').startCapture('video') },
+        { label: t('Ekran Görüntüsü Al'), accelerator: s.draw, click: () => require('./capture-service').startCapture('draw') },
+        { label: t('Metin Oku (OCR)'), accelerator: s.ocr, click: () => require('./capture-service').startCapture('ocr') },
+        { label: t('Renk Kodu Al'), accelerator: s.color, click: () => require('./capture-service').startCapture('color') },
+        { label: t('Video Kaydet'), accelerator: s.video, click: () => require('./capture-service').startCapture('video') },
         { type: 'separator' },
-        { label: 'Çıkış', click: () => app.quit() }
+        { label: t('Çıkış'), click: () => app.quit() }
     ]);
 
     menu.on('menu-will-show', () => {
@@ -73,7 +79,7 @@ function initTray() {
         // setContextMenu() makes a LEFT click open the menu on macOS, which swallowed the
         // 'click' handler below (the icon could never just show the window) and put that
         // freezing modal menu on the most common interaction. Left click toggles the
-        // window; the menu — including its own "Göster" — moves to right click.
+        // window; the menu — including its own t("Göster") — moves to right click.
         //
         // popUpContextMenu() does NOT emit the menu's will-show/will-close events, so the
         // suspend/resume pair is driven from here as well; the call itself returns once the

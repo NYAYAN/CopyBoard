@@ -1,0 +1,95 @@
+/* Notification card. Lifted out of a <style> block in toast.html so the window can run
+   the same strict CSP as the rest of the app (style-src 'self') and share
+   ../shared/tokens.css instead of declaring a fifth private palette. */
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    /* Transparent window: the card is the only thing that paints. */
+    background: transparent;
+    font-family: var(--font-ui);
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+}
+
+.toast {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-5);
+    /* toast.js mirrors this margin as CARD_MARGIN when it resizes the OS window around
+       the card — the two have to stay equal or a tall message gets clipped again. */
+    margin: var(--sp-7);
+    padding: var(--sp-5) var(--sp-6);
+    min-width: 200px;
+    max-width: 360px;
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
+    background: var(--bg-overlay);
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+    font-size: var(--fs-md);
+    line-height: var(--lh-normal);
+    transform: translateX(120%);
+    transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.toast.show {
+    transform: translateX(0);
+}
+
+.icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.icon svg {
+    width: 17px;
+    height: 17px;
+}
+
+.success .icon {
+    color: var(--success);
+}
+
+.info .icon {
+    color: var(--info);
+}
+
+.error .icon {
+    color: var(--danger);
+}
+
+.warning .icon {
+    color: var(--warning);
+}
+
+#message {
+    word-break: break-word;
+}
+
+/* Time remaining. toast.js animates the width, so the transition lives there. */
+.progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--accent);
+}
+
+.success .progress {
+    background: var(--success);
+}
+
+.error .progress {
+    background: var(--danger);
+}
+
+.warning .progress {
+    background: var(--warning);
+}

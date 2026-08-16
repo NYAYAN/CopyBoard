@@ -1,4 +1,5 @@
 const { ipcMain, clipboard, dialog, BrowserWindow, app, nativeImage, systemPreferences, screen } = require('electron');
+const { t } = require('../i18n');
 const fs = require('fs');
 const path = require('path');
 // Tesseract will be lazy-loaded in the OCR handler to speed up startup
@@ -95,7 +96,7 @@ function createOcrWorker() {
         errorHandler: err => console.error('OCR worker error:', err)
     });
 
-    return withOcrTimeout(creating, OCR_WORKER_TIMEOUT_MS, 'OCR worker hazırlanamadı (zaman aşımı)')
+    return withOcrTimeout(creating, OCR_WORKER_TIMEOUT_MS, t('OCR worker hazırlanamadı (zaman aşımı)'))
         .catch(err => {
             // A worker that finishes after the timeout would sit there holding ~150MB.
             creating.then(w => { try { w.terminate(); } catch (e) { } }, () => { });
@@ -286,7 +287,7 @@ function registerCaptureHandlers() {
     ipcMain.on('snip-copy-color', (e, hex) => {
         try {
             const value = String(hex || '').trim().toLowerCase();
-            if (!/^#[0-9a-f]{6}$/.test(value)) throw new Error('geçersiz renk kodu');
+            if (!/^#[0-9a-f]{6}$/.test(value)) throw new Error(t('geçersiz renk kodu'));
             clipboard.writeText(value);
             state.lastText = value; // keep the watcher from re-capturing our own write
             addHistory(value);
@@ -309,7 +310,7 @@ function registerCaptureHandlers() {
         let p = null;
         try {
             const opts = {
-                title: 'Kaydet',
+                title: t('Kaydet'),
                 defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`),
                 filters: [{ name: 'Images', extensions: ['png'] }]
             };
@@ -429,7 +430,7 @@ function registerCaptureHandlers() {
                 reusedWorker = !!ocrWorker; // a worker held over from an earlier scan may have died
                 const worker = await getOcrWorker();
                 const { data: { text } } = await withOcrTimeout(
-                    worker.recognize(image), OCR_SCAN_TIMEOUT_MS, 'Metin taranamadı (zaman aşımı)');
+                    worker.recognize(image), OCR_SCAN_TIMEOUT_MS, t('Metin taranamadı (zaman aşımı)'));
                 return text.trim();
             };
 

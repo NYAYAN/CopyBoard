@@ -1,5 +1,3 @@
-import { elements } from './dom.js';
-
 let dragStartId;
 
 export function onDragStart(e) {
@@ -9,17 +7,26 @@ export function onDragStart(e) {
     // would move the wrong items and corrupt the persisted order.
     dragStartId = this.dataset.itemId;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', this.innerHTML);
+    e.dataTransfer.setData('text/plain', dragStartId);
     this.classList.add('dragging');
 }
 
 export function onDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    // Say where the row will land. Previously the only feedback was the dragged row
+    // fading, which left the drop target itself unmarked.
+    if (this.dataset.itemId !== dragStartId) this.classList.add('drop-target');
+}
+
+export function onDragLeave() {
+    this.classList.remove('drop-target');
 }
 
 export function onDrop(e, favorites, activeTab) {
     e.stopPropagation();
+    e.preventDefault();
+    this.classList.remove('drop-target');
     if (activeTab !== 'favorites') return;
 
     const dragEndId = this.dataset.itemId;
@@ -39,6 +46,5 @@ function moveFavorite(fromId, toId, favorites) {
     const [movedItem] = favorites.splice(fromIndex, 1);
     favorites.splice(toIndex, 0, movedItem);
 
-    // Use the dedicated favorites reorder IPC
     window.api.reorderFavorites(favorites);
 }

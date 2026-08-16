@@ -1,12 +1,13 @@
+/* Update dialog. Palette, type and motion come from ../shared/tokens.css; the names
+   below are this window's own vocabulary, re-pointed at those tokens rather than
+   re-declaring the app's colours for a fifth time. */
 :root {
-    --accent: #8957e5;
-    --accent-dark: #6f42c1;
-    --accent-hover: #a27bf6;
-    --surface: #1e1e2e;
-    --surface-elevated: rgba(255, 255, 255, 0.06);
-    --border: rgba(255, 255, 255, 0.1);
-    --text: #ececf1;
-    --text-secondary: #a0a0b0;
+    --surface: var(--bg-base);
+    --surface-elevated: var(--bg-inset);
+    --border: var(--border-default);
+    --text: var(--text-primary);
+    /* The header is a gradient from the accent to a deeper shade of it. */
+    --accent-dark: color-mix(in srgb, var(--accent) 62%, #000);
 }
 
 * {
@@ -16,7 +17,7 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-ui);
     background: var(--surface);
     margin: 0;
     padding: 0;
@@ -34,7 +35,7 @@ body {
     flex-direction: column;
     overflow: hidden;
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--r-xl);
 }
 
 .update-header {
@@ -50,6 +51,8 @@ body {
     justify-content: center;
     width: 32px;
     height: 32px;
+    /* Always white: this sits on the accent gradient, where --fg-rgb (which flips to
+       black in the light theme) would render a muddy dark disc. */
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     margin-bottom: 10px;
@@ -167,7 +170,9 @@ body {
 }
 
 .notes-content {
-    background: rgba(0, 0, 0, 0.25);
+    /* Sunken panel, not a black one — 25% black behind #1c1c22 release notes made the
+       light theme's notes box a dark plate with dark text on it. */
+    background: rgba(var(--fg-rgb), 0.05);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px;
@@ -188,17 +193,17 @@ body {
 }
 
 .notes-content::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(var(--fg-rgb), 0.05);
     border-radius: 3px;
 }
 
 .notes-content::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(var(--fg-rgb), 0.15);
     border-radius: 3px;
 }
 
 .notes-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.28);
+    background: rgba(var(--fg-rgb), 0.28);
 }
 
 /* Styles for GitHub rendered HTML */
@@ -228,7 +233,7 @@ body {
 }
 
 .release-html-content code {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 1px 5px;
@@ -252,7 +257,7 @@ body {
 }
 
 .release-html-content th {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--fg-rgb), 0.06);
     color: var(--text);
     font-weight: 600;
 }
@@ -325,7 +330,7 @@ body {
 .progress-bar {
     width: 100%;
     height: 8px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
     border-radius: 4px;
     overflow: hidden;
     margin-bottom: 8px;
@@ -379,12 +384,12 @@ body {
 }
 
 .btn-secondary {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--fg-rgb), 0.08);
     color: var(--text);
 }
 
 .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(var(--fg-rgb), 0.14);
     transform: translateY(-1px);
 }
 

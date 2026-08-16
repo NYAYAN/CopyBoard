@@ -3,101 +3,122 @@
 
 <head>
     <meta charset="UTF-8">
+    <!-- No 'unsafe-inline' anywhere: the webfont link carried an inline onload handler and
+         the chrome carried style= attributes. Both are gone (system font stack, and the
+         one dynamic colour — the type swatch — is set through the CSSOM, which CSP
+         doesn't govern), so the policy can be the strict one the viewer window already uses. -->
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+        content="default-src 'none'; img-src 'self' data:; script-src 'self'; style-src 'self';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CopyBoard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"
-        media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="../shared/tokens.css">
     <link rel="stylesheet" href="styles.css">
+    <script src="../shared/theme.js"></script>
 </head>
 
 <body>
-    <div class="app-container">
-        <header>
-            <div class="logo">
-                <img src="../../../icon.png" alt="CopyBoard" style="width: 24px; height: 24px; margin-right: 8px;">
-                <h1>CopyBoard</h1>
-            </div>
-            <div class="actions">
-                <button id="history-btn" class="icon-btn" title="Geçmiş" aria-label="Geçmiş">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        style="width: 16px; height: 16px;">
-                        <path d="M3 3v5h5" />
-                        <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
-                        <path d="M12 7v5l4 2" />
+    <!-- One view is on screen at a time and data-view says which. The old markup used
+         :has(.settings-panel:not(.hidden)) on the container to hide the history chrome,
+         which meant every view's visibility was implied by another view's class. -->
+    <div class="app" id="app" data-view="history">
+
+        <!-- Title bar. In the history view it identifies the app; in a sub-view it turns
+             into "← <view name>", so there is exactly one way back and no row of icons
+             where the user has to work out which one is lit. -->
+        <header class="titlebar">
+            <div class="titlebar-lead">
+                <div class="brand" data-when="history">
+                    <img class="brand-mark" src="../../../icon.png" alt="">
+                    <span class="brand-name">CopyBoard</span>
+                </div>
+                <button id="back-btn" class="icon-btn back-btn" data-when="sub" title="Geri"
+                    aria-label="Geri">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 18l-6-6 6-6" />
                     </svg>
                 </button>
-                <button id="gallery-btn" class="icon-btn" title="Ekran Görüntüleri" aria-label="Ekran Görüntüleri">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        style="width: 16px; height: 16px;">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <span class="view-title" data-when="sub" id="view-title"></span>
+            </div>
+
+            <div class="titlebar-actions">
+                <button id="gallery-btn" class="icon-btn" data-when="history" title="Ekran Görüntüleri"
+                    aria-label="Ekran Görüntüleri">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2.5" />
                         <circle cx="8.5" cy="8.5" r="1.5" />
                         <path d="m21 15-5-5L5 21" />
                     </svg>
                 </button>
-                <button id="about-btn" class="icon-btn" title="Hakkında" aria-label="Hakkında">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        style="width: 16px; height: 16px;">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 16v-4m0-4h.01" />
+                <button id="settings-btn" class="icon-btn" data-when="history" title="Ayarlar" aria-label="Ayarlar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 6h6M14 6h6M4 12h10M18 12h2M4 18h3M11 18h9" />
+                        <circle cx="12" cy="6" r="2" />
+                        <circle cx="16" cy="12" r="2" />
+                        <circle cx="9" cy="18" r="2" />
                     </svg>
                 </button>
-                <button id="update-btn" class="icon-btn" title="Güncellemeleri Kontrol Et" aria-label="Güncellemeleri Kontrol Et">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        style="width: 16px; height: 16px;">
-                        <path d="M1 4v6h6" />
-                        <path d="M23 20v-6h-6" />
-                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15" />
-                    </svg>
-                </button>
-                <button id="settings-btn" class="icon-btn" title="Ayarlar" aria-label="Ayarlar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        style="width: 16px; height: 16px;">
-                        <path d="M4 6h16M4 12h16M4 18h16" />
-                        <circle cx="7" cy="6" r="2" fill="currentColor" />
-                        <circle cx="17" cy="12" r="2" fill="currentColor" />
-                        <circle cx="7" cy="18" r="2" fill="currentColor" />
-                    </svg>
-                </button>
-                <button id="minimize-btn" class="icon-btn" title="Gizle" aria-label="Gizle">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        style="width: 16px; height: 16px;">
+                <button id="minimize-btn" class="icon-btn" title="Gizle (Esc)" aria-label="Gizle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"
+                        stroke-linecap="round">
                         <path d="M5 12h14" />
                     </svg>
                 </button>
             </div>
         </header>
 
-        <div class="tabs-container">
-            <button class="tab-btn active" data-tab="all">Tümü</button>
-            <button class="tab-btn" data-tab="favorites">Favoriler <svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;vertical-align:-1px"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
-        </div>
+        <!-- ══ History view ══════════════════════════════════════════════════════ -->
+        <section class="view view-history" data-view-name="history">
+            <div class="filterbar">
+                <div class="search">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7.5" />
+                        <path d="m20.5 20.5-4.2-4.2" />
+                    </svg>
+                    <input type="text" id="search-input" placeholder="Ara" autocomplete="off" spellcheck="false"
+                        aria-label="Geçmişte ara">
+                    <button id="search-clear" class="search-clear" title="Aramayı temizle" aria-label="Aramayı temizle"
+                        hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"
+                            stroke-linecap="round">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
 
-        <div class="search-container">
-            <div class="search-wrapper">
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input type="text" id="search-input" placeholder="Geçmişte ara..." autocomplete="off">
+                <!-- A 26px track with the selected pill raised, rather than the old
+                     full-width block of accent: on a 350px panel that bar was the loudest
+                     thing on screen and the list was the quietest. -->
+                <div class="segmented" role="tablist" aria-label="Liste">
+                    <button class="seg tab-btn active" data-tab="all" role="tab" aria-selected="true">Tümü</button>
+                    <button class="seg tab-btn" data-tab="favorites" role="tab" aria-selected="false">Favoriler</button>
+                </div>
             </div>
-        </div>
 
-        <div id="about-panel" class="settings-panel hidden">
-            <div class="about-content">
-                <h3 id="about-version">CopyBoard</h3>
-                <p><strong>Geliştirici:</strong> Nurullah YAYAN</p>
-                <p><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-1px;margin-right:4px"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>nurullah.yayan@gmail.com</p>
-            </div>
-        </div>
+            <main id="history-list" class="list" role="listbox" aria-label="Pano geçmişi" tabindex="-1">
+                <!-- Rows injected by modules/history-renderer.js -->
+            </main>
 
-        <div id="gallery-panel" class="settings-panel hidden">
+            <!-- Status bar. Half of it is a live count, half is the keyboard contract —
+                 the shortcuts below are new, and a shortcut nobody can see is a shortcut
+                 nobody uses. -->
+            <footer class="statusbar">
+                <span id="status-count" class="status-count"></span>
+                <div class="hints">
+                    <span class="hint"><kbd>↑↓</kbd>Seç</span>
+                    <span class="hint"><kbd>↵</kbd>Kopyala</span>
+                    <span class="hint"><kbd class="kbd-mod">Ctrl</kbd><kbd>⌫</kbd>Sil</span>
+                </div>
+            </footer>
+        </section>
+
+        <!-- ══ Screenshot gallery view ═══════════════════════════════════════════ -->
+        <section class="view view-gallery" id="gallery-panel" data-view-name="gallery">
             <div class="gallery-toolbar">
-                <div class="gallery-actions-group">
+                <div class="btn-group">
                     <button id="gallery-folder-btn" title="Klasörde Göster" aria-label="Klasörde Göster">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                             stroke-linecap="round" stroke-linejoin="round">
@@ -112,7 +133,7 @@
                         </svg>
                     </button>
                 </div>
-                <div class="gallery-layout-toggle">
+                <div class="btn-group" id="gallery-layout-toggle">
                     <button id="gallery-layout-1" title="Tek sütun" aria-label="Tek sütun">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                             stroke-linecap="round" stroke-linejoin="round">
@@ -131,165 +152,401 @@
                     </button>
                 </div>
             </div>
-            <div id="gallery-grid" class="gallery-grid">
+            <div id="gallery-grid" class="gallery-grid" role="listbox" aria-label="Ekran görüntüleri"
+                tabindex="-1">
                 <!-- Thumbnails injected by modules/gallery.js -->
             </div>
-        </div>
 
-        <div id="settings-panel" class="settings-panel hidden">
-            <div class="setting-item">
-                <label for="max-items">Maksimum Kayıt:</label>
-                <input style="width: 100px;" type="number" id="max-items" min="1" max="500" value="50">
-            </div>
-            <div class="setting-item">
-                <label for="quickpaste-count">Hızlı Yapıştır Liste Sayısı:</label>
-                <input style="width: 100px;" type="number" id="quickpaste-count" min="1" max="100" value="20"
-                    title="Ctrl+Shift+V ile açılan hızlı yapıştır listesinde gösterilecek son kayıt sayısı">
-            </div>
-            <div class="setting-item">
-                <label for="incognito-check">Gizli Mod (Panoyu Kaydetme):</label>
-                <input type="checkbox" id="incognito-check" title="Açıkken kopyalanan metinler geçmişe kaydedilmez">
-            </div>
-            <div class="setting-item">
-                <label for="shortcut-input">Liste Kısayolu:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="shortcut-input" placeholder="Tuşlara basın..." readonly class="shortcut-input"
-                    title="Kopyalanan verilerin listesini açmak için">
-                    <input type="checkbox" id="shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
+            <footer class="statusbar">
+                <span id="gallery-count" class="status-count"></span>
+                <div class="hints">
+                    <span class="hint"><kbd>↵</kbd>Kopyala</span>
+                    <span class="hint"><kbd>O</kbd>Büyüt</span>
+                    <span class="hint"><kbd class="kbd-mod">Ctrl</kbd><kbd>⌫</kbd>Sil</span>
                 </div>
-            </div>
-            <div class="setting-item">
-                <label for="image-shortcut-input">Çizim Modu:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekran görüntüsü alıp üzerinde çizim yapmak için">
-                    <input type="checkbox" id="image-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="ocr-shortcut-input">Metin Oku (OCR):</label>
-                <div class="shortcut-row">
-                    <input type="text" id="ocr-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekrandaki yazıları kopyalamak için">
-                    <input type="checkbox" id="ocr-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="color-shortcut-input">Renk Kodu Al:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="color-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekrandaki bir pikselin renk kodunu kopyalamak için">
-                    <input type="checkbox" id="color-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="video-shortcut-input">Video Kayıt:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="video-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekranın belirli bir bölgesini videoya kaydetmek için">
-                    <input type="checkbox" id="video-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="paste-shortcut-input">Hızlı Yapıştır:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="paste-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Geçmişten seçip odaktaki alana anında yapıştırmak için. Parola alanlarında macOS klavyeyi o uygulamaya kilitler (Secure Input) ve kısayol çalışmaz — panel'i widget'taki Hızlı Yapıştır düğmesinden veya tepsi menüsünden açın.">
-                    <input type="checkbox" id="paste-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="video-quality">Video Kalitesi:</label>
-                <select id="video-quality" class="settings-select">
-                    <option value="low">Düşük (720p - 30fps)</option>
-                    <option value="medium">Orta (1080p - 30fps)</option>
-                    <option value="high" selected>Yüksek (4K - 60fps)</option>
-                    <option value="ultra">Ultra (120fps)</option>
-                </select>
-            </div>
-            <div class="setting-item">
-                <label for="autostart-check">Başlangıçta Çalıştır:</label>
-                <input type="checkbox" id="autostart-check">
-            </div>
-            <div class="setting-item">
-                <label for="widget-check">Yüzen Araç (Widget):</label>
-                <input type="checkbox" id="widget-check">
-            </div>
-            <div id="widget-extra-settings"
-                style="display: none; padding-left: 20px; flex-direction: column; gap: 8px;">
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-transparent-check">Widget Saydamlığı:</label>
-                    <input type="checkbox" id="widget-transparent-check">
-                </div>
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-color-input">Widget Rengi:</label>
-                    <input type="color" id="widget-color-input" value="#8957e5">
-                </div>
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-opacity-input">Opaklık:</label>
-                    <input type="range" id="widget-opacity-input" min="10" max="100" value="100" style="width: 100px;">
-                </div>
-                <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label for="widget-scale-input">Widget Boyutu:</label>
-                    <input type="range" id="widget-scale-input" min="50" max="150" value="100" style="width: 100px;"
-                        title="%50 ile %150 arası">
-                </div>
-            </div>
-            <button id="clear-history-btn" class="danger-btn">Geçmişi Temizle</button>
-        </div>
+            </footer>
+        </section>
 
-        <main id="history-list" class="history-list">
-            <!-- Items will be injected here -->
-        </main>
+        <!-- ══ Settings view ═════════════════════════════════════════════════════ -->
+        <section class="view view-settings" id="settings-panel" data-view-name="settings">
+            <div class="settings-search">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="7.5" />
+                    <path d="m20.5 20.5-4.2-4.2" />
+                </svg>
+                <input type="text" id="settings-search" placeholder="Ayarlarda ara" autocomplete="off"
+                    spellcheck="false" aria-label="Ayarlarda ara">
+            </div>
+            <p class="settings-no-match" id="settings-no-match" hidden>Eşleşen ayar yok.</p>
+
+            <!-- Appearance leads on purpose: it holds the language picker, the one setting
+                 someone may need BEFORE they can read any of the other headings. It is also
+                 the section that starts open on a first visit. -->
+            <section class="card" data-section="appearance">
+                <div class="card-head-row">
+                    <button type="button" class="card-head" aria-expanded="false" aria-controls="sec-appearance">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Görünüm</span>
+                    </button>
+                </div>
+                <div class="card-body" id="sec-appearance" hidden>
+                    <div class="set-row">
+                        <label class="set-label" for="theme-select">
+                            <span class="set-title">Tema</span>
+                            <span class="set-desc">Sistem seçiliyken işletim sisteminizi anında takip eder</span>
+                        </label>
+                        <select id="theme-select" class="control select">
+                            <option value="system">Sistem</option>
+                            <option value="dark">Koyu</option>
+                            <option value="light">Açık</option>
+                        </select>
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="language-select">
+                            <span class="set-title">Dil</span>
+                            <span class="set-desc">Arayüz dili. Pano içeriğiniz asla çevrilmez</span>
+                        </label>
+                        <select id="language-select" class="control select">
+                            <option value="tr">Türkçe</option>
+                            <option value="en">İngilizce</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" data-section="clipboard">
+                <div class="card-head-row">
+                    <button type="button" class="card-head" aria-expanded="false" aria-controls="sec-clipboard">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Pano</span>
+                    </button>
+                </div>
+                <div class="card-body" id="sec-clipboard" hidden>
+                    <div class="set-row">
+                        <label class="set-label" for="max-items">
+                            <span class="set-title">Maksimum kayıt</span>
+                            <span class="set-desc">Geçmişte tutulacak en fazla öğe sayısı</span>
+                        </label>
+                        <input type="number" id="max-items" class="control number" min="1" max="500" value="50">
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="quickpaste-count">
+                            <span class="set-title">Hızlı yapıştır liste sayısı</span>
+                            <span class="set-desc">Hızlı yapıştır listesinde gösterilecek son kayıt sayısı</span>
+                        </label>
+                        <input type="number" id="quickpaste-count" class="control number" min="1" max="100" value="20">
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="incognito-check">
+                            <span class="set-title">Gizli mod</span>
+                            <span class="set-desc">Açıkken kopyalanan metinler geçmişe kaydedilmez</span>
+                        </label>
+                        <input type="checkbox" id="incognito-check" class="switch">
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" data-section="shortcuts">
+                <div class="card-head-row">
+                    <button type="button" id="shortcuts-toggle" class="card-head" aria-expanded="false"
+                        aria-controls="sec-shortcuts">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Kısayollar</span>
+                    </button>
+                </div>
+                <div class="card-body" id="sec-shortcuts" hidden>
+                    <div class="set-row">
+                        <label class="set-label" for="shortcut-input">
+                            <span class="set-title">Pano listesi</span>
+                            <span class="set-desc">Kopyalanan verilerin listesini açar</span>
+                        </label>
+                        <div class="shortcut-control">
+                            <input type="text" id="shortcut-input" class="control shortcut" placeholder="Tuşlara basın"
+                                readonly>
+                            <input type="checkbox" id="shortcut-enabled" class="switch sm" aria-label="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="image-shortcut-input">
+                            <span class="set-title">Çizim modu</span>
+                            <span class="set-desc">Ekran görüntüsü alıp üzerinde çizim yapar</span>
+                        </label>
+                        <div class="shortcut-control">
+                            <input type="text" id="image-shortcut-input" class="control shortcut"
+                                placeholder="Tuşlara basın" readonly>
+                            <input type="checkbox" id="image-shortcut-enabled" class="switch sm"
+                                aria-label="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="ocr-shortcut-input">
+                            <span class="set-title">Metin oku (OCR)</span>
+                            <span class="set-desc">Ekrandaki yazıları metne çevirip kopyalar</span>
+                        </label>
+                        <div class="shortcut-control">
+                            <input type="text" id="ocr-shortcut-input" class="control shortcut"
+                                placeholder="Tuşlara basın" readonly>
+                            <input type="checkbox" id="ocr-shortcut-enabled" class="switch sm"
+                                aria-label="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="color-shortcut-input">
+                            <span class="set-title">Renk kodu al</span>
+                            <span class="set-desc">Ekrandaki bir pikselin renk kodunu kopyalar</span>
+                        </label>
+                        <div class="shortcut-control">
+                            <input type="text" id="color-shortcut-input" class="control shortcut"
+                                placeholder="Tuşlara basın" readonly>
+                            <input type="checkbox" id="color-shortcut-enabled" class="switch sm"
+                                aria-label="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="video-shortcut-input">
+                            <span class="set-title">Video kayıt</span>
+                            <span class="set-desc">Ekranın belirli bir bölgesini videoya kaydeder</span>
+                        </label>
+                        <div class="shortcut-control">
+                            <input type="text" id="video-shortcut-input" class="control shortcut"
+                                placeholder="Tuşlara basın" readonly>
+                            <input type="checkbox" id="video-shortcut-enabled" class="switch sm"
+                                aria-label="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="paste-shortcut-input">
+                            <span class="set-title">Hızlı yapıştır</span>
+                            <span class="set-desc">Geçmişten seçip odaktaki alana anında yapıştırır</span>
+                        </label>
+                        <div class="shortcut-control">
+                            <input type="text" id="paste-shortcut-input" class="control shortcut"
+                                placeholder="Tuşlara basın" readonly>
+                            <input type="checkbox" id="paste-shortcut-enabled" class="switch sm"
+                                aria-label="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <p class="set-note">Parola alanlarında macOS klavyeyi o uygulamaya kilitler (Secure Input) ve hızlı
+                        yapıştır kısayolu çalışmaz — paneli tepsi menüsünden açın.</p>
+                </div>
+            </section>
+
+            <!-- The on/off switch stays on the header row: turning the widget on shouldn't
+                 require opening the group first, and its settings only exist once it is on. -->
+            <section class="card" data-section="widget">
+                <div class="card-head-row">
+                    <button type="button" id="widget-toggle" class="card-head" aria-expanded="false"
+                        aria-controls="sec-widget">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Yüzen araç</span>
+                    </button>
+                    <input type="checkbox" id="widget-check" class="switch" aria-label="Yüzen aracı aç/kapa">
+                </div>
+                <div class="card-body" id="sec-widget" hidden>
+                    <div class="set-row">
+                        <label class="set-label" for="widget-transparent-check">
+                            <span class="set-title">Saydamlık</span>
+                            <span class="set-desc">Arkasındaki pencereler belli belirsiz görünür</span>
+                        </label>
+                        <input type="checkbox" id="widget-transparent-check" class="switch">
+                    </div>
+                    <!-- The colour is chosen IN the window, not through the OS colour
+                         panel. This window hides itself on blur (window-manager.js), and
+                         opening a native dialog takes focus — so clicking a
+                         <input type="color"> dismissed the very window you were setting up
+                         and left the picker orphaned. See modules/color-picker.js. -->
+                    <div class="set-row color-row">
+                        <div class="set-label">
+                            <span class="set-title">Renk</span>
+                        </div>
+                        <button type="button" id="widget-color-btn" class="control color-btn"
+                            aria-haspopup="dialog" aria-expanded="false" aria-label="Renk seç">
+                            <span class="color-dot" id="widget-color-dot"></span>
+                        </button>
+                        <div id="color-popover" class="color-popover" role="dialog" aria-label="Renk seç" hidden>
+                            <div class="cp-swatches" id="cp-swatches"></div>
+                            <input type="range" id="cp-hue" class="cp-hue" min="0" max="359" value="265"
+                                aria-label="Renk tonu">
+                            <div class="cp-hex">
+                                <span class="cp-hash">#</span>
+                                <input type="text" id="cp-hex" maxlength="6" spellcheck="false" autocomplete="off"
+                                    aria-label="Renk kodu">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="widget-opacity-input">
+                            <span class="set-title">Opaklık</span>
+                        </label>
+                        <input type="range" id="widget-opacity-input" class="control range" min="10" max="100"
+                            value="100">
+                    </div>
+                    <div class="set-row">
+                        <label class="set-label" for="widget-scale-input">
+                            <span class="set-title">Boyut</span>
+                            <span class="set-desc">%50 ile %150 arası</span>
+                        </label>
+                        <input type="range" id="widget-scale-input" class="control range" min="50" max="150"
+                            value="100">
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" data-section="video">
+                <div class="card-head-row">
+                    <button type="button" class="card-head" aria-expanded="false" aria-controls="sec-video">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Video</span>
+                    </button>
+                </div>
+                <div class="card-body" id="sec-video" hidden>
+                    <div class="set-row">
+                        <label class="set-label" for="video-quality">
+                            <span class="set-title">Kayıt kalitesi</span>
+                            <span class="set-desc">Yüksek ayarlar daha büyük dosya üretir</span>
+                        </label>
+                        <select id="video-quality" class="control select">
+                            <option value="low">Düşük (720p - 30fps)</option>
+                            <option value="medium">Orta (1080p - 30fps)</option>
+                            <option value="high" selected>Yüksek (4K - 60fps)</option>
+                            <option value="ultra">Ultra (120fps)</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" data-section="general">
+                <div class="card-head-row">
+                    <button type="button" class="card-head" aria-expanded="false" aria-controls="sec-general">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Genel</span>
+                    </button>
+                </div>
+                <div class="card-body" id="sec-general" hidden>
+                    <div class="set-row">
+                        <label class="set-label" for="autostart-check">
+                            <span class="set-title">Başlangıçta çalıştır</span>
+                            <span class="set-desc">Bilgisayar açıldığında CopyBoard arka planda başlar</span>
+                        </label>
+                        <input type="checkbox" id="autostart-check" class="switch">
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" data-section="about">
+                <div class="card-head-row">
+                    <button type="button" class="card-head" aria-expanded="false" aria-controls="sec-about">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        <span>Hakkında</span>
+                    </button>
+                </div>
+                <div class="card-body" id="sec-about" hidden>
+                    <div class="set-row">
+                        <div class="set-label">
+                            <span class="set-title">Güncellemeler</span>
+                            <span class="set-desc" id="about-version">CopyBoard</span>
+                        </div>
+                        <button id="update-btn" class="btn" title="Güncellemeleri Kontrol Et">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 4v6h6" />
+                                <path d="M23 20v-6h-6" />
+                                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15" />
+                            </svg>
+                            Kontrol et
+                        </button>
+                    </div>
+                    <div class="set-row">
+                        <div class="set-label">
+                            <span class="set-title">Geliştirici</span>
+                            <span class="set-desc selectable">Nurullah YAYAN · nurullah.yayan@gmail.com</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Outside the cards and last: a destructive action isn't a setting, and it
+                 should never sit one mis-click away from something you were adjusting. -->
+            <div class="danger-zone">
+                <div class="set-label">
+                    <span class="set-title">Geçmişi temizle</span>
+                    <span class="set-desc">Tüm geçmiş silinir. Favorileriniz kalır.</span>
+                </div>
+                <button id="clear-history-btn" class="btn danger">Temizle</button>
+            </div>
+        </section>
     </div>
 
-    <!-- Confirm Clear Modal -->
+    <!-- One confirm dialog for every destructive action; the caller fills in the wording.
+         See modules/modals.js — confirmAction() resolves to true/false. -->
     <div id="confirm-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <p>Tüm geçmişi silmek istediğinizden emin misiniz?</p>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+            <h3 id="confirm-title">Geçmişi temizle</h3>
+            <p class="modal-text" id="confirm-text">Tüm geçmiş silinecek. Favorileriniz etkilenmez.</p>
             <div class="modal-actions">
-                <button id="cancel-clear-btn" class="modal-btn">Vazgeç</button>
-                <button id="confirm-clear-btn" class="modal-btn danger">Sil</button>
+                <button id="confirm-cancel" class="btn">Vazgeç</button>
+                <button id="confirm-ok" class="btn danger-solid">Sil</button>
             </div>
         </div>
     </div>
 
     <!-- Note Modal -->
     <div id="note-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h3 id="note-modal-title">Not</h3>
-            <button id="copy-note-btn" class="note-copy-btn" title="Notu Kopyala" aria-label="Notu Kopyala">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-            </button>
+        <div class="modal" role="dialog" aria-modal="true">
+            <div class="modal-head">
+                <h3 id="note-modal-title">Not</h3>
+                <button id="copy-note-btn" class="icon-btn" title="Notu Kopyala" aria-label="Notu Kopyala">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                </button>
+            </div>
 
             <div id="note-view-content" class="note-view hidden"></div>
-            <textarea id="note-input" class="hidden" placeholder="Bu öğe için notunuzu girin..." rows="4"></textarea>
+            <textarea id="note-input" class="note-input hidden" placeholder="Bu öğe için notunuzu girin"
+                rows="5"></textarea>
 
             <div class="modal-actions" id="note-view-actions">
-                <button id="close-note-btn" class="modal-btn">Kapat</button>
-                <button id="edit-note-btn" class="modal-btn"
-                    style="background: var(--accent); color: white;">Düzenle</button>
+                <button id="close-note-btn" class="btn">Kapat</button>
+                <button id="edit-note-btn" class="btn primary">Düzenle</button>
             </div>
 
             <div class="modal-actions hidden" id="note-edit-actions">
-                <button id="cancel-note-btn" class="modal-btn">Vazgeç</button>
-                <button id="save-note-btn" class="modal-btn"
-                    style="background: var(--accent); color: white;">Kaydet</button>
+                <button id="cancel-note-btn" class="btn">Vazgeç</button>
+                <button id="save-note-btn" class="btn primary">Kaydet</button>
             </div>
         </div>
     </div>
 
+    <!-- Classic scripts first: they set the globals the module code reads (i18n before
+         content-type, which formats dates against the chosen language). -->
+    <script src="../shared/i18n.js"></script>
     <script src="../shared/render-utils.js"></script>
+    <script src="../shared/content-type.js"></script>
     <script type="module" src="renderer.js"></script>
 </body>
 

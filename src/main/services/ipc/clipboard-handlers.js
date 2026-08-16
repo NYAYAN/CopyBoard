@@ -1,4 +1,5 @@
 const { ipcMain, clipboard } = require('electron');
+const { t } = require('../i18n');
 const { state, store } = require('../state');
 const { showToast, hideQuickPaste } = require('../window-manager');
 const { sendPasteKeystroke, ensureAccessibility } = require('../paste-service');
@@ -70,8 +71,8 @@ function registerClipboardHandlers() {
                 // land here even though the check above passed.
                 showToast(
                     reason === 'automation'
-                        ? 'Otomatik yapıştırma engellendi: CopyBoard\'un "System Events" uygulamasını kontrol etmesine izin verilmedi. Öğe panoya kopyalandı — Cmd+V ile yapıştırabilirsiniz.'
-                        : 'Otomatik yapıştırma başarısız oldu. Öğe panoya kopyalandı — Cmd+V ile yapıştırabilirsiniz.',
+                        ? t('Otomatik yapıştırma engellendi: CopyBoard\'un "System Events" uygulamasını kontrol etmesine izin verilmedi. Öğe panoya kopyalandı — Cmd+V ile yapıştırabilirsiniz.')
+                        : t('Otomatik yapıştırma başarısız oldu. Öğe panoya kopyalandı — Cmd+V ile yapıştırabilirsiniz.'),
                     'error'
                 );
             });

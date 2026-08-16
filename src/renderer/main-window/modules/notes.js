@@ -1,6 +1,8 @@
 import { elements } from './dom.js';
 import { showModal, hideModal } from './modals.js';
 
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
+
 let currentNoteItemId = null;
 
 export function getCurrentNoteItemId() {
@@ -23,7 +25,7 @@ export function openNoteModal(item) {
 }
 
 export function showNoteViewMode(text) {
-    elements.noteModalTitle.textContent = 'Not';
+    elements.noteModalTitle.textContent = t('Not');
     elements.noteViewContent.textContent = text;
     elements.noteInput.value = text;
 
@@ -35,7 +37,7 @@ export function showNoteViewMode(text) {
 }
 
 export function showNoteEditMode(text) {
-    elements.noteModalTitle.textContent = text ? 'Notu Düzenle' : 'Not Ekle';
+    elements.noteModalTitle.textContent = text ? t('Notu Düzenle') : t('Not Ekle');
     elements.noteInput.value = text;
 
     elements.noteViewContent.classList.add('hidden');

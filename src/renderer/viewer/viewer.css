@@ -1,9 +1,31 @@
+/* Screenshot viewer. Palette, type, spacing, radius and motion come from
+   ../shared/tokens.css — this window used to carry a fourth private copy of the app's
+   colours, which is how its purple drifted from the main window's.
+ *
+ * What stays local is what genuinely has no app-wide meaning: the letterbox behind a
+ * picture, the outline that keeps a pale screenshot's edge visible, and the surface used
+ * by chrome that floats OVER arbitrary image content. */
 :root {
-    --bg: #1c1c1e;
-    --panel: #2c2c2e;
-    --text: #f2f2f7;
-    --text-secondary: #98989f;
-    --accent: #8957e5;
+    --panel: var(--bg-raised);
+    /* Letterbox while drawing: a shade away from the panel so the image pops, not a
+       hard black — in the light theme that read as the screen suddenly going dark. */
+    --stage-dim: #0f0f11;
+    --image-edge: none;
+    --pos-chip-bg: var(--accent-soft);
+    --pos-chip-text: var(--accent-text);
+    /* Floating chrome that sits OVER the image (nav arrows, crop bar, text box): its own
+       surface, not the panel — it has to read against any screenshot. */
+    --float-bg: color-mix(in srgb, var(--bg-overlay) 86%, transparent);
+    --float-bg-hover: var(--bg-overlay);
+    --float-text: var(--text-primary);
+}
+
+:root[data-theme="light"] {
+    --stage-dim: #d7d7de;
+    /* A pale screenshot on a pale stage has no visible edge — outline it so you can
+       always tell where the image ends. Costs nothing on dark, where the near-black
+       surround already does the framing. */
+    --image-edge: 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
 
 * {
@@ -19,9 +41,9 @@ body {
 }
 
 body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -35,17 +57,58 @@ body {
     justify-content: space-between;
     gap: 10px;
     padding: 0 10px 0 14px;
-    background: var(--panel);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-raised);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
     -webkit-app-region: drag;
 }
 
 .title {
-    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
+}
+
+/* Dimensions / weight / position read as values, so they get a chip each. */
+.ti-chip {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    border-radius: var(--r-xs);
+    background: rgba(var(--fg-rgb), 0.08);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.ti-dim {
+    font-weight: 600;
+}
+
+.ti-pos {
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
+}
+
+.ti-time {
+    flex: 0 1 auto;
+    overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Narrow windows: drop the softest information first so the chips always survive. */
+@media (max-width: 720px) {
+    .ti-time {
+        display: none;
+    }
+}
+
+@media (max-width: 560px) {
+    .ti-pos {
+        display: none;
+    }
 }
 
 .toolbar-actions {
@@ -59,22 +122,42 @@ body {
     align-items: center;
     gap: 6px;
     border: none;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text);
-    font-size: 0.72rem;
+    background: rgba(var(--fg-rgb), 0.08);
+    color: var(--text-primary);
+    font-size: var(--fs-xs);
     font-family: inherit;
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     cursor: pointer;
     transition: background 0.15s ease;
 }
 
 .tb-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(var(--fg-rgb), 0.16);
 }
 
-.tb-btn.close:hover {
-    background: #e5534b;
+.tb-btn.close:hover,
+.tb-btn.danger:hover {
+    /* The solid danger token, not --danger: white on the text-tuned red measures 3.4:1,
+       under the 4.5:1 that an 11px label needs. */
+    background: var(--danger-solid);
+    /* On red, always white: inheriting the theme text colour put dark grey on the
+       danger button in light mode. */
+    color: #fff;
+}
+
+.tb-btn.active {
+    background: var(--accent);
+    /* On the accent, not on the surface: the label must not inherit the theme text
+       colour, which is dark in light mode and unreadable on purple. */
+    color: #fff;
+}
+
+/* Hover DEEPENS the accent rather than lightening it: white 11px labels on a lighter
+   purple drop to 3.7:1. A filter says that once for both themes — the light theme's
+   --accent-hover is already the darker step, the dark theme's is the lighter one. */
+.tb-btn.active:hover {
+    filter: brightness(0.9);
 }
 
 .tb-btn svg {
@@ -82,8 +165,172 @@ body {
     height: 14px;
 }
 
+/* −, readout, + read as one control, so they share a single pill and lose their inner
+   corners rather than sitting as three separate buttons. */
+.tb-zoom {
+    display: flex;
+    gap: 1px;
+    border-radius: var(--r-sm);
+    overflow: hidden;
+    background: rgba(var(--fg-rgb), 0.08);
+}
+
+.tb-zoom .tb-btn {
+    border-radius: 0;
+    background: transparent;
+}
+
+.tb-btn.zoom-step {
+    padding: 6px 7px;
+}
+
+.tb-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.tb-btn:disabled:hover {
+    background: transparent;
+}
+
+/* The zoom readout changes on every wheel notch, so the digits are fixed-width and the
+   label has a floor: a button that resizes under the cursor is a button you misclick. */
+.tb-btn.zoom {
+    padding-right: 8px;
+}
+
+.tb-btn.zoom span {
+    min-width: 34px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Lit while the zoom is manual, so the fit percentage doesn't look like a mode. */
+.tb-btn.zoom.on {
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
+}
+
+.tb-btn.zoom.on:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* ── Annotation toolbar (second row, only while drawing is on) ─────────────── */
+.drawbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg-raised);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
+}
+
+.drawbar[hidden] {
+    display: none;
+}
+
+.db-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.db-sep {
+    width: 1px;
+    height: 18px;
+    background: rgba(var(--fg-rgb), 0.14);
+}
+
+.db-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.db-btn:hover:not(:disabled) {
+    background: rgba(var(--fg-rgb), 0.14);
+}
+
+.db-btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+.db-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.db-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* Stroke-width picker: a dot the size of what it draws. */
+.dot {
+    display: block;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.dot.s1 {
+    width: 4px;
+    height: 4px;
+}
+
+.dot.s2 {
+    width: 7px;
+    height: 7px;
+}
+
+.dot.s3 {
+    width: 11px;
+    height: 11px;
+}
+
+.swatch {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid rgba(var(--fg-rgb), 0.25);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.swatch.active {
+    box-shadow: 0 0 0 2px var(--bg-raised), 0 0 0 3px var(--text-primary);
+}
+
+/* Custom colour: the native picker sits invisibly over a rainbow dot. */
+.swatch.custom {
+    overflow: hidden;
+    background: conic-gradient(#ff3b30, #ffd60a, #32d74b, #0a84ff, #bf5af2, #ff3b30);
+}
+
+.swatch.custom input {
+    position: absolute;
+    inset: -6px;
+    padding: 0;
+    border: none;
+    opacity: 0;
+    cursor: pointer;
+}
+
 .stage {
     flex: 1;
+    position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -91,6 +338,7 @@ body {
 }
 
 .stage img {
+    box-shadow: var(--image-edge);
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
@@ -102,16 +350,179 @@ body {
     cursor: zoom-in;
 }
 
+/* Stays a flex container while zoomed. Dropping to `display: block` here top-left
+   aligned the image the instant zoom left fit mode, which reads as the picture jumping
+   to the ceiling — worst in a tall window, where there is the most slack to lose.
+   The centering comes from auto margins on the image instead of the container's
+   centering keywords: auto margins collapse to zero once the image overflows, so its
+   top-left corner stays reachable by scrolling, whereas `justify-content: center`
+   would centre the overflow and put that corner outside the scrollable area. Auto
+   margins beat align-items on their own, but not justify-content, so that one is
+   turned off explicitly. */
 .stage.zoomed {
-    display: block;
     overflow: auto;
-    text-align: center;
+    justify-content: flex-start;
 }
 
 .stage.zoomed img {
     max-width: none;
     max-height: none;
+    /* width comes from viewer.js as a pixel value — height follows the aspect. */
+    height: auto;
+    flex: none; /* keep that width: a flex item would otherwise shrink back to fitting */
+    margin: auto;
     cursor: zoom-out;
+}
+
+/* Zoomed out past fit: the next click enlarges. */
+.stage.zoomed.shrunk img {
+    cursor: zoom-in;
+}
+
+/* The annotation layer is parked exactly on top of the rendered image (viewer.js
+   keeps its box in sync) and stays click-through until drawing is turned on. */
+#viewer-canvas {
+    position: absolute;
+    pointer-events: none;
+}
+
+/* Draw mode frames the drawable area, so there's no guessing where the pen bites:
+   the letterbox around the image drops to near-black, and the image edge gets an
+   accent ring with corner brackets. */
+.stage.drawing {
+    background: var(--stage-dim);
+}
+
+.stage.drawing #viewer-canvas {
+    pointer-events: auto;
+    cursor: crosshair;
+}
+
+/* Marker only — sized/placed with the canvas by viewer.js, never hit-tested, never
+   part of what gets copied. Everything is drawn INWARD (inset ring, brackets pinned
+   to 0): anything outside the box is clipped on whichever axis the fitted image runs
+   flush with the stage. The dark halo behind the ring keeps it readable over pale
+   screenshots. */
+.draw-frame {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+.draw-frame[hidden] {
+    display: none;
+}
+
+.draw-frame span {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 5px solid var(--accent);
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.85));
+}
+
+/* Sat on the inside edge for the same reason the ring is: nothing outside the image
+   box survives the stage's overflow. */
+.draw-frame span.tl {
+    top: 0;
+    left: 0;
+    border-right: none;
+    border-bottom: none;
+}
+
+.draw-frame span.tr {
+    top: 0;
+    right: 0;
+    border-left: none;
+    border-bottom: none;
+}
+
+.draw-frame span.bl {
+    bottom: 0;
+    left: 0;
+    border-right: none;
+    border-top: none;
+}
+
+.draw-frame span.br {
+    bottom: 0;
+    right: 0;
+    border-left: none;
+    border-top: none;
+}
+
+/* Action bar for the crop selection, parked under it by viewer.js. */
+.crop-bar {
+    position: absolute;
+    z-index: 6;
+    display: flex;
+    gap: 6px;
+    padding: 5px;
+    background: var(--float-bg);
+    border: 1px solid rgba(var(--fg-rgb), 0.12);
+    border-radius: var(--r-md);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.crop-bar[hidden] {
+    display: none;
+}
+
+.cb-btn {
+    color: var(--float-text);
+    border: none;
+    border-radius: var(--r-sm);
+    padding: 5px 10px;
+    background: rgba(var(--fg-rgb), 0.1);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.cb-btn:hover {
+    background: rgba(var(--fg-rgb), 0.2);
+}
+
+.cb-btn.primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.cb-btn.primary:hover {
+    filter: brightness(0.9);
+}
+
+/* Live text entry: sized/coloured to match what the canvas will render. */
+.text-wrap {
+    position: absolute;
+    z-index: 5;
+}
+
+.text-wrap[hidden] {
+    display: none;
+}
+
+.text-wrap textarea {
+    min-width: 60px;
+    padding: 1px 4px;
+    background: var(--float-bg);
+    border: 1px dashed rgba(var(--fg-rgb), 0.65);
+    border-radius: var(--r-xs);
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    white-space: pre;
+    line-height: 1.25;
+    font-family: var(--font-ui);
+    user-select: text;
+}
+
+.text-wrap textarea::placeholder {
+    color: rgba(var(--fg-rgb), 0.45);
 }
 
 /* ←/→ overlay arrows: visible while the mouse is in the window, hidden at the
@@ -126,9 +537,10 @@ body {
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 8px;
-    background: rgba(44, 44, 46, 0.78);
-    color: var(--text);
+    border-radius: var(--r-md);
+    background: var(--float-bg);
+    color: var(--float-text);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.15s ease, background 0.15s ease;
@@ -147,7 +559,7 @@ body:hover .nav-btn:not(:disabled) {
 }
 
 .nav-btn:not(:disabled):hover {
-    background: rgba(85, 85, 92, 0.95);
+    background: var(--float-bg-hover);
 }
 
 .nav-btn:disabled {
@@ -168,8 +580,8 @@ body:hover .nav-btn:not(:disabled) {
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    background: var(--panel);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-raised);
+    border-top: 1px solid rgba(var(--fg-rgb), 0.08);
     overflow-x: auto;
     overflow-y: hidden;
 }
@@ -179,19 +591,26 @@ body:hover .nav-btn:not(:disabled) {
 }
 
 .strip::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.18);
-    border-radius: 3px;
+    background: rgba(var(--fg-rgb), 0.18);
+    border-radius: var(--r-xs);
 }
 
 .strip img {
     flex: 0 0 auto;
     height: 46px;
-    border-radius: 4px;
+    border-radius: var(--r-xs);
     border: 2px solid transparent;
     opacity: 0.55;
     cursor: pointer;
     transition: opacity 0.15s ease, border-color 0.15s ease;
     -webkit-user-drag: none;
+}
+
+/* Locked while the drawing tools are open — the arrows are hidden for the same reason
+   (see syncNav in viewer.js), and a live filmstrip would just be the same trapdoor. */
+.strip.locked {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 .strip img:hover {

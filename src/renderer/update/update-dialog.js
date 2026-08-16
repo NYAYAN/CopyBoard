@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 // Update dialog renderer process
 let updateInfo = null;
 
@@ -16,7 +17,7 @@ window.api.onUpdateInfo((info) => {
         const formattedNotes = formatReleaseNotes(info.releaseNotes);
         notesContent.innerHTML = formattedNotes;
     } else {
-        notesContent.textContent = 'Yeni özellikler ve iyileştirmeler.';
+        notesContent.textContent = t('Yeni özellikler ve iyileştirmeler.');
     }
 
     // If Mac, change update button text
@@ -66,7 +67,7 @@ window.api.onUpdateError((message) => {
 // releaseNotes is untrusted network input, so nothing from it is ever assigned as
 // live HTML — elements are created by name and text via createTextNode.
 function formatReleaseNotes(notes) {
-    if (!notes) return 'Yeni özellikler ve iyileştirmeler.';
+    if (!notes) return t('Yeni özellikler ve iyileştirmeler.');
 
     const ALLOWED = new Set([
         'P', 'BR', 'HR', 'STRONG', 'B', 'EM', 'I', 'CODE', 'PRE',
@@ -147,7 +148,7 @@ window.api.onUpdateDownloaded(() => {
     const progressLabel = document.querySelector('.progress-label');
 
     // Update UI
-    progressLabel.textContent = 'İndirme Tamamlandı!';
+    progressLabel.textContent = t('İndirme Tamamlandı!');
     document.getElementById('progressFill').style.width = '100%';
     document.getElementById('progressPercent').textContent = '100%';
 

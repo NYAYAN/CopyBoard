@@ -17,3 +17,6 @@ CopyBoard-win32-x64
 # Cache
 __pycache__
 *.log
+
+# Native addon build output — rebuilt by scripts/build-native.js on install
+native/*/build

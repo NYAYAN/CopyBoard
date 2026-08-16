@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 const canvas = document.getElementById('screen-canvas');
 const ctx = canvas.getContext('2d');
 const overlayCanvas = document.getElementById('overlay-canvas');
@@ -19,7 +20,7 @@ const state = {
     dpr: window.devicePixelRatio || 1,
     scaleX: null,
     scaleY: null,
-    selectedColor: '#ff0000'
+    selectedColor: '#ff3b30' // matches the first swatch in the palette
 };
 
 // A capture targets a single monitor: when a selection starts on one monitor, the others
@@ -131,7 +132,7 @@ function initDrawCtx() {
 
     drawCtx.lineCap = 'round';
     drawCtx.lineJoin = 'round';
-    drawCtx.strokeStyle = drawCtx.fillStyle = state.selectedColor || '#ff0000';
+    drawCtx.strokeStyle = drawCtx.fillStyle = state.selectedColor || '#ff3b30';
     drawCtx.lineWidth = 3 * scale;
     drawCtx.font = (20 * scale) + "px Arial";
 }
@@ -216,7 +217,7 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
     // click anywhere to copy that pixel's hex.
     state.colorMode = (mode === 'color');
     document.body.classList.toggle('color-mode', state.colorMode);
-    if (loupeHint) loupeHint.textContent = state.colorMode ? 'Tıkla: rengi kopyala' : 'C: rengi kopyala';
+    if (loupeHint) loupeHint.textContent = state.colorMode ? t('Tıkla: rengi kopyala') : 'C: rengi kopyala';
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -601,7 +602,7 @@ function getFinalImage() {
     tctx.drawImage(drawCanvas, r.x * sx, r.y * sy, cropW, cropH, 0, 0, cropW, cropH);
 
     if (isBlankCrop(tctx, cropW, cropH)) {
-        throw new Error('Seçilen alanda ekran görüntüsü yok — kopyalansaydı siyah yapışırdı. ESC ile kapatıp tekrar deneyin.');
+        throw new Error(t('Seçilen alanda ekran görüntüsü yok — kopyalansaydı siyah yapışırdı. ESC ile kapatıp tekrar deneyin.'));
     }
 
     return tc.toDataURL('image/png');
@@ -702,15 +703,17 @@ document.addEventListener('keydown', (e) => {
     // Enter/Escape handler); don't trigger canvas undo, image copy, or window close.
     if (document.activeElement === textInput) return;
     if (e.key === 'Escape') window.api.closeSnipper();
-    if (e.ctrlKey && e.key.toLowerCase() === 'z') undo();
-    if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+    // Cmd on macOS, Ctrl elsewhere — accept either so Cmd+C/Cmd+Z work natively on Mac.
+    const cmdOrCtrl = e.ctrlKey || e.metaKey;
+    if (cmdOrCtrl && e.key.toLowerCase() === 'z') undo();
+    if (cmdOrCtrl && e.key.toLowerCase() === 'c') {
         e.preventDefault(); // Prevent default copy which might fail if nothing focusable
         buttons['btn-copy']();
     }
     // Plain C = color picker: copy the hex code under the loupe crosshair to the
     // clipboard (it also lands in the CopyBoard history). Only while the loupe is
-    // visible, so it can't clash with Ctrl+C image copy during annotation.
-    if (!e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'c' && loupe.style.display === 'block' && loupeHex) {
+    // visible, so it can't clash with Cmd/Ctrl+C image copy during annotation.
+    if (!cmdOrCtrl && !e.altKey && e.key.toLowerCase() === 'c' && loupe.style.display === 'block' && loupeHex) {
         e.preventDefault();
         window.api.copyItem(loupeHex);
         loupeFlashText = '✓ Kopyalandı ' + loupeHex;
@@ -728,12 +731,20 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// The colour chip on the toggle button mirrors the pen, so the current colour is legible
+// with the palette closed — which is how it sits most of the time.
+const currentColorChip = document.getElementById('current-color');
+function showCurrentColor(hex) {
+    if (currentColorChip) currentColorChip.style.background = hex;
+}
+
 document.querySelectorAll('.color-dot').forEach(d => {
     const selectColor = () => {
         document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
         d.classList.add('active');
         drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
         state.selectedColor = d.dataset.color;
+        showCurrentColor(d.dataset.color);
         // Update selection border color immediately if selection exists
         if (state.selectionRect) {
             const r = state.selectionRect;
@@ -745,6 +756,7 @@ document.querySelectorAll('.color-dot').forEach(d => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectColor(); }
     });
 });
+showCurrentColor(document.querySelector('.color-dot.active').dataset.color);
 
 // Color palette toggle
 const colorToggle = document.getElementById('color-toggle');
@@ -843,3 +855,7 @@ function updateLoupe(cx, cy) {
 window.addEventListener('mousemove', (e) => updateLoupe(e.clientX, e.clientY), { passive: true });
 window.addEventListener('mouseup', () => { if (state.selectionRect) hideLoupe(); });
 
+
+// Toolbar labels are drawn in-page — the native tooltip is invisible behind an
+// always-on-top overlay. See ../shared/overlay-tooltip.js.
+window.CopyBoardOverlayTooltip.init('.toolbar');

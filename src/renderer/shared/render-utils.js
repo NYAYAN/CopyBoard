@@ -8,6 +8,12 @@
 // Only the genuinely-shared subset lives here: the 4 row-action icons that were
 // byte-for-byte identical in both files, and the list search predicate. Icons unique
 // to one renderer (history-renderer's check/noteAdd/noteEdit) intentionally stay local.
+// Applied AFTER toLowerCase, so only the lowercase forms need an entry. U+0307 is the
+// combining dot that lowercasing 'İ' leaves behind.
+const FOLD = {
+    '̇': '', 'ı': 'i', 'ş': 's', 'ğ': 'g', 'ç': 'c', 'ö': 'o', 'ü': 'u'
+};
+
 window.CopyBoardShared = {
     // Monochrome inline SVGs (stroke=currentColor) for the shared row actions, so they
     // render consistently across OSes and don't reflow on state swaps (fixed viewBox).
@@ -18,12 +24,32 @@ window.CopyBoardShared = {
         trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
     },
 
-    // List search predicate: an item matches when the (lowercased) query is a substring
-    // of its content OR its note. `query` must already be lowercased by the caller — this
-    // mirrors the previous inline logic exactly (callers lowercased once, before filtering).
+    // Search folding. toLowerCase() alone cannot match Turkish text, and the failures are
+    // not edge cases — they are the most common letters in the language:
+    //
+    //   'İSTANBUL'.toLowerCase()  →  'i̇stanbul'   (i + U+0307, a COMBINING DOT ABOVE)
+    //                                              so "istanbul" never matched it
+    //   'IŞIK'.toLowerCase()      →  'işik'        so "isik" never matched it
+    //   'Güneş'                   →  'güneş'       so "gunes" never matched it
+    //
+    // Both sides go through this, so it is symmetric: "sarki" finds "ŞARKI" and "ŞARKI"
+    // finds "sarki". Deliberately a lowercase + single regex pass rather than a full
+    // NFD normalise — the list re-filters on every keystroke over items that can be
+    // hundreds of KB, and this is the same order of cost as the toLowerCase() it replaces.
+    //
+    // Note it folds toward ASCII rather than applying Turkish casing rules: someone
+    // typing "isik" on a keyboard without ı should still find "ışık", and vice versa.
+    fold(s) {
+        return String(s || '').toLowerCase().replace(/[̇ışğçöü]/g, (ch) => FOLD[ch]);
+    },
+
+    // List search predicate: an item matches when the folded query is a substring of its
+    // folded content OR note. `query` must already be folded by the caller (once per
+    // keystroke, rather than once per item).
     matchesSearch(item, query) {
-        const contentMatch = item.content && item.content.toLowerCase().includes(query);
-        const noteMatch = item.note && item.note.toLowerCase().includes(query);
+        const fold = window.CopyBoardShared.fold;
+        const contentMatch = item.content && fold(item.content).includes(query);
+        const noteMatch = item.note && fold(item.note).includes(query);
         return contentMatch || noteMatch;
     }
 };

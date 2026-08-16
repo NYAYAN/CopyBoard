@@ -138,12 +138,23 @@ export function setupEventListeners() {
         elements.galleryBtn.classList.remove('active');
     };
 
+    // The shortcut group is a disclosure, not a remembered preference: every visit to
+    // Settings starts with it closed, so the panel opens on the settings people came for.
+    const setShortcutsOpen = (open) => {
+        elements.shortcutsBody.hidden = !open;
+        elements.shortcutsToggle.setAttribute('aria-expanded', String(open));
+    };
+    elements.shortcutsToggle.addEventListener('click', () => {
+        setShortcutsOpen(elements.shortcutsBody.hidden);
+    });
+
     elements.settingsBtn.addEventListener('click', () => {
         elements.aboutPanel.classList.add('hidden');
         elements.aboutBtn.classList.remove('active');
         closeGalleryPanel();
         elements.settingsPanel.classList.toggle('hidden');
         elements.settingsBtn.classList.toggle('active');
+        setShortcutsOpen(false);
     });
 
     elements.aboutBtn.addEventListener('click', () => {

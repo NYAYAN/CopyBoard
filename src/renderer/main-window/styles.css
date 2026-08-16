@@ -248,6 +248,59 @@ input[type="checkbox"]:focus-visible {
     font-size: 0.75rem;
 }
 
+/* Collapsible group inside the settings panel (the shortcut rows). Closed by default,
+   and closed again every time Settings is opened — six rows otherwise bury the handful
+   of settings people actually come here for. */
+.settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: var(--text-secondary, #98989f);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.group-header:hover {
+    color: var(--text, #f2f2f7);
+}
+
+.group-chevron {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+    transition: transform 0.2s ease;
+}
+
+.group-header[aria-expanded="true"] .group-chevron {
+    transform: rotate(90deg);
+}
+
+.group-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 19px;
+    /* aligns the rows under the header's label, past the chevron */
+}
+
+.group-body[hidden] {
+    display: none;
+}
+
 /* Shortcut row: the binding plus its own on/off switch. A disabled shortcut keeps its
    value (so turning it back on restores it) but is greyed out and not editable. */
 .shortcut-row {

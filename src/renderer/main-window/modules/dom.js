@@ -6,6 +6,8 @@ export const elements = {
     historyBtn: document.getElementById('history-btn'),
     settingsPanel: document.getElementById('settings-panel'),
     aboutPanel: document.getElementById('about-panel'),
+    shortcutsToggle: document.getElementById('shortcuts-toggle'),
+    shortcutsBody: document.getElementById('shortcuts-body'),
 
     // Screenshot gallery
     galleryBtn: document.getElementById('gallery-btn'),

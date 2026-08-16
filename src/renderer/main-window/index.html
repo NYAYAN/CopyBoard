@@ -150,58 +150,72 @@
                 <label for="incognito-check">Gizli Mod (Panoyu Kaydetme):</label>
                 <input type="checkbox" id="incognito-check" title="Açıkken kopyalanan metinler geçmişe kaydedilmez">
             </div>
-            <div class="setting-item">
-                <label for="shortcut-input">Liste Kısayolu:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="shortcut-input" placeholder="Tuşlara basın..." readonly class="shortcut-input"
-                    title="Kopyalanan verilerin listesini açmak için">
-                    <input type="checkbox" id="shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="image-shortcut-input">Çizim Modu:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekran görüntüsü alıp üzerinde çizim yapmak için">
-                    <input type="checkbox" id="image-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="ocr-shortcut-input">Metin Oku (OCR):</label>
-                <div class="shortcut-row">
-                    <input type="text" id="ocr-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekrandaki yazıları kopyalamak için">
-                    <input type="checkbox" id="ocr-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="color-shortcut-input">Renk Kodu Al:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="color-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekrandaki bir pikselin renk kodunu kopyalamak için">
-                    <input type="checkbox" id="color-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="video-shortcut-input">Video Kayıt:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="video-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Ekranın belirli bir bölgesini videoya kaydetmek için">
-                    <input type="checkbox" id="video-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
-                </div>
-            </div>
-            <div class="setting-item">
-                <label for="paste-shortcut-input">Hızlı Yapıştır:</label>
-                <div class="shortcut-row">
-                    <input type="text" id="paste-shortcut-input" placeholder="Tuşlara basın..." readonly
-                    class="shortcut-input" title="Geçmişten seçip odaktaki alana anında yapıştırmak için. Parola alanlarında macOS klavyeyi o uygulamaya kilitler (Secure Input) ve kısayol çalışmaz — panel'i widget'taki Hızlı Yapıştır düğmesinden veya tepsi menüsünden açın.">
-                    <input type="checkbox" id="paste-shortcut-enabled" class="shortcut-toggle" checked
-                        title="Kısayolu aç/kapa">
+            <!-- Six shortcut rows would otherwise dominate the panel, so they live in a
+                 group that starts collapsed every time Settings opens. -->
+            <div class="settings-group">
+                <button type="button" id="shortcuts-toggle" class="group-header" aria-expanded="false"
+                    aria-controls="shortcuts-body">
+                    <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18l6-6-6-6" />
+                    </svg>
+                    <span>Kısayollar</span>
+                </button>
+                <div id="shortcuts-body" class="group-body" hidden>
+                    <div class="setting-item">
+                        <label for="shortcut-input">Liste Kısayolu:</label>
+                        <div class="shortcut-row">
+                            <input type="text" id="shortcut-input" placeholder="Tuşlara basın..." readonly
+                                class="shortcut-input" title="Kopyalanan verilerin listesini açmak için">
+                            <input type="checkbox" id="shortcut-enabled" class="shortcut-toggle" checked
+                                title="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="image-shortcut-input">Çizim Modu:</label>
+                        <div class="shortcut-row">
+                            <input type="text" id="image-shortcut-input" placeholder="Tuşlara basın..." readonly
+                                class="shortcut-input" title="Ekran görüntüsü alıp üzerinde çizim yapmak için">
+                            <input type="checkbox" id="image-shortcut-enabled" class="shortcut-toggle" checked
+                                title="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="ocr-shortcut-input">Metin Oku (OCR):</label>
+                        <div class="shortcut-row">
+                            <input type="text" id="ocr-shortcut-input" placeholder="Tuşlara basın..." readonly
+                                class="shortcut-input" title="Ekrandaki yazıları kopyalamak için">
+                            <input type="checkbox" id="ocr-shortcut-enabled" class="shortcut-toggle" checked
+                                title="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="color-shortcut-input">Renk Kodu Al:</label>
+                        <div class="shortcut-row">
+                            <input type="text" id="color-shortcut-input" placeholder="Tuşlara basın..." readonly
+                                class="shortcut-input" title="Ekrandaki bir pikselin renk kodunu kopyalamak için">
+                            <input type="checkbox" id="color-shortcut-enabled" class="shortcut-toggle" checked
+                                title="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="video-shortcut-input">Video Kayıt:</label>
+                        <div class="shortcut-row">
+                            <input type="text" id="video-shortcut-input" placeholder="Tuşlara basın..." readonly
+                                class="shortcut-input" title="Ekranın belirli bir bölgesini videoya kaydetmek için">
+                            <input type="checkbox" id="video-shortcut-enabled" class="shortcut-toggle" checked
+                                title="Kısayolu aç/kapa">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="paste-shortcut-input">Hızlı Yapıştır:</label>
+                        <div class="shortcut-row">
+                            <input type="text" id="paste-shortcut-input" placeholder="Tuşlara basın..." readonly
+                                class="shortcut-input" title="Geçmişten seçip odaktaki alana anında yapıştırmak için. Parola alanlarında macOS klavyeyi o uygulamaya kilitler (Secure Input) ve kısayol çalışmaz — panel'i widget'taki Hızlı Yapıştır düğmesinden veya tepsi menüsünden açın.">
+                            <input type="checkbox" id="paste-shortcut-enabled" class="shortcut-toggle" checked
+                                title="Kısayolu aç/kapa">
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="setting-item">

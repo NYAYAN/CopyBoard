@@ -1,3 +1,4 @@
+const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 const canvas = document.getElementById('screen-canvas');
 const ctx = canvas.getContext('2d');
 const overlayCanvas = document.getElementById('overlay-canvas');

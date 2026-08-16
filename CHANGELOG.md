@@ -1,8 +1,41 @@
 # CopyBoard v2.10.0 Release Notes
 
-Görüntüleyicide düzenleme ve zoom, koyu/açık tema, arayüz dili, atanabilir tüm kısayollar ve baştan düzenlenmiş Ayarlar paneli.
+Uygulamanın tamamının yeniden tasarımı; görüntüleyicide düzenleme ve zoom, koyu/açık tema, arayüz dili, atanabilir tüm kısayollar ve baştan düzenlenmiş Ayarlar paneli.
 
-> Dal: `feature/viewer-editing-and-native-hotkeys` — 18 commit, 56 dosya, +4302/−720.
+## 🎨 Arayüzün yeniden tasarımı
+- **Tek tasarım sistemi:** `shared/tokens.css` renk (koyu + açık), tipografi, aralık, köşe, gölge ve hareket ölçeklerini tutuyor; dokuz pencerenin hepsi buna bağlı. Önceden `styles.css` `--accent`, `widget.css` ve `quickpaste.css` `--primary`, `viewer.css` üçüncü bir set, toast dördüncüsünü satır içinde tanımlıyordu — aynı mor beş yerde elle yazılıydı ve dördünde kaymıştı.
+- **Webfont kaldırıldı:** Ana pencere her açılışta `fonts.googleapis.com`'dan Inter çekiyordu; diğer sekiz pencere zaten `system-ui`'ye düşmüştü, yani onu alan tek pencere diğerlerinden farklı görünen pencereydi. Sistem yığını 11–13px'te daha iyi hinting veriyor; o `<link>`'in taşıdığı satır içi `onload` işleyicisinin gitmesi, her pencerenin CSP'sinden `unsafe-inline`'ın düşmesini sağladı.
+- **Kontrast ölçüldü:** Küçük metin iki temada da 4.5:1 üstünde. `--accent-text` var çünkü `--accent` koyu zeminde tam 4.5:1'de — dolgu için yeterli, metin için değil. `--danger-solid` var çünkü `--danger` üzerine beyaz 3.4:1 ölçüyor.
+- **Görünüm modeli:** Hangi görünümün ekranda olduğunu artık kapsayıcıdaki `data-view` söylüyor. Önceden her görünümün görünürlüğü, başka bir görünümün sınıfının **yokluğu** üzerinden `:has()` ile ifade ediliyordu — "hangi görünümdeyim" sorusunun okunabilir tek bir cevabı yoktu.
+- **İçerik türü sınıflandırma:** `shared/content-type.js` bir pano kaydının ne olduğunu belirliyor (link, e-posta, dosya, yol, kod, renk, çok satırlı, düz metin); satır listesi çizen üç pencere de bunu kullanıyor. Renk kodları CSSOM üzerinden gerçek rengiyle çiziliyor — CSP satır içi stil özniteliğini engelliyor, CSSOM'u engellemiyor.
+- **Gün başlıkları ve göreli zaman:** Yapışkan `Bugün / Dün / Bu hafta / Daha eski` başlıkları; satır yalnızca başlığın söylemediğini yazıyor. `Intl.DateTimeFormat` örnekleri arayüz diline göre bir kez kuruluyor — önceden `tr-TR` sabit yazılıydı ve satır başına yeniden kuruluyordu.
+- **Satır kuyruğu sabit genişlikte:** Zaman damgası hover'da yerini eylem düğmelerine bırakıyor, metin kaymıyor. Eski çözüm metnin üzerine kayan opak bir gradyan plakaydı.
+- **Klavye katmanı:** `modules/keyboard.js`. Seçim yeniden çizimlerde **kayıt id'sinden** geri kuruluyor, yani pano güncellemesi imleci başa atmıyor. `aria-activedescendant` liste kutusunda, odak arama kutusunda kalıyor.
+- **Yıkıcı işlemler için tek onay diyaloğu:** `confirmAction()` söz döndürüyor; geçmişi temizleme, favoriden klavyeyle çıkarma ve klavyeyle ekran görüntüsü silme aynı kapıdan geçiyor. Esc dahil her çıkış yolu sözü karara bağlıyor.
+- **Uygulama içi renk seçici:** `<input type="color">` bu pencerede çalışamazdı — pencere odağını kaybedince kendini gizliyor, işletim sisteminin renk paneli ise tam olarak odağı alıyor. `modules/color-picker.js` hazır renkler, ton kaydırıcısı ve hex alanından oluşuyor.
+- **Ayarlar kartları:** Bölümlerin açık/kapalı durumu `localStorage`'da; ilk açılışta hepsi kapalı. Ayar araması başlık ve açıklama metinlerinde eşleşiyor, eşleşen bölümü geçici olarak açıyor (kalıcı duruma yazmadan).
+- **Yakalama katmanları için ortak krom:** `--overlay-*` grubu snipper, kayıt ve OCR'ın araç çubuklarını tek yüzeyde topluyor. Açık temada ayrıca `--overlay-shadow` var: soluk bir çubuğun soluk bir ekran görüntüsü üzerinde kendi kenarı olmadığı için saç teli halka + daha derin gölge.
+- **Ekran üstü ipuçları:** `shared/overlay-tooltip.js`. Yerel `title` ipucu işletim sistemi tarafından normal pencere seviyesinde çiziliyor; bu katmanlar her şeyin üstünde durduğu için ipuçları arkalarında kalıyor ve hiç görünmüyordu.
+
+## 🔎 Arama: Türkçe katlama
+- `toLowerCase()` bu dili eşleştiremiyor ve hatalar istisna değil: `'İSTANBUL'.toLowerCase()` sonucu `'i̇stanbul'` — bir `i` ve ardından **U+0307 COMBINING DOT ABOVE**, dolayısıyla "istanbul" araması onu hiç bulmuyordu. `'IŞIK'` → `'işik'`, yani "isik" kaçırıyordu; "gunes" `Güneş`'i bulmuyordu.
+- Sorgu ve içerik tek bir katlamadan geçiyor: küçült → `U+0307` at → `ı ş ğ ç ö ü` → `i s g c o u`. Eşleşme iki yönlü simetrik.
+- Türkçe küçültme kuralları yerine ASCII'ye katlama bilinçli: `ı` tuşu olmayan bir klavyede "isik" yazan `ışık`ı bulmalı.
+- NFD normalizasyonu yerine tek regex geçişi: liste her tuş vuruşunda yüz KB'larca kaydı yeniden süzüyor; bu, yerini aldığı `toLowerCase()` ile aynı maliyet sınıfında.
+
+## 🐞 Bu sürümde düzelen davranışlar
+- **Çizim kopyalandıktan sonra hayalet kalıyordu:** Kopyalama çizimi yeni bir galeri kaydına gömüyor ama kaynak resim kendi şekillerini tutmaya devam ediyordu — aynı çizim iki yerde. Kopyayı silip komşuya (orijinale) dönünce çizim geri basılıyor, yanlış resim silinmiş gibi görünüyordu. Şekiller dosyalandıkları anda bırakılıyor; artık var olmayan kayıtların çizimleri galeri listesi değiştiğinde temizleniyor.
+- **Çizim modunda navigasyon:** `syncNav()` tek karar noktası — çizim araçları açıkken ok tuşları, ‹ › düğmeleri ve film şeridi kapalı.
+- **Kayıt araç çubuğu açık temada okunmuyordu:** Çubuk sabit koyuyken etiket, hover ve alan renkleri `--fg-rgb` üzerinden gidiyordu; o değişken açık temada siyaha döndüğü için koyu çubuk üzerinde koyu gri yazı oluyordu.
+- **Güncelleme kutusunun başlık ikonu:** Mor gradyan üzerinde `rgba(var(--fg-rgb), 0.2)` kullanıyordu, açık temada çamurlu koyu bir daireye dönüyordu.
+- **Favorilerde çift eylem:** Satır hem yıldız hem çöp kutusu taşıyordu, ikisi de aynı çağrıya bağlıydı.
+- **Snipper'ın gövdesinde yazı tipi tanımlı değildi** — bilgi şeridi dahil her dize varsayılan serif ile çiziliyordu.
+
+## ⚡ Performans
+- Sekme geçişindeki 150ms'lik yapay gecikme kaldırıldı; liste tek haneli milisaniyelerde yeniden çiziliyor.
+- Arama 90ms geciktiriliyor: `maxItems` 500'e çıkabiliyor ve yazma hızında bu, kullanıcının sormayı bitirmediği bir sonuç için saniyede birkaç tam yeniden çizim demekti.
+- Satırlar `DocumentFragment` ile bir kerede ekleniyor; satır metni ve ipucu metni DOM'a girmeden kırpılıyor (kopyalama ve arama her zaman tam içeriği kullanıyor).
+- Widget satır yüksekliği 44px → 38px; sanal listenin aritmetiği `ITEM_HEIGHT` ile birlikte taşındı.
 
 ## 🖼️ Büyük görüntüleyicide düzenleme
 - **Çiz:** Snipper'ın araç seti (kalem, kare, yuvarlak, ok, metin, bulanıklaştır) artık büyük görüntüleyicide de var. Kanvas görüntünün **kendi çözünürlüğünde** tutuluyor: pencere ne kadar küçük olursa olsun kopyalanan resim tam kalitede işaretleniyor. Çizimler piksel değil **vektör işlem listesi** olarak saklanıyor — geri alma bu yüzden ucuz, ve galeride ileri geri gezerken her resim kendi çizimini koruyor.

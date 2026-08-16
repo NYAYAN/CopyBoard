@@ -10,7 +10,14 @@
     --tooltip-bg: rgba(24, 24, 27, 0.98);
     --tooltip-text: #f2f2f7;
     --field-bg: rgba(0, 0, 0, 0.28);
+    --field-bg-focus: rgba(0, 0, 0, 0.4);
     --tab-active-text: #fff;
+    /* Plate behind a row's hover actions — it has to hide the row text sliding under
+       it, so it is opaque and a shade off the row itself. */
+    --row-pill: rgba(28, 28, 32, 0.97);
+    --star: #f1fa8c;
+    --del-hover-bg: rgba(255, 80, 80, 0.28);
+    --del-hover-text: #ff9a9a;
 }
 
 :root[data-theme="light"] {
@@ -24,9 +31,16 @@
     --tooltip-bg: rgba(252, 252, 253, 0.98);
     --tooltip-text: #1c1c22;
     --field-bg: rgba(0, 0, 0, 0.06);
+    --field-bg-focus: rgba(0, 0, 0, 0.1);
     /* The active tab is a 32% wash of the accent — white on that is unreadable once
        the panel is pale, so the label takes the accent itself, darkened. */
     --tab-active-text: #4a2596;
+    --row-pill: rgba(242, 242, 246, 0.98);
+    /* Pastel yellow on a near-white plate is not a star, it is a smudge. This amber
+       clears 3:1 on the plate AND on the darker wash the button takes under hover. */
+    --star: #8a6500;
+    --del-hover-bg: rgba(179, 38, 30, 0.14);
+    --del-hover-text: #b3261e;
 }
 
 body {
@@ -134,7 +148,9 @@ body {
 
 #widget-search:focus {
     border-color: var(--primary);
-    background: rgba(0, 0, 0, 0.4);
+    /* 40% black was a "sink the field" effect built for the dark panel; on the light
+       one it darkened the field under near-black text instead. */
+    background: var(--field-bg-focus);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
@@ -179,7 +195,8 @@ body {
 .history-item-meta {
     flex-shrink: 0;
     font-size: 10px;
-    color: #9a9aae;
+    /* Was a fixed grey that measured 2.6:1 on the light panel — 10px text needs more. */
+    color: var(--text-dim);
 }
 
 .item-star {
@@ -211,7 +228,7 @@ body {
     top: 50%;
     transform: translateY(-50%);
     padding-left: 24px;
-    background: linear-gradient(90deg, transparent, rgba(28, 28, 32, 0.97) 30%, rgba(28, 28, 32, 0.97));
+    background: linear-gradient(90deg, transparent, var(--row-pill) 30%, var(--row-pill));
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.18s ease;
@@ -246,7 +263,7 @@ body {
 
 .action-btn:hover {
     background: rgba(var(--fg-rgb), 0.14);
-    color: #fff;
+    color: var(--text);
     transform: scale(1.08);
 }
 
@@ -256,12 +273,12 @@ body {
 }
 
 .action-btn.star-btn.active {
-    color: #f1fa8c;
+    color: var(--star);
 }
 
 .action-btn.del:hover {
-    background: rgba(255, 80, 80, 0.28);
-    color: #ff9a9a;
+    background: var(--del-hover-bg);
+    color: var(--del-hover-text);
 }
 
 .history-item-text {
@@ -486,7 +503,6 @@ body {
 .widget-menu.open .menu-item:nth-child(3) { animation-delay: 0.11s; }
 .widget-menu.open .menu-item:nth-child(4) { animation-delay: 0.15s; }
 .widget-menu.open .menu-item:nth-child(5) { animation-delay: 0.19s; }
-.widget-menu.open .menu-item:nth-child(6) { animation-delay: 0.23s; }
 
 @keyframes menuItemIn {
     from {
@@ -515,8 +531,10 @@ body {
 .menu-item svg {
     width: 18px;
     height: 18px;
-    stroke: #ffffff;
-    color: #ffffff;
+    /* Follow the button's own colour. Hard white here quietly undid the themed colour
+       set on .menu-item above it, so in light mode these icons were white discs on a
+       near-white button — present, but invisible. */
+    stroke: currentColor;
     pointer-events: none;
 }
 

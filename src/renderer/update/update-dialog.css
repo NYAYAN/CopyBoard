@@ -179,7 +179,9 @@ body {
 }
 
 .notes-content {
-    background: rgba(0, 0, 0, 0.25);
+    /* Sunken panel, not a black one — 25% black behind #1c1c22 release notes made the
+       light theme's notes box a dark plate with dark text on it. */
+    background: rgba(var(--fg-rgb), 0.05);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px;

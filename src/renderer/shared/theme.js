@@ -12,7 +12,7 @@
         document.documentElement.style.colorScheme = theme === 'light' ? 'light' : 'dark';
     };
 
-    applyTheme((window.api && window.api.theme) || 'dark');
+    applyTheme((window.api && window.api.theme && window.api.theme.resolved) || 'dark');
 
     if (window.api && window.api.onThemeChanged) window.api.onThemeChanged(applyTheme);
 })();

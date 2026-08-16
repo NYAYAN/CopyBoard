@@ -7,6 +7,10 @@
         content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline';">
     <style>
         :root {
+            --fg-rgb: 255, 255, 255;
+        }
+
+        :root {
             --bg: #1e1e2e;
             --accent: #8957e5;
             --success: #50fa7b;
@@ -14,6 +18,18 @@
             --error: #ff5555;
             --warning: #f1fa8c;
             --text: #ffffff;
+        }
+
+        /* Light: same tokens, readable on a pale card. Status hues stay recognisable. */
+        :root[data-theme="light"] {
+            --bg: #f7f7f9;
+            --text: #1c1c22;
+            --success: #1a9c4b;
+            --info: #0b7ea8;
+            --error: #d93636;
+            --warning: #9a7b00;
+            --accent: #7a45de;
+            --fg-rgb: 0, 0, 0;
         }
 
         body {
@@ -33,7 +49,7 @@
             padding: 12px 20px;
             border-radius: 12px;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
             display: flex;
             align-items: center;
             gap: 12px;

@@ -1,9 +1,32 @@
 :root {
+    --fg-rgb: 255, 255, 255;
     --bg: #1c1c1e;
     --panel: #2c2c2e;
     --text: #f2f2f7;
     --text-secondary: #98989f;
     --accent: #8957e5;
+    /* Letterbox while drawing: a shade away from the panel so the image pops, not a
+       hard black — in the light theme that read as the screen suddenly going dark. */
+    --stage-dim: #0f0f11;
+    --image-edge: none;
+    --pos-chip-bg: rgba(137, 87, 229, 0.22);
+    --pos-chip-text: #c9aefc;
+}
+
+:root[data-theme="light"] {
+    --bg: #e9e9ec;
+    --panel: #f7f7f9;
+    --text: #1c1c1e;
+    --text-secondary: #63636b;
+    --accent: #7a45de;
+    --fg-rgb: 0, 0, 0;
+    --stage-dim: #d7d7de;
+    /* A pale screenshot on a pale stage has no visible edge — outline it so you can
+       always tell where the image ends. Costs nothing on dark, where the near-black
+       surround already does the framing. */
+    --image-edge: 0 0 0 1px rgba(0, 0, 0, 0.18);
+    --pos-chip-bg: rgba(122, 69, 222, 0.16);
+    --pos-chip-text: #5a2eb0;
 }
 
 * {
@@ -36,7 +59,7 @@ body {
     gap: 10px;
     padding: 0 10px 0 14px;
     background: var(--panel);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
     -webkit-app-region: drag;
 }
 
@@ -56,7 +79,7 @@ body {
     flex: 0 0 auto;
     padding: 2px 7px;
     border-radius: 5px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--fg-rgb), 0.08);
     color: var(--text);
     font-variant-numeric: tabular-nums;
 }
@@ -66,8 +89,8 @@ body {
 }
 
 .ti-pos {
-    background: rgba(137, 87, 229, 0.22);
-    color: #c9aefc;
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
 }
 
 .ti-time {
@@ -100,7 +123,7 @@ body {
     align-items: center;
     gap: 6px;
     border: none;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--fg-rgb), 0.08);
     color: var(--text);
     font-size: 0.72rem;
     font-family: inherit;
@@ -111,7 +134,7 @@ body {
 }
 
 .tb-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(var(--fg-rgb), 0.16);
 }
 
 .tb-btn.close:hover,
@@ -121,6 +144,9 @@ body {
 
 .tb-btn.active {
     background: var(--accent);
+    /* On the accent, not on the surface: the label must not inherit the theme text
+       colour, which is dark in light mode and unreadable on purple. */
+    color: #fff;
 }
 
 .tb-btn.active:hover {
@@ -141,7 +167,7 @@ body {
     gap: 6px;
     padding: 6px 10px;
     background: var(--panel);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
 }
 
 .drawbar[hidden] {
@@ -157,7 +183,7 @@ body {
 .db-sep {
     width: 1px;
     height: 18px;
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(var(--fg-rgb), 0.14);
 }
 
 .db-btn {
@@ -175,7 +201,7 @@ body {
 }
 
 .db-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(var(--fg-rgb), 0.14);
 }
 
 .db-btn.active {
@@ -220,7 +246,7 @@ body {
     width: 18px;
     height: 18px;
     padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(var(--fg-rgb), 0.25);
     border-radius: 50%;
     cursor: pointer;
 }
@@ -254,6 +280,7 @@ body {
 }
 
 .stage img {
+    box-shadow: var(--image-edge);
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
@@ -288,7 +315,7 @@ body {
    the letterbox around the image drops to near-black, and the image edge gets an
    accent ring with corner brackets. */
 .stage.drawing {
-    background: #0a0a0b;
+    background: var(--stage-dim);
 }
 
 .stage.drawing #viewer-canvas {
@@ -358,7 +385,7 @@ body {
     gap: 6px;
     padding: 5px;
     background: rgba(28, 28, 30, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(var(--fg-rgb), 0.12);
     border-radius: 8px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
@@ -371,7 +398,7 @@ body {
     border: none;
     border-radius: 6px;
     padding: 5px 10px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--fg-rgb), 0.1);
     color: var(--text);
     font-family: inherit;
     font-size: 0.72rem;
@@ -381,7 +408,7 @@ body {
 }
 
 .cb-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(var(--fg-rgb), 0.2);
 }
 
 .cb-btn.primary {
@@ -407,7 +434,7 @@ body {
     min-width: 60px;
     padding: 1px 4px;
     background: rgba(0, 0, 0, 0.4);
-    border: 1px dashed rgba(255, 255, 255, 0.65);
+    border: 1px dashed rgba(var(--fg-rgb), 0.65);
     border-radius: 4px;
     outline: none;
     resize: none;
@@ -419,7 +446,7 @@ body {
 }
 
 .text-wrap textarea::placeholder {
-    color: rgba(255, 255, 255, 0.45);
+    color: rgba(var(--fg-rgb), 0.45);
 }
 
 /* ←/→ overlay arrows: visible while the mouse is in the window, hidden at the
@@ -477,7 +504,7 @@ body:hover .nav-btn:not(:disabled) {
     gap: 6px;
     padding: 0 10px;
     background: var(--panel);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(var(--fg-rgb), 0.08);
     overflow-x: auto;
     overflow-y: hidden;
 }
@@ -487,7 +514,7 @@ body:hover .nav-btn:not(:disabled) {
 }
 
 .strip::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(var(--fg-rgb), 0.18);
     border-radius: 3px;
 }
 

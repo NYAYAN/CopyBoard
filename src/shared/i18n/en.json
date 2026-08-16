@@ -96,5 +96,6 @@
   "Bu sürümde güncelleme kontrolü yapılamıyor (paketlenmemiş uygulama).": "Update checks are unavailable in this build (app is not packaged).",
   "Tema:": "Theme:",
   "Koyu": "Dark",
-  "Açık": "Light"
+  "Açık": "Light",
+  "Sistem": "System"
 }

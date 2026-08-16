@@ -1,7 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Fetched synchronously so the dictionary is in hand before the page's own scripts run
+// (shared/i18n.js translates the markup in its first pass). A sandboxed preload can't
+// read the JSON itself, hence the round trip; the payload is a few KB of strings.
+let i18n = { lang: 'tr', dict: {} };
+try { i18n = ipcRenderer.sendSync('i18n-get') || i18n; } catch (e) { /* main not ready — stay Turkish */ }
+
 contextBridge.exposeInMainWorld('api', {
     platform: process.platform,
+    i18n,
+    setLanguage: (lang) => ipcRenderer.send('set-language', lang),
     getHistory: () => ipcRenderer.invoke('get-history'),
     getSettings: () => ipcRenderer.invoke('get-settings'),
     getAudioSettings: () => ipcRenderer.invoke('get-audio-settings'),

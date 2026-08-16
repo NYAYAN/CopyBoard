@@ -215,6 +215,9 @@ export function setupEventListeners() {
     });
 
     // Inputs
+    // Main reloads every window (and rebuilds the tray) — each surface paints its own
+    // strings at load, so there's no live re-render path to keep correct.
+    elements.languageSelect.addEventListener('change', (e) => window.api.setLanguage(e.target.value));
     elements.autostartCheck.addEventListener('change', (e) => window.api.setAutoStart(e.target.checked));
     elements.incognitoCheck.addEventListener('change', (e) => window.api.setClipboardPaused(e.target.checked));
     elements.widgetCheck.addEventListener('change', (e) => {

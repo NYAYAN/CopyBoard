@@ -1,0 +1,28 @@
+/* Label for a capture overlay's toolbar button — see shared/overlay-tooltip.js for why
+   the native tooltip cannot work in these windows.
+
+   Themed with the toolbars it belongs to, and carrying the same --overlay-shadow edge:
+   over a pale screenshot a pale tooltip has no boundary of its own. */
+.tool-tip {
+    position: fixed;
+    z-index: 10001;
+    padding: 5px 9px;
+    border: 1px solid var(--overlay-border);
+    border-radius: var(--r-sm);
+    background: var(--overlay-surface);
+    box-shadow: var(--overlay-shadow);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--overlay-text);
+    font-family: var(--font-ui);
+    font-size: var(--fs-sm);
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.tool-tip.visible {
+    opacity: 1;
+}

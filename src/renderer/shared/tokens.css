@@ -1,0 +1,278 @@
+/* CopyBoard design tokens — the single source of truth for colour, type, spacing,
+   radius, elevation and motion across every window.
+ *
+ * Before this file each window carried its own palette: styles.css had --accent,
+ * widget.css and quickpaste.css had --primary, viewer.css had its own again, and the
+ * toast declared a fourth set inline. The same violet was written out by hand in five
+ * places and drifted in four of them. Everything now points here, so re-skinning the
+ * app — or fixing one contrast miss — is one edit rather than nine.
+ *
+ * Load order matters: this must come BEFORE a window's own stylesheet, so a window can
+ * still override a token for a genuinely local reason (the snipper overlay, say, which
+ * is drawn over arbitrary desktop content and can't use the app background).
+ *
+ * Dark is the default and light re-points the same names, so any rule written against
+ * a token themes itself. That is why the translucent washes go through --fg-rgb /
+ * --bg-rgb instead of literal rgba(255,255,255,…): the channel flips with the theme.
+ */
+
+:root {
+    /* ── Type ──────────────────────────────────────────────────────────────────
+       The system stack, not a webfont. The main window used to pull Inter off
+       fonts.googleapis.com at load — a network round trip on every launch, and the one
+       window that got it looked different from the other eight, which had already
+       fallen back to system-ui. Native text also hints better at the 11–13px this UI
+       actually renders at. */
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI',
+        system-ui, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', 'Cascadia Mono', Menlo,
+        Consolas, monospace;
+
+    /* A utility panel is a fixed-size surface, so the scale is in px: rem fractions
+       (0.72rem, 0.78rem, 0.85rem) landed on half-pixels and rendered inconsistently. */
+    --fs-2xs: 10px;
+    /* keycaps, group headings */
+    --fs-xs: 11px;
+    /* timestamps, descriptions */
+    --fs-sm: 12px;
+    /* labels, controls */
+    --fs-md: 13px;
+    /* row content — the primary reading size */
+    --fs-lg: 15px;
+    /* view titles */
+
+    --fw-regular: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+
+    --lh-tight: 1.25;
+    --lh-normal: 1.45;
+
+    /* ── Space ─────────────────────────────────────────────────────────────────
+       A 2px-based scale. Everything in the UI should land on one of these. */
+    --sp-1: 2px;
+    --sp-2: 4px;
+    --sp-3: 6px;
+    --sp-4: 8px;
+    --sp-5: 12px;
+    --sp-6: 16px;
+    --sp-7: 20px;
+    --sp-8: 24px;
+
+    /* ── Radius ────────────────────────────────────────────────────────────────
+       Nested corners need to differ or they read as a mistake: a control inside a card
+       takes the next size down. */
+    --r-xs: 4px;
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
+    --r-xl: 16px;
+    --r-full: 999px;
+
+    /* ── Motion ────────────────────────────────────────────────────────────────
+       Decelerating curves only. Anything that overshoots reads as a toy in a tool the
+       user opens fifty times a day. */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --dur-fast: 110ms;
+    --dur-med: 180ms;
+    --dur-slow: 260ms;
+
+    /* ── Colour: dark ──────────────────────────────────────────────────────────
+       Three background planes rather than one flat fill: the window, the chrome that
+       frames it, and whatever floats above both. Depth comes from the plane plus a
+       hairline border — not from drop shadows, which bleed into the transparent corners
+       of these frameless windows. */
+    --fg-rgb: 255, 255, 255;
+    --bg-rgb: 15, 15, 18;
+
+    --bg-base: #0f0f12;
+    /* the window itself */
+    --bg-raised: #16161b;
+    /* header, footer, cards, group bodies */
+    --bg-overlay: #1c1c22;
+    /* modals, popovers, tooltips */
+    --bg-inset: rgba(var(--fg-rgb), 0.045);
+    /* text fields, wells */
+
+    --surface-hover: rgba(var(--fg-rgb), 0.055);
+    --surface-active: rgba(var(--fg-rgb), 0.09);
+
+    --border-subtle: rgba(var(--fg-rgb), 0.06);
+    /* row rules, dividers */
+    --border-default: rgba(var(--fg-rgb), 0.1);
+    /* fields, buttons */
+    --border-strong: rgba(var(--fg-rgb), 0.18);
+    /* hover on a bordered control */
+
+    --text-primary: #ededf0;
+    --text-secondary: #a1a1aa;
+    /* Small text still has to clear 4.5:1. #71717a — the obvious next step down — sits
+       at 4.3:1 on --bg-base, which is exactly where every timestamp in the list lives. */
+    --text-tertiary: #85858e;
+    --text-on-accent: #ffffff;
+
+    --accent: #8b5cf6;
+    --accent-hover: #a78bfa;
+    /* --accent measures 4.5:1 on --bg-base: fine for a fill or an icon, short of it for
+       a run of text. Accent-coloured LABELS take this lighter step instead (7:1). */
+    --accent-text: #a78bfa;
+    --accent-soft: rgba(139, 92, 246, 0.16);
+    --accent-ring: rgba(139, 92, 246, 0.4);
+
+    --success: #3fce6d;
+    --success-soft: rgba(63, 206, 109, 0.14);
+    /* Neutral "here is something you asked for" — distinct from the accent, which means
+       "this is selected/active". Used by the toast. */
+    --info: #55c2f0;
+    --info-soft: rgba(85, 194, 240, 0.14);
+    --danger: #f2545b;
+    /* For a filled destructive button, where the label is white. --danger is tuned to read
+       AS text on the window background; white on it measures 3.4:1, under the 4.5:1 that
+       12px button text needs. This is the same hue taken down to 5:1. */
+    --danger-solid: #d32f2f;
+    --danger-soft: rgba(242, 84, 91, 0.13);
+    --danger-soft-strong: rgba(242, 84, 91, 0.22);
+    --warning: #f0c04a;
+    --warning-soft: rgba(240, 192, 74, 0.15);
+
+    /* ── Overlay chrome ────────────────────────────────────────────────────────
+       The snipper, the recorder and the OCR picker are drawn OVER whatever happens to be
+       on screen, so they have no window background to borrow — there isn't one. Their
+       toolbars follow the theme like everything else (macOS's own screenshot bar does the
+       same), which is why these are real tokens rather than literals in three stylesheets.
+
+       What the theme cannot decide for them is the EDGE. A dark bar over a screenshot is
+       self-delineating; a pale one over a pale screenshot is not, so the light theme pays
+       for the switch with a hairline ring and a deeper drop shadow — that is what
+       --overlay-shadow carries, and why it isn't just --shadow-lg. */
+    --overlay-surface: rgba(24, 24, 27, 0.92);
+    --overlay-hover: rgba(255, 255, 255, 0.12);
+    --overlay-active: rgba(255, 255, 255, 0.18);
+    --overlay-border: rgba(255, 255, 255, 0.12);
+    --overlay-text: #f2f2f7;
+    --overlay-text-dim: rgba(255, 255, 255, 0.62);
+    --overlay-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+
+    --scrollbar-thumb: rgba(var(--fg-rgb), 0.14);
+    --scrollbar-thumb-hover: rgba(var(--fg-rgb), 0.26);
+}
+
+/* ── Colour: light ─────────────────────────────────────────────────────────────
+   Not the dark palette inverted. The planes reverse (the window is the tinted one and
+   raised chrome goes white), and the accent darkens: a violet tuned to glow on
+   near-black measures 2.5:1 on near-white. */
+:root[data-theme="light"] {
+    --fg-rgb: 0, 0, 0;
+    --bg-rgb: 255, 255, 255;
+
+    --bg-base: #f7f7f9;
+    --bg-raised: #ffffff;
+    --bg-overlay: #ffffff;
+    --bg-inset: rgba(var(--fg-rgb), 0.045);
+
+    --surface-hover: rgba(var(--fg-rgb), 0.045);
+    --surface-active: rgba(var(--fg-rgb), 0.075);
+
+    --border-subtle: rgba(var(--fg-rgb), 0.07);
+    --border-default: rgba(var(--fg-rgb), 0.11);
+    --border-strong: rgba(var(--fg-rgb), 0.2);
+
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    /* 5.2:1 on --bg-base. The dark theme's tertiary would land at 2.9:1 here. */
+    --text-tertiary: #6f6f78;
+    --text-on-accent: #ffffff;
+
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    /* Dark enough to serve as text on its own (5.5:1), so labels and fills agree. */
+    --accent-text: #6d28d9;
+    --accent-soft: rgba(124, 58, 237, 0.11);
+    --accent-ring: rgba(124, 58, 237, 0.3);
+
+    --success: #128a3e;
+    --success-soft: rgba(18, 138, 62, 0.12);
+    --info: #0b6f96;
+    --info-soft: rgba(11, 111, 150, 0.12);
+    --danger: #b3261e;
+    /* Already dark enough to carry white text (6.4:1), so the solid variant is the same. */
+    --danger-solid: #b3261e;
+    --danger-soft: rgba(179, 38, 30, 0.09);
+    --danger-soft-strong: rgba(179, 38, 30, 0.17);
+    /* The dark theme's pale gold measures 1.4:1 here — a favourited star would be blank. */
+    --warning: #8a6500;
+    --warning-soft: rgba(138, 101, 0, 0.13);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.16);
+
+    /* Capture chrome, light. Deliberately not the app's --bg-raised: this bar is judged
+       against a screenshot, not against a window, so it stays a touch more opaque and
+       carries its own edge (see --overlay-shadow — a hairline ring plus a drop heavier
+       than --shadow-lg, because white-on-white has no boundary of its own). */
+    --overlay-surface: rgba(252, 252, 253, 0.94);
+    --overlay-hover: rgba(0, 0, 0, 0.07);
+    --overlay-active: rgba(0, 0, 0, 0.12);
+    --overlay-border: rgba(0, 0, 0, 0.14);
+    --overlay-text: #1c1c22;
+    --overlay-text-dim: rgba(0, 0, 0, 0.58);
+    --overlay-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 10px 32px rgba(0, 0, 0, 0.24);
+}
+
+/* ── Primitives shared by every window ─────────────────────────────────────── */
+
+/* Focus ring. One definition, so keyboard focus looks the same everywhere and can
+   never be styled away by accident. :focus-visible only — a mouse click on a row
+   shouldn't paint a ring. */
+:where(button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-xs);
+}
+
+/* Thin overlay scrollbars. The default Chromium bar is 15px of opaque grey and looks
+   like a browser inside what is supposed to be a native panel. */
+:where(*)::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+:where(*)::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+:where(*)::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: 3px solid transparent;
+    border-radius: var(--r-full);
+    background-clip: padding-box;
+}
+
+:where(*)::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+}
+
+:where(*)::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Motion is decoration here — every animation in the app has an instant end state that
+   is equally usable, so honouring the OS preference costs nothing. */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

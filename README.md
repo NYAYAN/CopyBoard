@@ -31,23 +31,29 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
   - 🌫️ **Blur (Bulanıklaştırma):** Hassas bilgileri (şifre, kimlik vb.) sansürleyin.
 - **Kopyalama & Kaydetme:** Görüntüyü direkt panoya kopyalayın (`Ctrl+C`) veya PNG olarak kaydedin.
 
-### 🎥 4. Video Ekran Kaydı
+### 📜 4. Kaydırmalı Yakalama (Scrolling Capture)
+- **Ekrana Sığmayanı Yakalayın:** Uzun bir web sayfasını, sohbeti veya belgeyi tek bir görüntüde birleştirin.
+- **Nasıl Çalışır:** Alanı seçip **Başlat**'a basın, ardından uygulamayı her zamanki gibi kendiniz kaydırın. CopyBoard kareleri örtüşmelerinden birleştirir; kaydırmayı bırakınca kendiliğinden biter.
+- **Yapışkan Başlık/Altlık:** Sayfayla birlikte kaymayan sabit başlık ve araç çubukları tanınır — sonuçta tekrar tekrar basılmaz, bir kez görünürler.
+- **Dürüst Uyarı:** Bir kare güvenle eşleşmezse birleştirilmez; sonunda kaç karenin atlandığı size söylenir. Çok hızlı kaydırırsanız uyarı çıkar.
+
+### 🎥 5. Video Ekran Kaydı
 - **Esnek Kayıt:** İster tam ekran, isterseniz sadece seçtiğiniz belirli bir alanın videosunu çekin.
 - **Format:** WebM formatında yüksek kaliteli kayıtlar alın.
 - **Kalite Seçenekleri:** Yüksek, Orta veya Düşük kalite ayarları.
 
-### 🔍 5. Gelişmiş OCR (Optik Karakter Tanıma)
+### 🔍 6. Gelişmiş OCR (Optik Karakter Tanıma)
 - **Metin Tanıma:** Ekranda gördüğünüz herhangi bir yazıyı (resim, PDF, video karesi vb.) seçerek anında metne dönüştürün.
 - **Dil Desteği:** Türkçe ve İngilizce metinleri yüksek doğrulukla tanır.
 - **Otomatik Kopyalama:** Tanınan metin otomatik olarak panoya kopyalanır.
 
-### 🔄 6. Otomatik Güncelleme
+### 🔄 7. Otomatik Güncelleme
 - Uygulama başlangıcında otomatik güncelleme kontrolü.
 - Yeni sürümlerin arka planda indirilmesi ve tek tıkla kurulumu.
 
-### 🌟 7. Yüzen Kısayol Aracı (Floating Widget)
+### 🌟 8. Yüzen Kısayol Aracı (Floating Widget)
 - **Hızlı Erişim:** Masaüstünüzde her an elinizin altında duran, dilediğiniz köşeye yaslanabilen akıllı yüzen araç.
-- **Tek Tıkla Araçlar:** Pano, Ekran Yakalama, OCR ve Video Kaydı araçlarına klavye kısayolu kullanmadan anında ulaşın.
+- **Tek Tıkla Araçlar:** Pano, Ekran Yakalama, OCR, Kaydırmalı Yakalama ve Video Kaydı araçlarına klavye kısayolu kullanmadan anında ulaşın.
 - **Nasıl Açılır?:** Uygulamanın ayarlar menüsüne girip "Yüzen Araç (Widget)" seçeneğini işaretlemeniz yeterlidir. Ardından fare ile dilediğiniz yere sürükleyebilirsiniz.
 
 ---
@@ -60,6 +66,8 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 | `Alt / Option + 9` | **Ekran Görüntüsü** | Ekran alıntısı aracını başlatır. |
 | `Alt / Option + 8` | **Video Kaydı** | Video kaydı arayüzünü açar. |
 | `Alt / Option + 2` | **OCR (Metin Oku)** | Ekrandan metin okuma aracını başlatır. |
+| `Alt / Option + 3` | **Renk Kodu Al** | Ekrandaki bir pikselin renk kodunu kopyalar. |
+| `Alt / Option + 4` | **Kaydırmalı Yakalama** | Uzun sayfaları kaydırarak tek görüntüde birleştirir. |
 | `Ctrl + C` | **Kopyala** | (Snipping Modunda) Seçili alanı panoya kopyalar. |
 | `ESC` | **Çıkış** | Aktif araçtan veya pencereden çıkar. |
 
@@ -111,6 +119,7 @@ src/
 │   ├── snipper/       # Ekran Alıntısı Aracı
 │   ├── ocr/           # OCR Aracı
 │   ├── recorder/      # Video Kaydedici
+│   ├── scroller/      # Kaydırmalı Yakalama (+ birleştirme algoritması)
 │   ├── update/        # Güncelleme Penceresi
 │   ├── toast/         # Bildirim (Toast)
 │   └── shared/        # Ortak Varlıklar (cursor vb.)

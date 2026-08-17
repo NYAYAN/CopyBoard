@@ -51,12 +51,13 @@ import { keycapFor, applyLayoutMap } from './modules/accelerator.js';
     elements.imageShortcutInput.value = format(settings.globalShortcutImage);
     elements.ocrShortcutInput.value = format(settings.globalShortcutOcr);
     elements.colorShortcutInput.value = format(settings.globalShortcutColor);
+    elements.scrollShortcutInput.value = format(settings.globalShortcutScroll);
     elements.videoShortcutInput.value = format(settings.globalShortcutVideo);
     elements.pasteShortcutInput.value = format(settings.globalShortcutPaste);
     if (settings.videoQuality) elements.videoQualitySelect.value = settings.videoQuality;
 
     const enabled = settings.shortcutsEnabled || {};
-    ['list', 'draw', 'ocr', 'color', 'video', 'paste'].forEach(k => applyShortcutEnabled(k, enabled[k] !== false));
+    ['list', 'draw', 'ocr', 'color', 'scroll', 'video', 'paste'].forEach(k => applyShortcutEnabled(k, enabled[k] !== false));
 
     // The status bar spells out the delete shortcut, and its modifier differs per platform.
     document.querySelectorAll('.kbd-mod').forEach(el => { el.textContent = isMac ? '⌘' : 'Ctrl'; });

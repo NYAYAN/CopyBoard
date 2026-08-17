@@ -1,4 +1,4 @@
-const { ipcMain, clipboard, dialog, BrowserWindow, app, nativeImage, systemPreferences, screen } = require('electron');
+const { ipcMain, clipboard, dialog, BrowserWindow, app, nativeImage, systemPreferences, screen, globalShortcut } = require('electron');
 const { t } = require('../i18n');
 const fs = require('fs');
 const path = require('path');
@@ -128,6 +128,21 @@ function getOcrWorker() {
     return ocrWorkerPromise;
 }
 
+// --- Scroll capture: Escape while the overlay is click-through ---
+// Once a scroll capture starts, the overlay stops taking mouse events so the user can
+// scroll the app underneath it — and the first click into that app takes keyboard focus
+// with it, which puts Escape out of reach of the window's own before-input-event handler.
+// A global Escape is registered for exactly the length of the scroll phase so cancelling
+// always works. It is invasive (Escape belongs to whatever app is in front), so every path
+// out of the scroll phase — finish, cancel, window closed, quit — releases it.
+let scrollEscapeOwner = null;
+
+function releaseScrollEscape() {
+    if (!scrollEscapeOwner) return;
+    scrollEscapeOwner = null;
+    try { globalShortcut.unregister('Escape'); } catch (err) { console.error('Escape release failed:', err); }
+}
+
 // Recording chunks stream to disk through ONE WriteStream — the old
 // fs.appendFileSync-per-chunk reopened the file and blocked the main process
 // (every window + the clipboard watcher) on each write.
@@ -249,12 +264,16 @@ function registerCaptureHandlers() {
                 // So we should NOT force setIgnoreMouseEvents(false) for video.
                 if (state.lastMode !== 'video') {
                     const focusInterval = setInterval(() => {
-                        if (win && !win.isDestroyed() && win.isVisible()) {
-                            win.setIgnoreMouseEvents(false);
-                            win.moveTop();
-                        } else {
+                        if (!win || win.isDestroyed() || !win.isVisible()) {
                             clearInterval(focusInterval);
+                            return;
                         }
+                        // Once a scroll capture is running the overlay deliberately passes
+                        // mouse events to the app underneath so the user can scroll it.
+                        // Re-asserting them here would kill scrolling one second in — the
+                        // window must stay on top, but it must not take the mouse back.
+                        if (!win.__clickThrough) win.setIgnoreMouseEvents(false);
+                        win.moveTop();
                     }, 1000);
                 }
             }
@@ -299,8 +318,10 @@ function registerCaptureHandlers() {
         }
     });
 
-    ipcMain.on('snip-save-image', async (e, d) => {
-        let win = BrowserWindow.fromWebContents(e.sender);
+    // Ask where to put the PNG and write it. Shared by the data-URL channel the snipper uses
+    // and the binary one below, whose images are far too big to move as base64.
+    async function saveImage(sender, buffer, namePrefix) {
+        let win = BrowserWindow.fromWebContents(sender);
         if (!win && state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;
 
         const parent = process.platform === 'darwin' ? null : win;
@@ -311,7 +332,7 @@ function registerCaptureHandlers() {
         try {
             const opts = {
                 title: t('Kaydet'),
-                defaultPath: path.join(app.getPath('pictures'), `snip_${Date.now()}.png`),
+                defaultPath: path.join(app.getPath('pictures'), `${namePrefix}_${Date.now()}.png`),
                 filters: [{ name: 'Images', extensions: ['png'] }]
             };
             const result = parent && !parent.isDestroyed()
@@ -324,7 +345,6 @@ function registerCaptureHandlers() {
 
         if (p) {
             try {
-                const buffer = Buffer.from(d.split(',')[1], 'base64');
                 fs.writeFileSync(p, buffer);
                 // Also keep it in the screenshot gallery (never let a gallery error break the save).
                 try { addScreenshot(buffer); } catch (galleryErr) { console.error('Gallery save failed:', galleryErr); }
@@ -337,7 +357,62 @@ function registerCaptureHandlers() {
             if (process.platform === 'darwin' && win && !win.isDestroyed()) win.setAlwaysOnTop(true, 'pop-up-menu');
             showToast('Kaydetme iptal edildi.', 'info');
         }
+    }
+
+    ipcMain.on('snip-save-image', (e, d) => {
+        saveImage(e.sender, Buffer.from(d.split(',')[1], 'base64'), 'snip');
     });
+
+    // --- Scroll capture ---
+    // A stitched page runs to tens of megabytes, so it travels as a binary PNG rather than
+    // through the data-URL channels above: base64 would inflate it by a third, and both the
+    // encode and the decode are a string copy of the whole image on the main thread.
+    ipcMain.on('snip-save-buffer', (e, arrayBuffer) => {
+        saveImage(e.sender, Buffer.from(arrayBuffer), 'scroll');
+    });
+
+    ipcMain.on('snip-copy-buffer', (e, arrayBuffer) => {
+        try {
+            const buffer = Buffer.from(arrayBuffer);
+            // scaleFactor 1.0: the renderer already worked in physical pixels, exactly as
+            // snip-copy-v2 does, so the pasted image is the size the HUD reported.
+            clipboard.writeImage(nativeImage.createFromBuffer(buffer, { scaleFactor: 1.0 }));
+            try { addScreenshot(buffer); } catch (galleryErr) { console.error('Gallery save failed:', galleryErr); }
+            showToast('Resim Kopyalandı.', 'success');
+        } catch (err) {
+            showToast('Kopyalama Hatası: ' + err.message, 'error');
+        } finally {
+            closeAllCaptureWindows();
+        }
+    });
+
+    // The scroll phase is starting: this monitor's overlay is the only one that stays.
+    ipcMain.on('scroll-begin', (e) => {
+        const win = BrowserWindow.fromWebContents(e.sender);
+        if (!win || win.isDestroyed()) return;
+
+        // A scroll capture follows one window on one monitor; the other monitors' overlays
+        // would just be dimmed panes in the way (and their Escape handler is redundant).
+        closeAllCaptureWindows(win);
+
+        // Tells snip-ready's macOS focus loop to stop re-asserting mouse events on this
+        // window — from here on the renderer owns that decision.
+        win.__clickThrough = true;
+
+        if (scrollEscapeOwner) return; // already armed — never stack registrations
+        try {
+            if (globalShortcut.register('Escape', () => closeAllCaptureWindows())) {
+                scrollEscapeOwner = win;
+                win.once('closed', releaseScrollEscape);
+            }
+        } catch (err) {
+            // Not fatal: the overlay's own Escape handler still works whenever it has focus,
+            // and the toolbar's cancel button always does.
+            console.error('Scroll Escape registration failed:', err);
+        }
+    });
+
+    ipcMain.on('scroll-end', () => releaseScrollEscape());
 
     // Video chunks arrive every second and used to be written with fs.appendFileSync on
     // the MAIN process — at high quality that's a multi-MB synchronous disk write that
@@ -465,11 +540,13 @@ function registerCaptureHandlers() {
         }
     });
 
-    // Release the cached OCR worker and any open video stream on quit (best-effort)
+    // Release the cached OCR worker, any open video stream and a live scroll capture's
+    // global Escape on quit (best-effort)
     app.on('before-quit', () => {
         cancelOcrRelease();
         endVideoStream(() => { });
         releaseOcrWorker();
+        releaseScrollEscape();
     });
 }
 

@@ -12,6 +12,7 @@
     "dist": "electron-builder",
     "test": "node --test \"test/**/*.test.mjs\"",
     "test:electron": "electron test/electron-accelerator-check.js",
+    "test:scroller": "electron test/electron-scroller-check.js",
     "postinstall": "node scripts/build-native.js",
     "build:native": "node scripts/build-native.js"
   },

@@ -60,6 +60,7 @@ export const elements = {
     imageShortcutInput: $('image-shortcut-input'),
     ocrShortcutInput: $('ocr-shortcut-input'),
     colorShortcutInput: $('color-shortcut-input'),
+    scrollShortcutInput: $('scroll-shortcut-input'),
     videoShortcutInput: $('video-shortcut-input'),
     pasteShortcutInput: $('paste-shortcut-input'),
     shortcutInputsByKey: {
@@ -67,6 +68,7 @@ export const elements = {
         draw: $('image-shortcut-input'),
         ocr: $('ocr-shortcut-input'),
         color: $('color-shortcut-input'),
+        scroll: $('scroll-shortcut-input'),
         video: $('video-shortcut-input'),
         paste: $('paste-shortcut-input')
     },
@@ -75,6 +77,7 @@ export const elements = {
         draw: $('image-shortcut-enabled'),
         ocr: $('ocr-shortcut-enabled'),
         color: $('color-shortcut-enabled'),
+        scroll: $('scroll-shortcut-enabled'),
         video: $('video-shortcut-enabled'),
         paste: $('paste-shortcut-enabled')
     },

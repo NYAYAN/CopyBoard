@@ -5,6 +5,7 @@ const btnSnippet = document.getElementById('btn-snippet');
 const btnScreenshot = document.getElementById('btn-screenshot');
 const btnOcr = document.getElementById('btn-ocr');
 const btnVideo = document.getElementById('btn-video');
+const btnScroll = document.getElementById('btn-scroll');
 const btnOpenMain = document.getElementById('btn-open-main');
 const historyPanel = document.getElementById('history-panel');
 const historyItemsContainer = document.getElementById('history-items');
@@ -614,6 +615,7 @@ btnSnippet.addEventListener('click', async () => {
 btnScreenshot.addEventListener('click', () => window.api.widgetAction('capture-draw'));
 btnOcr.addEventListener('click', () => window.api.widgetAction('capture-ocr'));
 btnVideo.addEventListener('click', () => window.api.widgetAction('capture-video'));
+btnScroll.addEventListener('click', () => window.api.widgetAction('capture-scroll'));
 btnOpenMain.addEventListener('click', () => {
     window.api.widgetAction('open-list');
     closeAll();

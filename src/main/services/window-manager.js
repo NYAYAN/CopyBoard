@@ -120,30 +120,31 @@ function createCapture(type = 'draw', display = null) {
         }
     });
 
-    // The video recorder captures the LIVE desktop via getUserMedia, so this fullscreen
-    // overlay window — its pulsing selection outline, toolbar and timer — would otherwise
-    // be filmed into the recording. Exclude it from all screen capture (including our own
-    // getUserMedia) while keeping it visible to the user: WDA_EXCLUDEFROMCAPTURE on Windows,
-    // NSWindowSharingNone on macOS. Snipper/OCR annotate a pre-captured PNG, so they don't
-    // need this.
-    if (type === 'video') {
+    // The video recorder and the scroll capture both read the LIVE desktop via getUserMedia,
+    // so this fullscreen overlay window — its selection outline, toolbar and HUD — would
+    // otherwise be filmed into the result. Exclude it from all screen capture (including our
+    // own getUserMedia) while keeping it visible to the user: WDA_EXCLUDEFROMCAPTURE on
+    // Windows, NSWindowSharingNone on macOS. It is set at creation rather than when capture
+    // starts so there is no window in which a frame can catch the overlay. Snipper/OCR
+    // annotate a pre-captured PNG, so they don't need this.
+    if (type === 'video' || type === 'scroll') {
         try { win.setContentProtection(true); } catch (e) { console.error('setContentProtection failed:', e); }
+    }
 
-        // macOS system-audio capture. Chromium's getUserMedia desktop-loopback trick (used on
-        // Windows) is unavailable on macOS, so the recorder falls back to getDisplayMedia there.
-        // This handler fulfils that request with a screen source + loopback audio; the renderer
-        // discards the video track and keeps only the audio. Loopback audio works only on
-        // supported macOS versions — if unavailable the stream has no audio track and the
-        // recorder warns the user (about needing a virtual audio device) and records without it.
-        if (process.platform === 'darwin') {
-            try {
-                win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
-                    desktopCapturer.getSources({ types: ['screen'] })
-                        .then(sources => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
-                        .catch(err => { console.error('DisplayMedia source failed:', err); callback({}); });
-                }, { useSystemPicker: false });
-            } catch (e) { console.error('setDisplayMediaRequestHandler failed:', e); }
-        }
+    // macOS system-audio capture. Chromium's getUserMedia desktop-loopback trick (used on
+    // Windows) is unavailable on macOS, so the recorder falls back to getDisplayMedia there.
+    // This handler fulfils that request with a screen source + loopback audio; the renderer
+    // discards the video track and keeps only the audio. Loopback audio works only on
+    // supported macOS versions — if unavailable the stream has no audio track and the
+    // recorder warns the user (about needing a virtual audio device) and records without it.
+    if (type === 'video' && process.platform === 'darwin') {
+        try {
+            win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
+                desktopCapturer.getSources({ types: ['screen'] })
+                    .then(sources => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
+                    .catch(err => { console.error('DisplayMedia source failed:', err); callback({}); });
+            }, { useSystemPicker: false });
+        } catch (e) { console.error('setDisplayMediaRequestHandler failed:', e); }
     }
 
     // Hide Widget during capture
@@ -156,6 +157,7 @@ function createCapture(type = 'draw', display = null) {
 
     if (type === 'ocr') win.loadFile(path.join(rendererPath, 'ocr/ocr.html'));
     else if (type === 'video') win.loadFile(path.join(rendererPath, 'recorder/recorder.html'));
+    else if (type === 'scroll') win.loadFile(path.join(rendererPath, 'scroller/scroller.html'));
     else win.loadFile(path.join(rendererPath, 'snipper/snipper.html'));
 
     const level = process.platform === 'darwin' ? 'pop-up-menu' : 'screen-saver';
@@ -167,6 +169,7 @@ function createCapture(type = 'draw', display = null) {
         state.captureWindows = state.captureWindows.filter(w => w !== win);
         if (type === 'ocr' && state.ocrWindow === win) state.ocrWindow = null;
         else if (type === 'video' && state.recorderWindow === win) state.recorderWindow = null;
+        else if (type === 'scroll' && state.scrollerWindow === win) state.scrollerWindow = null;
         else if (state.snipperWindow === win) state.snipperWindow = null;
 
         // End the capture session only once EVERY monitor's overlay is gone, so the
@@ -191,6 +194,7 @@ function createCapture(type = 'draw', display = null) {
 
     if (type === 'ocr') state.ocrWindow = win;
     else if (type === 'video') state.recorderWindow = win;
+    else if (type === 'scroll') state.scrollerWindow = win;
     else state.snipperWindow = win;
     state.captureWindows.push(win);
 
@@ -386,8 +390,8 @@ function handleWidgetAction(action, data) {
     // Scaled dimensions
     const FULL_W = Math.round(418 * s);
     const COL_H = Math.round(68 * s);
-    // Menu column: 70px offset + 5 × 42px items + 4 × 10px gaps = 320, plus bottom slack.
-    const EXP_H = Math.round(350 * s);
+    // Menu column: 70px offset + 6 × 42px items + 5 × 12px gaps = 382, plus bottom slack.
+    const EXP_H = Math.round(404 * s);
     const HIS_H = Math.round(400 * s);
     const PANEL_W = Math.round(350 * s);
     const BTN_W = Math.round(68 * s);
@@ -523,6 +527,8 @@ function handleWidgetAction(action, data) {
         require('./capture-service').startCapture('ocr');
     } else if (action === 'capture-video') {
         require('./capture-service').startCapture('video');
+    } else if (action === 'capture-scroll') {
+        require('./capture-service').startCapture('scroll');
     }
 }
 

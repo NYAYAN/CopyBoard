@@ -240,6 +240,7 @@ export function setupEventListeners() {
     setupShortcutInput(elements.imageShortcutInput, (s) => window.api.setImageShortcut(s));
     setupShortcutInput(elements.ocrShortcutInput, (s) => window.api.setOcrShortcut(s));
     setupShortcutInput(elements.colorShortcutInput, (s) => window.api.setColorShortcut(s));
+    setupShortcutInput(elements.scrollShortcutInput, (s) => window.api.setScrollShortcut(s));
     setupShortcutInput(elements.videoShortcutInput, (s) => window.api.setVideoShortcut(s));
     setupShortcutInput(elements.pasteShortcutInput, (s) => window.api.setPasteShortcut(s));
 

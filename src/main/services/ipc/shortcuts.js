@@ -125,6 +125,7 @@ function registerShortcutHandlers() {
         if (k === 'video') return () => startCapture('video');
         if (k === 'ocr') return () => startCapture('ocr');
         if (k === 'color') return () => startCapture('color');
+        if (k === 'scroll') return () => startCapture('scroll');
         if (k === 'paste') return toggleQuickPaste;
         return null;
     };
@@ -248,13 +249,14 @@ function registerShortcutHandlers() {
 
     // Initial Registration
     const resetFrom = sanitizePersistedShortcuts();
-    const { list, draw, video, ocr, color, paste } = state.shortcuts;
+    const { list, draw, video, ocr, color, scroll, paste } = state.shortcuts;
     // Only switched-on shortcuts are claimed from the OS.
     if (isEnabled('list')) tryRegister(list, showMain, 'list');
     if (isEnabled('draw')) tryRegister(draw, () => startCapture('draw'), 'draw');
     if (isEnabled('video')) tryRegister(video, () => startCapture('video'), 'video');
     if (isEnabled('ocr')) tryRegister(ocr, () => startCapture('ocr'), 'ocr');
     if (isEnabled('color')) tryRegister(color, () => startCapture('color'), 'color');
+    if (isEnabled('scroll')) tryRegister(scroll, () => startCapture('scroll'), 'scroll');
     const pasteOk = !isEnabled('paste') || tryRegister(paste, toggleQuickPaste, 'paste');
 
     // initTray() runs BEFORE this, so a binding sanitizePersistedShortcuts() just reset
@@ -282,6 +284,7 @@ function registerShortcutHandlers() {
     ipcMain.on('set-video-shortcut', (e, s) => updateShortcut('video', s, 'globalShortcutVideo'));
     ipcMain.on('set-ocr-shortcut', (e, s) => updateShortcut('ocr', s, 'globalShortcutOcr'));
     ipcMain.on('set-color-shortcut', (e, s) => updateShortcut('color', s, 'globalShortcutColor'));
+    ipcMain.on('set-scroll-shortcut', (e, s) => updateShortcut('scroll', s, 'globalShortcutScroll'));
     ipcMain.on('set-shortcut-enabled', (e, key, enabled) => setShortcutEnabled(key, enabled));
     ipcMain.on('set-paste-shortcut', (e, s) => updateShortcut('paste', s, 'globalShortcutPaste'));
 }

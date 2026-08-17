@@ -772,14 +772,10 @@ let exportHold = null;
 const copyBtn = document.getElementById('btn-copy');
 const saveBtn = document.getElementById('btn-save');
 
-function setExporting(btn, busyText) {
+function setExporting(btn) {
     exporting = true;
     [copyBtn, saveBtn].forEach(b => { if (b) b.disabled = true; });
-    const label = btn && btn.querySelector('span');
-    if (label) {
-        label.dataset.idle = label.textContent;
-        label.textContent = busyText;
-    }
+    if (btn) btn.classList.add('busy'); // spinner in place of the icon; the label stays put
 }
 
 function clearExporting() {
@@ -788,11 +784,7 @@ function clearExporting() {
     [copyBtn, saveBtn].forEach(b => {
         if (!b) return;
         b.disabled = false;
-        const label = b.querySelector('span');
-        if (label && label.dataset.idle) {
-            label.textContent = label.dataset.idle;
-            delete label.dataset.idle;
-        }
+        b.classList.remove('busy');
     });
 }
 
@@ -802,9 +794,9 @@ function clearExporting() {
 // panel is on screen. The encode is only half the wait — the buffer still has to cross the
 // IPC and the panel still has to come up — and a button that returns to "Kaydet" during
 // that gap is the button that looked like it had done nothing.
-function exportPng(btn, busyText, send, holdForDialog) {
+function exportPng(btn, send, holdForDialog) {
     if (!finalCanvas || exporting) return;
-    setExporting(btn, busyText);
+    setExporting(btn);
     finalCanvas.toBlob((blob) => {
         if (!blob) { clearExporting(); alert(t('Görüntü oluşturulamadı.')); return; }
         blob.arrayBuffer()
@@ -853,8 +845,8 @@ function cancelAll() {
 const actions = {
     'btn-start': () => beginCapture(),
     'btn-finish': () => finishCapture(null),
-    'btn-copy': () => exportPng(copyBtn, t('Kopyalanıyor…'), (ab) => window.api.sendCopyBuffer(ab), false),
-    'btn-save': () => exportPng(saveBtn, t('Kaydediliyor…'), (ab) => window.api.sendSaveBuffer(ab), true),
+    'btn-copy': () => exportPng(copyBtn, (ab) => window.api.sendCopyBuffer(ab), false),
+    'btn-save': () => exportPng(saveBtn, (ab) => window.api.sendSaveBuffer(ab), true),
     'btn-close': () => cancelAll()
 };
 

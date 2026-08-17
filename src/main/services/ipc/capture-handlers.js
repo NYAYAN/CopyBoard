@@ -163,6 +163,10 @@ function endVideoStream(cb) {
 
 // Screenshot / OCR / video-recording IPC.
 function registerCaptureHandlers() {
+    // True while a save dialog is up, so a second request can be refused rather than
+    // stacked behind the first.
+    let saveDialogOpen = false;
+
     ipcMain.on('set-video-quality', (e, v) => { state.videoQuality = v; store.set('videoQuality', v); });
 
     // Recorder audio toggles (microphone + system/computer audio). Persisted so the
@@ -273,6 +277,9 @@ function registerCaptureHandlers() {
                         // Re-asserting them here would kill scrolling one second in — the
                         // window must stay on top, but it must not take the mouse back.
                         if (!win.__clickThrough) win.setIgnoreMouseEvents(false);
+                        // Safe while a save sheet is up: the sheet is attached to this
+                        // window, so raising the window raises the sheet with it. Measured
+                        // with the loop running against an open sheet.
                         win.moveTop();
                     }, 1000);
                 }
@@ -318,12 +325,12 @@ function registerCaptureHandlers() {
         }
     });
 
-    // One save dialog at a time. A second request stacks another dialog behind the first,
-    // and the extra one surfaces whenever the first is dismissed — long after the moment
-    // it belonged to, over whatever the user is doing by then. The renderer no longer
-    // sends a second request while an export is in flight; this makes it impossible.
-    let saveDialogOpen = false;
-
+    // One save dialog at a time (see saveDialogOpen at the top of this scope). A second
+    // request stacks another dialog behind the first, and the extra one surfaces whenever
+    // the first is dismissed — long after the moment it belonged to, over whatever the user
+    // is doing by then. The renderer no longer sends a second request while an export is in
+    // flight; this makes it impossible.
+    //
     // Ask where to put the PNG and write it. Shared by the data-URL channel the snipper uses
     // and the binary one below, whose images are far too big to move as base64.
     async function saveImage(sender, buffer, namePrefix) {
@@ -340,7 +347,20 @@ function registerCaptureHandlers() {
         let win = BrowserWindow.fromWebContents(sender);
         if (!win && state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;
 
-        const parent = process.platform === 'darwin' ? null : win;
+        // Parented on macOS too, which makes the panel a SHEET on the capture overlay.
+        // Unparented it belonged to the application rather than to a window, and the
+        // capture overlay never makes us the front application — it passes clicks through
+        // to whatever is underneath, and it is created always-on-top and can-join-all-
+        // spaces besides. So the panel opened behind the windows of whichever app was
+        // actually in front: a flicker, then nothing, and it turned up only when something
+        // tore the overlay down — which is why pressing Kopyala produced it.
+        //
+        // A sheet is attached to its parent, so it cannot end up behind it and does not
+        // depend on which application is active. Measured in an isolated overlay carrying
+        // this window's own flags: unparented it never appeared, and no amount of
+        // app.focus({steal}) reliably brought it up; parented it came up focused and
+        // stayed up, including with snip-ready's once-a-second moveTop() loop running.
+        const parent = win && !win.isDestroyed() ? win : null;
         if (process.platform === 'darwin' && win && !win.isDestroyed()) win.setAlwaysOnTop(false);
 
         // Async dialog — the sync variant froze the whole main process while open.

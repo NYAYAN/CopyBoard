@@ -1213,10 +1213,14 @@ kbd+kbd {
     box-shadow: inset 0 0 0 2px var(--success);
 }
 
+/* The height has a floor the eye doesn't see: the action column is four 22px buttons with
+   --sp-1 between them and --sp-2 top and bottom, which needs 102px. At 92px the last one
+   (Sil) was cut in half. 108 clears it with a little slack — anything shorter clips the
+   column again. */
 .gallery-item img {
     display: block;
     width: 100%;
-    height: 92px;
+    height: 108px;
     object-fit: cover;
 }
 

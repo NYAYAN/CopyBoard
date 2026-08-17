@@ -1,3 +1,34 @@
+# CopyBoard v2.11.0 Release Notes
+
+Kaydırmalı yakalama, ve bir haftanın ölçülerek bulunmuş düzeltmeleri.
+
+## 📜 Kaydırmalı yakalama
+- Kullanıcı alanı seçiyor, sayfayı **kendisi kaydırıyor**, uygulama saniyede ~25 kare örnekleyip örtüşmelerinden birleştiriyor. Kaydırma enjekte edilmediği için macOS'ta **Erişilebilirlik izni istenmiyor**.
+- Boru tesisatının çoğu video kaydından hazır geldi: aynı `getUserMedia` masaüstü akışı, ve `setContentProtection` overlay'i kendi akışımızdan zaten dışlıyor — outline, HUD ve araç çubuğu sonuca baskılanmıyor.
+- Eşleştirme kareyi satır başına ~64 luma örneğine indiriyor: 1200x800 bir kare 3.8MB yerine 51KB, ve 2B şablon eşleştirme 1B dizi eşleştirmeye dönüşüyor.
+- Gerçek sayfaların üç zorluğunun karşılığı var: **yapışkan başlık/altlık** tespit edilip hem eşleştirme bandından hem eklenen şeritten çıkarılıyor; **tekrarlı içerikte** birden çok offset aynı derecede iyi eşleştiği için kare, kaydırma hızı net bir kazanan göstermedikçe reddediliyor; **bölge boyundan hızlı kaydırmada** hiç örtüşme kalmıyor, o kare reddedilip taban kare tutuluyor, böylece içerik menzile dönünce yakalama kendini toparlıyor.
+- **İki yönlü.** Offset araması yalnızca `d >= 0` üzerindeydi — içeriğin yukarı kayması, yani sayfada aşağı inmek. Yukarı kaydırmak negatif offset ürettiği için hiç aday olarak denenmiyor, dolayısıyla yukarı doğru yapılan bir yakalamada **her kare reddediliyordu**. Yön kilidi koymak yerine doğru model kuruldu: yakalanan bölge artık mutlak sayfa koordinatında bir `[capLo, capHi)` aralığı ve kare bu aralığın hangi ucundan taşıyorsa yeni satırlar o uca gidiyor. Yön kendiliğinden çıkıyor; zaten yakalanmış yerin üstünden geçmek hiçbir şey eklemiyor ama nerede olduğumuzu bildiğimiz için taban kare ilerliyor.
+- **Araç çubuğu hiç görünmüyordu:** `.hidden` `display: none !important` taşıyor, `placeToolbar` ise satır içi `style.display = 'flex'` ile açmaya çalışıyordu — satır içi değer `!important`'ı yenemez. Sonucu ağır: Başlat düğmesi yok, Bitir düğmesi yok, yani başlayan yakalamadan çıkışın tek yolu global Esc — o da iptal ediyor. Görünürlük artık tamamen sınıf üzerinden.
+- **Bitirme sayacı hareketi değil işlenen satırı ölçüyordu.** Hızlı kaydırma örtüşme bırakmadığı için kareler reddediliyor (bu kasıtlı: taban kare tutulup içerik menzile dönünce toparlanıyor) ve o süre boyunca hiçbir satır işlenmiyor. 2,5 saniyelik reddedilen kare, sayfanın sonuna gelmekle birebir aynı görünüyordu — yakalama kullanıcının elinde, sayfanın ortasında bitiyordu. Aynısı **geriye kaydırırken** de oluyordu: o kareler eşleşiyor ama yeni satır getirmiyor. Sayaç artık durgunluğu ölçüyor; bölgenin içinde sürekli değişen bir şey varsa (animasyon, video) durgunluk hiç gelmeyeceği için ayrıca uzun bir tavan var ve o yol sessizce değil notla bitiyor.
+
+## 💾 Kaydetme penceresi
+- **Panel gerçekten açılıyordu — kimsenin göremeyeceği yerde.** macOS'ta bilerek ebeveynsiz açılıyordu, yani bir pencereye değil uygulamaya aitti. Yakalama kaplaması uygulamayı hiçbir zaman ön plana getirmiyor (tıklamaları altındaki uygulamaya geçiriyor, üstelik always-on-top ve can-join-all-spaces), dolayısıyla ön planda olmayan bir uygulamanın app-modal paneli ön plandaki uygulamanın pencerelerinin arkasında açılıyordu. Ancak kaplama yıkıldığında ortaya çıkıyordu — Kopyala'ya basınca gelen dosya yolu ekranı buydu. Panel artık kaplamaya bağlı bir **sheet**: ebeveynine yapışık olduğu için arkasına düşemiyor ve hangi uygulamanın aktif olduğu önemli değil.
+- **Üst üste basmak birden çok panel açıyordu.** Birleştirilmiş bir sayfayı PNG'ye kodlamak saniyeler sürüyor ve o sırada ekranda hiçbir şey değişmiyordu; her yeni tıklama yeni bir kodlama ve yeni bir panel isteği başlatıyordu. Dışa aktarma düğmeleri artık iş bitene kadar pasif, ana süreç de bir panel açıkken ikincisini reddediyor.
+- Basılan düğme ikonunun yerinde **dönen bir gösterge** taşıyor (genişliği sabit kalsın diye `border-box` bir halka) ve gösterge, panelin gerçekten açıldığı anda duruyor: macOS'ta `sheet-begin` 647 ms'de tetikleniyor, `showSaveDialog` çağrısı ise 910 ms'de dönüyor — paneli istemeden önce haber vermek göstergeyi yarım saniye erken durduruyordu.
+
+## 🖼️ Büyük görüntüleyici
+- Resim pencereye tam yapışık geliyordu. Sahneye 10px dolgu verildi **ve pencere o kadar büyük açılıyor**, yani boşluk resimden değil pencereden geliyor: 1:1 görünen bir görüntü yine 1:1 görünüyor.
+- Pencere ayrıca resmin ~1,25 katı açılıyor, böylece resim sahnenin %80'ini kaplıyor. Öncelik 1:1: ekran 1,25 katına yetmiyorsa boşluktan feragat ediliyor, çünkü bir ekran görüntüsünü %94'e küçültmek yazıları bulanıklaştırır.
+- `clientWidth` dolguyu saydığı için `fitScale()` ve `updateZoomable()` içerik kutusunu ölçüyor — düzeltilmese sığdırma, resmin ulaşamayacağı bir ölçek bildirecekti.
+
+## 🖼️ Galeri
+- **Küçük resimler ızgaranın çizdiği şekilde üretiliyor.** Kare bir kutuya sığdırmak, ekran şeklinde olmayan her şeyi eziyordu: 766x8175 bir kaydırmalı yakalama 34 piksel, 785x16384 bir sayfa **11 piksel** genişliğinde çıkıyor, `object-fit: cover` da bunları hücrenin 318 pikseline yayıyordu. Artık 360x245'i (hücrenin 159x108 CSS boyutunun iki katı) kaplayacak şekilde ölçekleniyor ve o boyuta kırpılıyor; kırpma üstten, çünkü bir sayfa başlığından tanınıyor. Ölçüm: galerideki şekillerin hepsinde 1,6x–18,7x büyütme sıfıra iniyor.
+- **Mevcut kayıtlar açılışta onarılıyor**, diskteki PNG'lerden, olay döngüsünün her turunda bir kayıt — bazıları 16000 piksel yüksekliğinde ve otuzunu arka arkaya çözmek ana süreci saniyelerce kilitlerdi. Gerçek indeksin kopyası üzerinde ölçüldü: 30 kaydın 27'si hücreyi kaplar hâle geliyor, 5 saniye sürüyor, indeks 284KB'den 483KB'ye çıkıyor.
+- Kare yüksekliği 92 → 108px. İkon sütunu dört 22px düğme + aralar + 4px üst boşlukla 98px yer istiyor; 92px'de **Sil** alt kenarda kesiliyordu.
+- İlk kare sürekli seçili görünüyordu: karartma ve düğmeler `:hover`'ın yanı sıra `.selected` için de açılıyordu, ızgarada ise her zaman bir seçim var. İkisi de artık yalnız hover'da; seçim vurgu halkasıyla görünmeye devam ediyor.
+
+---
+
 # CopyBoard v2.10.0 Release Notes
 
 Uygulamanın tamamının yeniden tasarımı; görüntüleyicide düzenleme ve zoom, koyu/açık tema, arayüz dili, atanabilir tüm kısayollar ve baştan düzenlenmiş Ayarlar paneli.

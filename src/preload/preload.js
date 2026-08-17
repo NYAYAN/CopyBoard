@@ -69,6 +69,10 @@ contextBridge.exposeInMainWorld('api', {
     scrollEnd: () => ipcRenderer.send('scroll-end'),
     sendCopyBuffer: (arrayBuffer) => ipcRenderer.send('snip-copy-buffer', arrayBuffer),
     sendSaveBuffer: (arrayBuffer) => ipcRenderer.send('snip-save-buffer', arrayBuffer),
+    // Fires when the save panel is actually on screen. The encode is only half the wait —
+    // without this the button would go back to idle in front of a dialog that has not
+    // arrived yet, which is the state that read as "nothing happened".
+    onSaveDialogOpen: (callback) => ipcRenderer.on('save-dialog-open', () => callback()),
 
     // Widget
     widgetAction: (action, data) => ipcRenderer.send('widget-action', action, data),

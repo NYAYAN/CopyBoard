@@ -768,6 +768,7 @@ function showPreview(note, gaps) {
 // dialogs then arrived one after another, minutes later, on top of whatever the user had
 // moved on to — one of them turned up right after a copy had already finished.
 let exporting = false;
+let exportHold = null;
 const copyBtn = document.getElementById('btn-copy');
 const saveBtn = document.getElementById('btn-save');
 
@@ -782,6 +783,7 @@ function setExporting(btn, busyText) {
 }
 
 function clearExporting() {
+    if (exportHold) { clearTimeout(exportHold); exportHold = null; }
     exporting = false;
     [copyBtn, saveBtn].forEach(b => {
         if (!b) return;
@@ -796,19 +798,29 @@ function clearExporting() {
 
 // PNG as bytes, not a data URL: a stitched page runs to tens of megabytes and base64 would
 // add a third on top of a full string copy at each end of the IPC hop.
-function exportPng(btn, busyText, send) {
+// holdForDialog: stay busy past the handoff, until the main process reports that the save
+// panel is on screen. The encode is only half the wait — the buffer still has to cross the
+// IPC and the panel still has to come up — and a button that returns to "Kaydet" during
+// that gap is the button that looked like it had done nothing.
+function exportPng(btn, busyText, send, holdForDialog) {
     if (!finalCanvas || exporting) return;
     setExporting(btn, busyText);
     finalCanvas.toBlob((blob) => {
         if (!blob) { clearExporting(); alert(t('Görüntü oluşturulamadı.')); return; }
         blob.arrayBuffer()
-            .then(send)
-            .catch((err) => alert(t('Görüntü aktarılamadı: ') + err.message))
-            // A cancelled save dialog leaves this overlay standing, so the buttons have to
-            // come back — the handoff is the end of OUR work, not the end of the save.
-            .finally(clearExporting);
+            .then((ab) => {
+                send(ab);
+                if (!holdForDialog) return clearExporting();
+                // Never stuck: if that report never comes, the buttons come back anyway.
+                exportHold = setTimeout(clearExporting, 15000);
+            })
+            .catch((err) => { clearExporting(); alert(t('Görüntü aktarılamadı: ') + err.message); });
     }, 'image/png');
 }
+
+// The panel is a sheet on this window, so it blocks the toolbar while it is up; releasing
+// the buttons here is what puts them back for a CANCELLED save, where this overlay stays.
+if (window.api.onSaveDialogOpen) window.api.onSaveDialogOpen(clearExporting);
 
 // ── Click-through while capturing ──────────────────────────────────────────────
 // The window ignores the mouse so scrolling reaches the app underneath, but the toolbar
@@ -841,8 +853,8 @@ function cancelAll() {
 const actions = {
     'btn-start': () => beginCapture(),
     'btn-finish': () => finishCapture(null),
-    'btn-copy': () => exportPng(copyBtn, t('Kopyalanıyor…'), (ab) => window.api.sendCopyBuffer(ab)),
-    'btn-save': () => exportPng(saveBtn, t('Kaydediliyor…'), (ab) => window.api.sendSaveBuffer(ab)),
+    'btn-copy': () => exportPng(copyBtn, t('Kopyalanıyor…'), (ab) => window.api.sendCopyBuffer(ab), false),
+    'btn-save': () => exportPng(saveBtn, t('Kaydediliyor…'), (ab) => window.api.sendSaveBuffer(ab), true),
     'btn-close': () => cancelAll()
 };
 

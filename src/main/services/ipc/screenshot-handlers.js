@@ -74,17 +74,24 @@ function openViewer(id) {
     if (!payload) return;
 
     const CHROME_H = 44 + 64; // toolbar row + bottom thumbnail strip
-    const STAGE_PAD = 10;     // .stage padding in viewer.css — the gutter around the image
+    const STAGE_PAD = 10;     // .stage padding in viewer.css — the minimum gutter
     const PAD_H = STAGE_PAD * 2;
+    const FILL = 0.8;         // the share of the stage the image should take when there's room
     const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-    // Fit the image (never upscale), keep room for the chrome and the gutter, center on
-    // screen. The gutter is added back to the window rather than taken out of the
-    // picture: a shot that would show at 1:1 still does, framed instead of flush.
-    const scale = Math.min(1,
-        (wa.width * 0.85 - PAD_H) / payload.w,
-        (wa.height * 0.85 - CHROME_H - PAD_H) / payload.h);
-    const width = Math.max(480, Math.round(payload.w * scale) + PAD_H);
-    const height = Math.max(320, Math.round(payload.h * scale) + CHROME_H + PAD_H);
+    // The most stage this display can carry, once the chrome and the padding are paid for.
+    const roomW = wa.width * 0.85 - PAD_H;
+    const roomH = wa.height * 0.85 - CHROME_H - PAD_H;
+    // 1:1 comes first — a screenshot drawn at 94% is a blurry screenshot — so the image
+    // scale is only ever "as large as fits, never upscaled".
+    const scale = Math.min(1, roomW / payload.w, roomH / payload.h);
+    // Then the stage is opened LARGER than the picture, so the picture sits in some space
+    // instead of against the frame: enough that it takes FILL of the stage, or whatever
+    // the display leaves over, whichever is smaller. A shot too big for the screen can't
+    // have that space and keeps the 10px padding as its gutter.
+    const stageW = Math.min(Math.round(payload.w * scale / FILL), Math.floor(roomW));
+    const stageH = Math.min(Math.round(payload.h * scale / FILL), Math.floor(roomH));
+    const width = Math.max(480, stageW + PAD_H);
+    const height = Math.max(320, stageH + CHROME_H + PAD_H);
     const bounds = {
         x: Math.round(wa.x + (wa.width - width) / 2),
         y: Math.round(wa.y + (wa.height - height) / 2),

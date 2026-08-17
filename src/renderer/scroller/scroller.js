@@ -46,10 +46,19 @@ const PROFILE_W = 128;
 // for the profile to say anything. Below this the stitcher would refuse every frame.
 const MIN_CROP_W = 120;
 const MIN_CROP_H = 240;
-// Stop once the content has not advanced for this long — reaching the end of the page IS
-// the natural end of a scroll capture, so the user should not have to say so twice.
+// Stop once the region has been STILL for this long — reaching the end of the page IS the
+// natural end of a scroll capture, so the user should not have to say so twice.
+//
+// Stillness, not progress: a scroll that outruns the region leaves no overlap, so the
+// stitcher refuses those frames and nothing is committed while the user is very much still
+// scrolling. Timing that as idleness ended the capture under the user's hands, mid-page.
 const IDLE_FINISH_MS = 2500;
 const IDLE_HINT_MS = 1000;
+// The other side of the same coin: something inside the region keeps changing (an
+// animation, a video) so frames never settle AND never match. Stillness will never
+// arrive, so the capture still needs a ceiling of its own — with a note saying so,
+// because unlike reaching the end of a page this one is a failure the user can act on.
+const COMMIT_STALL_MS = 12000;
 // Give up when the region has clearly been scrolling for this long and NOTHING has matched.
 // Timed from the first motion rather than from Start, so a user who takes a while to find
 // their place is not cut off. Without it a capture that can never match has no ending of its
@@ -91,7 +100,8 @@ let totalRows = 0;
 let frameTimer = null;
 let idleTimer = null;
 let lastSampleAt = 0;
-let lastProgressAt = 0;
+let lastProgressAt = 0;  // last frame that committed rows
+let lastMotionAt = 0;    // last frame where the region was seen to move at all
 let missStreak = 0;
 let firstMotionAt = 0;   // when the region was first seen to move at all
 let finalCanvas = null;
@@ -455,7 +465,7 @@ async function beginCapture() {
     window.api.setIgnoreMouseEvents(true, { forward: true });
 
     lastSampleAt = 0;
-    lastProgressAt = performance.now();
+    lastProgressAt = lastMotionAt = performance.now();
     startFrameLoop();
 }
 
@@ -468,7 +478,7 @@ function startFrameLoop() {
         const now = performance.now();
         refreshHud(now);
         if (stitcher.started) {
-            if (now - lastProgressAt > IDLE_FINISH_MS) finishCapture(null);
+            checkAutoFinish(now);
         } else if (firstMotionAt && now - firstMotionAt > STALL_GIVEUP_MS) {
             finishCapture(null); // routes to the "nothing was captured" path
         }
@@ -575,6 +585,10 @@ function sampleFrame(now) {
     if (decision.offset !== 0 || decision.status === 'reject') {
         if (!firstMotionAt) firstMotionAt = now;
     }
+    // 'idle' is the stitcher's own verdict that the region barely moved. Everything else —
+    // a refused frame included — means the picture under the pointer is still changing, so
+    // the user has not finished with it.
+    if (decision.status !== 'idle' && decision.status !== 'need-more') lastMotionAt = now;
     if (decision.base || decision.add) {
         lastProgressAt = now;
         missStreak = 0;
@@ -588,11 +602,24 @@ function sampleFrame(now) {
     }
 
     refreshHud(now);
+    checkAutoFinish(now);
+}
 
-    // The end of the page is the end of the capture: once nothing new has arrived for a
-    // while there is nothing left to scroll to, and making the user confirm that adds a
+// Asked from both loops, so they cannot drift apart: a still page stops producing frames
+// altogether, so only the timer can see the end of a scroll — and only the frame path sees
+// a scroll that is still going.
+function checkAutoFinish(now) {
+    if (!stitcher.started) return;
+    // The end of the page is the end of the capture: nothing has moved for a while, so
+    // there is nothing left to scroll to, and making the user confirm that would add a
     // step to every single capture.
-    if (stitcher.started && now - lastProgressAt > IDLE_FINISH_MS) finishCapture(null);
+    if (now - lastMotionAt > IDLE_FINISH_MS) {
+        finishCapture(null);
+    } else if (now - lastProgressAt > COMMIT_STALL_MS) {
+        // Still moving, but nothing has landed for a long time. Ending silently here would
+        // read as the same bug this clock was split to fix, so it says why.
+        finishCapture(t('Kaydırma izlenemedi — daha yavaş kaydırın'));
+    }
 }
 
 function updateHud(main) {
@@ -606,7 +633,9 @@ function updateHud(main) {
 function refreshHud(now) {
     if (!stitcher.started) {
         updateHud(t('Şimdi kaydırın'));
-    } else if (now - lastProgressAt > IDLE_HINT_MS) {
+    } else if (now - lastMotionAt > IDLE_HINT_MS) {
+        // Follows the same clock as the finish: announcing "finishing" while the user is
+        // mid-scroll was the visible half of the bug that ended those captures.
         updateHud(t('Bitiriliyor…'));
     } else {
         updateHud(t('Yakalanıyor'));

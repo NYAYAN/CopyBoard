@@ -318,9 +318,25 @@ function registerCaptureHandlers() {
         }
     });
 
+    // One save dialog at a time. A second request stacks another dialog behind the first,
+    // and the extra one surfaces whenever the first is dismissed — long after the moment
+    // it belonged to, over whatever the user is doing by then. The renderer no longer
+    // sends a second request while an export is in flight; this makes it impossible.
+    let saveDialogOpen = false;
+
     // Ask where to put the PNG and write it. Shared by the data-URL channel the snipper uses
     // and the binary one below, whose images are far too big to move as base64.
     async function saveImage(sender, buffer, namePrefix) {
+        if (saveDialogOpen) return;
+        saveDialogOpen = true;
+        try {
+            await runSaveDialog(sender, buffer, namePrefix);
+        } finally {
+            saveDialogOpen = false;
+        }
+    }
+
+    async function runSaveDialog(sender, buffer, namePrefix) {
         let win = BrowserWindow.fromWebContents(sender);
         if (!win && state.snipperWindow && !state.snipperWindow.isDestroyed()) win = state.snipperWindow;
 

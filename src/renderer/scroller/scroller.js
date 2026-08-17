@@ -761,13 +761,52 @@ function showPreview(note, gaps) {
     toolbar.style.top = Math.min(pr.bottom + 12, window.innerHeight - toolbar.offsetHeight - 10) + 'px';
 }
 
+// Export is not instant — a stitched page is tens of megapixels and the PNG encode alone
+// runs for seconds. Saying so on the button matters more here than anywhere else in the
+// app: with nothing changing, the click looked like it had missed, so it got pressed
+// again, and EVERY press ran another encode and asked for another save dialog. Those
+// dialogs then arrived one after another, minutes later, on top of whatever the user had
+// moved on to — one of them turned up right after a copy had already finished.
+let exporting = false;
+const copyBtn = document.getElementById('btn-copy');
+const saveBtn = document.getElementById('btn-save');
+
+function setExporting(btn, busyText) {
+    exporting = true;
+    [copyBtn, saveBtn].forEach(b => { if (b) b.disabled = true; });
+    const label = btn && btn.querySelector('span');
+    if (label) {
+        label.dataset.idle = label.textContent;
+        label.textContent = busyText;
+    }
+}
+
+function clearExporting() {
+    exporting = false;
+    [copyBtn, saveBtn].forEach(b => {
+        if (!b) return;
+        b.disabled = false;
+        const label = b.querySelector('span');
+        if (label && label.dataset.idle) {
+            label.textContent = label.dataset.idle;
+            delete label.dataset.idle;
+        }
+    });
+}
+
 // PNG as bytes, not a data URL: a stitched page runs to tens of megabytes and base64 would
 // add a third on top of a full string copy at each end of the IPC hop.
-function exportPng(send) {
-    if (!finalCanvas) return;
+function exportPng(btn, busyText, send) {
+    if (!finalCanvas || exporting) return;
+    setExporting(btn, busyText);
     finalCanvas.toBlob((blob) => {
-        if (!blob) { alert(t('Görüntü oluşturulamadı.')); return; }
-        blob.arrayBuffer().then(send).catch((err) => alert(t('Görüntü aktarılamadı: ') + err.message));
+        if (!blob) { clearExporting(); alert(t('Görüntü oluşturulamadı.')); return; }
+        blob.arrayBuffer()
+            .then(send)
+            .catch((err) => alert(t('Görüntü aktarılamadı: ') + err.message))
+            // A cancelled save dialog leaves this overlay standing, so the buttons have to
+            // come back — the handoff is the end of OUR work, not the end of the save.
+            .finally(clearExporting);
     }, 'image/png');
 }
 
@@ -802,8 +841,8 @@ function cancelAll() {
 const actions = {
     'btn-start': () => beginCapture(),
     'btn-finish': () => finishCapture(null),
-    'btn-copy': () => exportPng((ab) => window.api.sendCopyBuffer(ab)),
-    'btn-save': () => exportPng((ab) => window.api.sendSaveBuffer(ab)),
+    'btn-copy': () => exportPng(copyBtn, t('Kopyalanıyor…'), (ab) => window.api.sendCopyBuffer(ab)),
+    'btn-save': () => exportPng(saveBtn, t('Kaydediliyor…'), (ab) => window.api.sendSaveBuffer(ab)),
     'btn-close': () => cancelAll()
 };
 

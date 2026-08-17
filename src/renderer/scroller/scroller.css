@@ -287,10 +287,20 @@ body.phase-review {
     stroke: currentColor;
 }
 
-.text-btn:hover,
-.icon-btn:hover {
+/* :not(:disabled) rather than an override afterwards — an override would have to repaint
+   the button's resting background, and it would guess wrong for .primary. */
+.text-btn:hover:not(:disabled),
+.icon-btn:hover:not(:disabled) {
     background: var(--overlay-hover);
     color: var(--overlay-text);
+}
+
+/* Busy, not broken: the export buttons go inert together while a PNG is being encoded,
+   and the one that was pressed says what it is doing. */
+.text-btn:disabled,
+.icon-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
 }
 
 .text-btn.primary {
@@ -298,11 +308,11 @@ body.phase-review {
     color: #fff;
 }
 
-.text-btn.primary:hover {
+.text-btn.primary:hover:not(:disabled) {
     background: var(--accent-hover);
 }
 
-.icon-btn.close:hover {
+.icon-btn.close:hover:not(:disabled) {
     background: var(--danger);
     color: #fff;
 }

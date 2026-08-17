@@ -105,7 +105,48 @@ app.whenReady().then(async () => {
             .filter(id => !document.getElementById(id)).length
     }))()`);
 
+    // Drag out a selection with synthetic events and check the toolbar actually APPEARS.
+    //
+    // This is here because it shipped broken once: .hidden carries `display: none
+    // !important`, placeToolbar() was revealing the bar with an inline `style.display =
+    // 'flex'`, and an inline value cannot beat !important — so the bar stayed invisible
+    // while the code reading it looked right. With no Start button and no Finish button the
+    // mode was unusable and, once started, had no way out but cancelling.
+    //
+    // Events go to document.body rather than window so e.target is a real element (the
+    // handlers call e.target.closest).
+    const bar = await win.webContents.executeJavaScript(`(() => {
+        const fire = (type, x, y) => document.body.dispatchEvent(
+            new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+        fire('mousedown', 80, 80);
+        fire('mousemove', 480, 520);
+        fire('mouseup', 480, 520);
+
+        const toolbar = document.getElementById('toolbar');
+        const start = document.getElementById('btn-start');
+        const box = document.getElementById('selection-box');
+        return {
+            selectionW: box.offsetWidth,
+            selectionH: box.offsetHeight,
+            toolbarDisplay: getComputedStyle(toolbar).display,
+            toolbarW: toolbar.offsetWidth,
+            startDisplay: getComputedStyle(start).display,
+            startW: start.offsetWidth,
+            // Finish belongs to the scroll phase and must stay off the bar until then.
+            finishDisplay: getComputedStyle(document.getElementById('btn-finish')).display
+        };
+    })()`);
+
     const expect = (cond, message) => { if (!cond) problems.push(message); };
+
+    expect(bar.selectionW > 300 && bar.selectionH > 400,
+        `dragging out a selection produced a ${bar.selectionW}x${bar.selectionH} box`);
+    expect(bar.toolbarW > 0,
+        `the toolbar is ${bar.toolbarW}px wide (display: ${bar.toolbarDisplay}) after a selection — it never became visible`);
+    expect(bar.startW > 0,
+        `the Start button is ${bar.startW}px wide (display: ${bar.startDisplay}) — the mode cannot be started by mouse`);
+    expect(bar.finishDisplay === 'none',
+        `the Finish button is visible (${bar.finishDisplay}) during the select phase`);
 
     expect(seen.hasApi, 'window.api is missing — the preload bridge did not load');
     expect(seen.buttons === 0, 'some toolbar buttons are missing from the markup');
@@ -125,6 +166,9 @@ app.whenReady().then(async () => {
     console.log(`  screenshot decoded  ${seen.ready ? 'ok' : 'FAIL'}`);
     console.log(`  phase               ${seen.phase}`);
     console.log(`  i18n before tips    ${seen.startTip === 'Start the scrolling capture' ? 'ok' : 'FAIL'}  ("${seen.startTip}")`);
+    console.log(`  selection drag      ${bar.selectionW}x${bar.selectionH}`);
+    console.log(`  toolbar visible     ${bar.toolbarW > 0 ? 'ok' : 'FAIL'}  (${bar.toolbarDisplay}, ${bar.toolbarW}px)`);
+    console.log(`  Start button        ${bar.startW > 0 ? 'ok' : 'FAIL'}  (${bar.startDisplay}, ${bar.startW}px)`);
     if (logs.length) console.log(`  renderer logs       ${logs.join(' | ')}`);
 
     if (problems.length) {

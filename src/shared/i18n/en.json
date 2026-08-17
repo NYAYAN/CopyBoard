@@ -297,5 +297,6 @@
   "{n} kare eşleşmedi — içerik eksik olabilir": "{n} frames did not match — content may be missing",
   "Ekran akışı başlatılamadı: ": "Could not start the screen stream: ",
   "Görüntü oluşturulamadı.": "Could not build the image.",
-  "Görüntü aktarılamadı: ": "Could not transfer the image: "
+  "Görüntü aktarılamadı: ": "Could not transfer the image: ",
+  "Kaydırmayı bırakınca biter": "Stops when you stop scrolling"
 }

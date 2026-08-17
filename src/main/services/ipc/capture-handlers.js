@@ -371,10 +371,24 @@ function registerCaptureHandlers() {
                 defaultPath: path.join(app.getPath('pictures'), `${namePrefix}_${Date.now()}.png`),
                 filters: [{ name: 'Images', extensions: ['png'] }]
             };
-            // The renderer holds its button in a busy state from the click until this
-            // lands, so it has to be sent from right here — the last statement before the
-            // panel goes up, and after everything that could still fail.
-            try { if (!sender.isDestroyed()) sender.send('save-dialog-open'); } catch (e) { /* window gone */ }
+            // The renderer holds its button spinning until this lands, so it has to mean
+            // "the panel is up" and not "the panel has been asked for". macOS raises
+            // sheet-begin as the sheet opens — measured at 647ms, while the showSaveDialog
+            // call itself does not even return until 910ms, so sending before the call put
+            // the report better than half a second early and the spinner stopped in front
+            // of a panel that was still on its way.
+            let reported = false;
+            const report = () => {
+                if (reported) return;
+                reported = true;
+                try { if (!sender.isDestroyed()) sender.send('save-dialog-open'); } catch (e) { /* window gone */ }
+            };
+            if (process.platform === 'darwin' && parent && !parent.isDestroyed()) {
+                parent.once('sheet-begin', report);
+                setTimeout(report, 2500); // no sheet event ever came — don't spin forever
+            } else {
+                report(); // no sheet on this platform; the dialog is its own window
+            }
 
             const result = parent && !parent.isDestroyed()
                 ? await dialog.showSaveDialog(parent, opts)

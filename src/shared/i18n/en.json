@@ -290,8 +290,6 @@
   "Bitiriliyor…": "Finishing…",
   "Daha yavaş kaydırın": "Scroll more slowly",
   "Kaydırma izlenemedi — daha yavaş kaydırın": "Couldn't follow the scroll — try scrolling more slowly",
-  "Kaydediliyor…": "Saving…",
-  "Kopyalanıyor…": "Copying…",
   "{h} px · {n} birleşim": "{h} px · {n} joins",
   "Başlat’a basın, sonra bu alanın üstünde kaydırın": "Press Start, then scroll over this area",
   "Alan çok küçük — kaydırmalı yakalama için daha büyük bir bölge seçin": "That area is too small — pick a larger region for a scrolling capture",

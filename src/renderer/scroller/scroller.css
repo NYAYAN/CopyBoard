@@ -295,12 +295,48 @@ body.phase-review {
     color: var(--overlay-text);
 }
 
-/* Busy, not broken: the export buttons go inert together while a PNG is being encoded,
-   and the one that was pressed says what it is doing. */
+/* Busy, not broken: the export buttons go inert together while a PNG is being encoded. */
 .text-btn:disabled,
 .icon-btn:disabled {
     opacity: 0.55;
     cursor: default;
+}
+
+/* The one that was pressed spins where its icon was. In the icon's place rather than in
+   the label, so the button keeps its width — a control that resizes under the cursor is a
+   control you misclick — and the button keeps saying what it IS rather than what it is
+   doing. It stays lit while the rest of the bar dims. */
+.text-btn.busy {
+    opacity: 1;
+}
+
+.text-btn.busy svg {
+    display: none;
+}
+
+.text-btn.busy::before {
+    content: '';
+    /* border-box, so the ring occupies exactly the 16px the icon did — content-box put the
+       2px border outside it and the button grew by 4px the moment it started working. */
+    box-sizing: border-box;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    animation: btn-spin 0.7s linear infinite;
+}
+
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .text-btn.busy::before {
+        animation: none;
+        opacity: 0.6;
+    }
 }
 
 .text-btn.primary {

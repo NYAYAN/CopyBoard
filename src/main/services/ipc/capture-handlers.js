@@ -371,6 +371,11 @@ function registerCaptureHandlers() {
                 defaultPath: path.join(app.getPath('pictures'), `${namePrefix}_${Date.now()}.png`),
                 filters: [{ name: 'Images', extensions: ['png'] }]
             };
+            // The renderer holds its button in a busy state from the click until this
+            // lands, so it has to be sent from right here — the last statement before the
+            // panel goes up, and after everything that could still fail.
+            try { if (!sender.isDestroyed()) sender.send('save-dialog-open'); } catch (e) { /* window gone */ }
+
             const result = parent && !parent.isDestroyed()
                 ? await dialog.showSaveDialog(parent, opts)
                 : await dialog.showSaveDialog(opts);

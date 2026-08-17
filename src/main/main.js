@@ -43,6 +43,9 @@ if (!gotTheLock) {
       createMainWindow();
       registerIpcHandlers();
       initAutoUpdater();
+      // Repairs thumbnails saved under an older, much smaller rule. Self-scheduling and
+      // one entry at a time, so it cannot hold the startup it is standing in.
+      require('./services/screenshot-library').upgradeThumbnails();
     } catch (svcErr) {
       console.error('Service Initialization Failed:', svcErr);
       dialog.showErrorBox(t('Servis Hatası'), 'Uygulama servisleri başlatılamadı: ' + svcErr.message);

@@ -20,7 +20,15 @@ const { app, ipcMain, nativeImage, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const RENDERER = path.join(__dirname, '../src/renderer/scroller/scroller.html');
+// Defaults to the working tree. Point APP_ROOT at a packaged app.asar to run the same
+// checks against a real build — worth doing because reason (1) above is stricter there:
+// the import has to resolve INSIDE an asar archive, through Electron's file: hook, and a
+// failure still looks like a page that loads and does nothing.
+//   APP_ROOT=dist/mac-arm64/CopyBoard.app/Contents/Resources/app.asar npm run test:scroller
+const APP_ROOT = process.env.APP_ROOT || path.join(__dirname, '..');
+const RENDERER = path.join(APP_ROOT, 'src/renderer/scroller/scroller.html');
+const PRELOAD = path.join(APP_ROOT, 'src/preload/preload.js');
+// Test data, always read from the working tree.
 const EN_DICT = path.join(__dirname, '../src/shared/i18n/en.json');
 const READY_TIMEOUT_MS = 15000;
 
@@ -54,7 +62,7 @@ app.whenReady().then(async () => {
     const win = new BrowserWindow({
         width: WIDTH, height: HEIGHT, show: false,
         webPreferences: {
-            preload: path.join(__dirname, '../src/preload/preload.js'),
+            preload: PRELOAD,
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,

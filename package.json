@@ -10,6 +10,7 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
+    "screenshots": "electron scripts/capture-screens.js",
     "test": "node --test \"test/**/*.test.mjs\"",
     "test:electron": "electron test/electron-accelerator-check.js",
     "test:scroller": "electron test/electron-scroller-check.js",

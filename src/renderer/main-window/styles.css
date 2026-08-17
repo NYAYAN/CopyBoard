@@ -1242,8 +1242,12 @@ kbd+kbd {
     transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.gallery-item:hover::after,
-.gallery-item.selected::after {
+/* Hover only, not .selected. The grid always carries a selection — the keyboard cursor
+   starts on the newest shot — so including it here darkened and armed the first thumbnail
+   permanently, which read as a button bar stuck open on an item nobody was pointing at.
+   The selection still shows: it keeps the accent ring. The buttons are the mouse's
+   affordance, and the keys that do the same jobs are listed in the status bar. */
+.gallery-item:hover::after {
     opacity: 1;
 }
 
@@ -1260,8 +1264,7 @@ kbd+kbd {
     transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.gallery-item:hover .shot-actions,
-.gallery-item.selected .shot-actions {
+.gallery-item:hover .shot-actions {
     opacity: 1;
     pointer-events: auto;
 }

@@ -105,11 +105,21 @@ const ZOOM_MIN = 0.1;
 const ZOOM_STEP = 1.25;
 let zoom = 0;
 
+// The stage's own gutter, taken off the element rather than repeated here. clientWidth
+// counts padding, so every "how much room is there" question has to subtract it — get
+// that wrong and fit mode reports a scale the picture cannot actually reach.
+const STAGE_PAD = parseFloat(getComputedStyle(stage).paddingTop) || 0;
+const stageRoom = () => ({
+    w: stage.clientWidth - STAGE_PAD * 2,
+    h: stage.clientHeight - STAGE_PAD * 2
+});
+
 // What fit mode is actually showing right now — the number the % readout compares
 // against, and the scale the zoom snaps back to when it lands on top of it.
 function fitScale() {
     if (!img.naturalWidth) return 1;
-    return Math.min(1, stage.clientWidth / img.naturalWidth, stage.clientHeight / img.naturalHeight);
+    const room = stageRoom();
+    return Math.min(1, room.w / img.naturalWidth, room.h / img.naturalHeight);
 }
 
 const currentScale = () => (zoom || fitScale());
@@ -186,8 +196,8 @@ function zoomButtonClick() {
 }
 
 function updateZoomable() {
-    const zoomable = img.naturalWidth > stage.clientWidth || img.naturalHeight > stage.clientHeight;
-    stage.classList.toggle('zoomable', zoomable);
+    const room = stageRoom();
+    stage.classList.toggle('zoomable', img.naturalWidth > room.w || img.naturalHeight > room.h);
 }
 
 function markActiveThumb() {

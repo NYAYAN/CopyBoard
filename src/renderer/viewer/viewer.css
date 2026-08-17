@@ -328,6 +328,11 @@ body {
     cursor: pointer;
 }
 
+/* The padding is the picture's breathing room — without it a fitted screenshot runs
+   flush into the window edge and reads as clipped rather than framed. The window is
+   opened that much larger for it (STAGE_PAD in screenshot-handlers.js), so the gutter
+   costs the image nothing at 1:1. viewer.js reads this value back off the element
+   instead of repeating the number. */
 .stage {
     flex: 1;
     position: relative;
@@ -335,6 +340,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 10px;
 }
 
 .stage img {

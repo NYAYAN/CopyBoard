@@ -16,7 +16,16 @@ const MAX_SCREENSHOTS = 30;
 // 2400x16000 page came out as a 220x1467 "thumbnail", which is a ~100KB base64 string in
 // the electron-store index and, because the gallery's rows are sized by content, a grid
 // cell fifteen screens tall.
-const THUMB_MAX = 220;
+//
+// 360, not 220, because the grid draws these on a Retina display. A cell is 159x108 CSS px
+// (350px window, minus the grid's 12px padding either side and its 8px gap, halved) — 318
+// x216 DEVICE pixels. A 16:10 shot contained in 220 is 220x137, so object-fit: cover had to
+// blow it up 1.58x and every thumbnail looked soft. Contained in 360 it is 360x225, which
+// covers that cell without upscaling at all. The cost is the index: these are base64 in the
+// electron-store JSON, so it roughly doubles. Screenshots far from screen-shaped — a long
+// scroll capture — are still soft, since containing THOSE in a square leaves the short edge
+// tiny whatever the box.
+const THUMB_MAX = 360;
 
 function screenshotsDir() {
     return path.join(app.getPath('userData'), 'screenshots');

@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('api', {
     setVideoShortcut: (shortcut) => ipcRenderer.send('set-video-shortcut', shortcut),
     setOcrShortcut: (shortcut) => ipcRenderer.send('set-ocr-shortcut', shortcut),
     setColorShortcut: (shortcut) => ipcRenderer.send('set-color-shortcut', shortcut),
+    setScrollShortcut: (shortcut) => ipcRenderer.send('set-scroll-shortcut', shortcut),
     setShortcutEnabled: (key, enabled) => ipcRenderer.send('set-shortcut-enabled', key, enabled),
     setPasteShortcut: (shortcut) => ipcRenderer.send('set-paste-shortcut', shortcut),
     copyItem: (text) => ipcRenderer.send('copy-item', text),
@@ -61,6 +62,13 @@ contextBridge.exposeInMainWorld('api', {
     sendCopyImage: (dataUrl) => ipcRenderer.send('snip-copy-v2', dataUrl), // RENAMED due to channel blocking
     sendCopyColor: (hex) => ipcRenderer.send('snip-copy-color', hex),
     sendSaveImage: (dataUrl) => ipcRenderer.send('snip-save-image', dataUrl),
+
+    // Scroll capture. The stitched page is passed as a binary PNG — at tens of megabytes a
+    // data URL costs a third more bytes plus a full string copy on both sides.
+    scrollBegin: () => ipcRenderer.send('scroll-begin'),
+    scrollEnd: () => ipcRenderer.send('scroll-end'),
+    sendCopyBuffer: (arrayBuffer) => ipcRenderer.send('snip-copy-buffer', arrayBuffer),
+    sendSaveBuffer: (arrayBuffer) => ipcRenderer.send('snip-save-buffer', arrayBuffer),
 
     // Widget
     widgetAction: (action, data) => ipcRenderer.send('widget-action', action, data),

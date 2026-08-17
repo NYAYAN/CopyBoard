@@ -1,0 +1,329 @@
+/* Scroll-capture overlay. Three phases share one window, switched by a class on <body>:
+   .phase-select (frozen backdrop, pick a region), .phase-capture (window is transparent and
+   click-through so the live app scrolls underneath) and .phase-review (the stitched page).
+   Surfaces come from the shared --overlay-* group so this window, the snipper's toolbar and
+   the recorder's stay identical and follow the theme together. */
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: transparent;
+    font-family: var(--font-ui);
+    /* Hidden until the screenshot lands, so the pointer is never baked into the capture. */
+    cursor: none;
+}
+
+body.ready {
+    cursor: url('../shared/cursor.svg') 15 15, crosshair;
+}
+
+#screen-canvas,
+#overlay-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#screen-canvas {
+    z-index: 1;
+}
+
+#overlay-canvas {
+    z-index: 2;
+    pointer-events: none;
+}
+
+.selection-box {
+    position: absolute;
+    border: none;
+    /* the outline is drawn on overlay-canvas while selecting */
+    z-index: 20;
+    pointer-events: auto;
+    cursor: move;
+    box-sizing: border-box;
+    background: transparent;
+}
+
+.dimensions-label {
+    position: absolute;
+    top: -25px;
+    left: 0;
+    padding: 2px var(--sp-3);
+    border-radius: var(--r-xs);
+    background: color-mix(in srgb, var(--accent) 92%, transparent);
+    color: #fff;
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+body.selecting,
+body.selecting * {
+    cursor: url('../shared/cursor.svg') 15 15, crosshair !important;
+}
+
+.resize-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border: 1px solid var(--accent);
+    z-index: 30;
+}
+
+.resize-handle.nw { top: -4px; left: -4px; cursor: nw-resize; }
+.resize-handle.n { top: -4px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+.resize-handle.ne { top: -4px; right: -4px; cursor: ne-resize; }
+.resize-handle.e { top: 50%; right: -4px; transform: translateY(-50%); cursor: e-resize; }
+.resize-handle.se { bottom: -4px; right: -4px; cursor: se-resize; }
+.resize-handle.s { bottom: -4px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+.resize-handle.sw { bottom: -4px; left: -4px; cursor: sw-resize; }
+.resize-handle.w { top: 50%; left: -4px; transform: translateY(-50%); cursor: w-resize; }
+
+.hidden {
+    display: none !important;
+}
+
+/* ── Scroll phase ──────────────────────────────────────────────────────────────
+   The frozen shot and the dim both go away: the user has to see the REAL app move.
+   All that is left over the live desktop is the region outline and the HUD, and the
+   window passes the mouse through so scrolling reaches the app below. */
+body.phase-capture #screen-canvas,
+body.phase-capture #overlay-canvas,
+body.phase-capture .resize-handle,
+body.phase-capture .dimensions-label,
+body.phase-capture .instruction {
+    display: none;
+}
+
+body.phase-capture {
+    cursor: default;
+}
+
+body.phase-capture .selection-box {
+    /* Outline OUTSIDE the box: a border would sit on the first and last row of the region
+       and, since the overlay is excluded from capture, leave a transparent frame there. */
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
+    pointer-events: none;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.hud {
+    position: absolute;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-5);
+    border: 1px solid var(--overlay-border);
+    border-radius: var(--r-full);
+    background: var(--overlay-surface);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    box-shadow: var(--overlay-shadow);
+    color: var(--overlay-text);
+    font-size: var(--fs-sm);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.hud-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    animation: hud-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes hud-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hud-dot { animation: none; }
+}
+
+.hud-main {
+    font-weight: var(--fw-medium);
+}
+
+.hud-stats {
+    color: var(--overlay-text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.hud-warn {
+    color: var(--danger);
+    font-weight: var(--fw-medium);
+}
+
+/* ── Review phase ──────────────────────────────────────────────────────────── */
+body.phase-review .selection-box {
+    display: none;
+}
+
+body.phase-review {
+    cursor: default;
+}
+
+.preview {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-4);
+    max-width: 70vw;
+    padding: var(--sp-5);
+    border: 1px solid var(--overlay-border);
+    border-radius: var(--r-lg);
+    background: var(--overlay-surface);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    box-shadow: var(--overlay-shadow);
+    pointer-events: none;
+}
+
+#preview-canvas {
+    display: block;
+    border-radius: var(--r-sm);
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.preview-foot {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    color: var(--overlay-text-dim);
+    font-size: var(--fs-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+.preview-warn {
+    color: var(--danger);
+}
+
+/* ── Toolbar ───────────────────────────────────────────────────────────────── */
+.toolbar {
+    position: absolute;
+    display: none;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border: 1px solid var(--overlay-border);
+    border-radius: var(--r-lg);
+    background: var(--overlay-surface);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    box-shadow: var(--overlay-shadow);
+    z-index: 9999;
+    pointer-events: auto;
+    cursor: default;
+}
+
+.divider {
+    width: 1px;
+    height: 18px;
+    margin: 0 var(--sp-2);
+    background: var(--overlay-border);
+}
+
+.text-btn,
+.icon-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    height: 28px;
+    padding: 0 var(--sp-4);
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--overlay-text-dim);
+    font-family: var(--font-ui);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+        color var(--dur-fast) var(--ease-standard);
+}
+
+.icon-btn {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+}
+
+.text-btn svg,
+.icon-btn svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    stroke: currentColor;
+}
+
+.text-btn:hover,
+.icon-btn:hover {
+    background: var(--overlay-hover);
+    color: var(--overlay-text);
+}
+
+.text-btn.primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.text-btn.primary:hover {
+    background: var(--accent-hover);
+}
+
+.icon-btn.close:hover {
+    background: var(--danger);
+    color: #fff;
+}
+
+/* Only the buttons that belong to the current phase are on the bar. */
+#btn-start, #btn-finish, #btn-copy, #btn-save {
+    display: none;
+}
+
+body.phase-select #btn-start,
+body.phase-capture #btn-finish,
+body.phase-review #btn-copy,
+body.phase-review #btn-save {
+    display: flex;
+}
+
+.instruction {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    padding: var(--sp-4) var(--sp-6);
+    border: 1px solid var(--overlay-border);
+    border-radius: var(--r-full);
+    background: var(--overlay-surface);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: var(--overlay-shadow);
+    color: var(--overlay-text);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-medium);
+    pointer-events: none;
+}
+
+.instruction.warn {
+    color: var(--danger);
+}

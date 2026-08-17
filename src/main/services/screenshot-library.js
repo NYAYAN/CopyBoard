@@ -11,7 +11,12 @@ const { state, store } = require('./state');
 // lives in the electron-store under 'screenshots'.
 
 const MAX_SCREENSHOTS = 30;
-const THUMB_WIDTH = 220;
+// The thumbnail is CONTAINED in a square rather than merely narrowed to THUMB_MAX px wide.
+// Scaling by width alone is fine for a screen-shaped snip but not for a scroll capture: a
+// 2400x16000 page came out as a 220x1467 "thumbnail", which is a ~100KB base64 string in
+// the electron-store index and, because the gallery's rows are sized by content, a grid
+// cell fifteen screens tall.
+const THUMB_MAX = 220;
 
 function screenshotsDir() {
     return path.join(app.getPath('userData'), 'screenshots');
@@ -49,7 +54,12 @@ function addScreenshot(pngBuffer) {
 
     const img = nativeImage.createFromBuffer(pngBuffer);
     const size = img.getSize();
-    const thumb = 'data:image/jpeg;base64,' + img.resize({ width: THUMB_WIDTH }).toJPEG(80).toString('base64');
+    const scale = Math.min(THUMB_MAX / size.width, THUMB_MAX / size.height, 1);
+    const thumbImg = img.resize({
+        width: Math.max(1, Math.round(size.width * scale)),
+        height: Math.max(1, Math.round(size.height * scale))
+    });
+    const thumb = 'data:image/jpeg;base64,' + thumbImg.toJPEG(80).toString('base64');
 
     items.unshift({ id, file, hash, timestamp: new Date().toISOString(), w: size.width, h: size.height, thumb });
     while (items.length > MAX_SCREENSHOTS) {

@@ -45,6 +45,7 @@ const state = {
     snipperWindow: null,
     ocrWindow: null,
     recorderWindow: null,
+    scrollerWindow: null,
     captureWindows: [], // all active capture overlay windows (one per monitor)
     widgetWindow: null,
     quickPasteWindow: null,
@@ -65,10 +66,11 @@ const state = {
         video: store.get('globalShortcutVideo', 'Alt+8'),
         ocr: store.get('globalShortcutOcr', 'Alt+2'),
         color: store.get('globalShortcutColor', 'Alt+3'),
+        scroll: store.get('globalShortcutScroll', 'Alt+4'),
         // Per-shortcut on/off. The accelerator is KEPT when a shortcut is switched off, so
         // turning it back on restores the same binding — only the registration goes away.
         enabled: Object.assign(
-            { list: true, draw: true, video: true, ocr: true, color: true, paste: true },
+            { list: true, draw: true, video: true, ocr: true, color: true, scroll: true, paste: true },
             store.get('shortcutsEnabled', {})
         ),
         paste: store.get('globalShortcutPaste', 'CommandOrControl+Shift+V')

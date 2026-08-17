@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CopyBoard Scroll Capture</title>
+    <link rel="stylesheet" href="../shared/tokens.css">
+    <link rel="stylesheet" href="../shared/overlay-tooltip.css">
+    <link rel="stylesheet" href="scroller.css">
+    <script src="../shared/theme.js"></script>
+</head>
+
+<body class="phase-select">
+    <!-- Frozen backdrop for picking the region. It is HIDDEN for the scroll phase: the
+         whole point then is to watch the live app scroll underneath a transparent window. -->
+    <canvas id="screen-canvas"></canvas>
+    <canvas id="overlay-canvas"></canvas>
+
+    <div id="selection-box" class="selection-box hidden">
+        <div id="dimensions-label" class="dimensions-label">0 x 0</div>
+        <div class="resize-handle nw" data-handle="nw"></div>
+        <div class="resize-handle n" data-handle="n"></div>
+        <div class="resize-handle ne" data-handle="ne"></div>
+        <div class="resize-handle e" data-handle="e"></div>
+        <div class="resize-handle se" data-handle="se"></div>
+        <div class="resize-handle s" data-handle="s"></div>
+        <div class="resize-handle sw" data-handle="sw"></div>
+        <div class="resize-handle w" data-handle="w"></div>
+    </div>
+
+    <!-- Live counters during the scroll phase. -->
+    <div id="hud" class="hud hidden">
+        <span class="hud-dot"></span>
+        <span id="hud-main" class="hud-main">Şimdi kaydırın</span>
+        <span id="hud-stats" class="hud-stats"></span>
+        <span id="hud-warn" class="hud-warn hidden"></span>
+    </div>
+
+    <div id="preview" class="preview hidden">
+        <canvas id="preview-canvas"></canvas>
+        <div class="preview-foot">
+            <span id="preview-meta" class="preview-meta"></span>
+            <span id="preview-warn" class="preview-warn hidden"></span>
+        </div>
+    </div>
+
+    <div id="toolbar" class="toolbar hidden">
+        <button class="text-btn primary" id="btn-start" title="Kaydırmalı yakalamayı başlat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M12 5v14" />
+                <polyline points="6 13 12 19 18 13" />
+            </svg>
+            <span>Başlat</span>
+        </button>
+        <button class="text-btn primary" id="btn-finish" title="Yakalamayı bitir ve birleştir">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>Bitir</span>
+        </button>
+        <button class="text-btn" id="btn-copy" title="Panoya kopyala">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+            <span>Kopyala</span>
+        </button>
+        <button class="text-btn" id="btn-save" title="Dosyaya kaydet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+            </svg>
+            <span>Kaydet</span>
+        </button>
+        <div class="divider"></div>
+        <button class="icon-btn close" id="btn-close" title="Kapat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="instruction" id="instruction">Kaydırarak yakalanacak alanı seçin</div>
+
+    <script src="../shared/i18n.js"></script>
+    <script src="../shared/overlay-tooltip.js"></script>
+    <script type="module" src="scroller.js"></script>
+</body>
+
+</html>

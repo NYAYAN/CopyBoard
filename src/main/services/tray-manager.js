@@ -34,6 +34,7 @@ function buildMenu() {
         { label: t('Ekran Görüntüsü Al'), accelerator: s.draw, click: () => require('./capture-service').startCapture('draw') },
         { label: t('Metin Oku (OCR)'), accelerator: s.ocr, click: () => require('./capture-service').startCapture('ocr') },
         { label: t('Renk Kodu Al'), accelerator: s.color, click: () => require('./capture-service').startCapture('color') },
+        { label: t('Kaydırmalı Yakalama'), accelerator: s.scroll, click: () => require('./capture-service').startCapture('scroll') },
         { label: t('Video Kaydet'), accelerator: s.video, click: () => require('./capture-service').startCapture('video') },
         { type: 'separator' },
         { label: t('Çıkış'), click: () => app.quit() }

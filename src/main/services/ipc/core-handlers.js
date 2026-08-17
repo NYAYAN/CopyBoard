@@ -10,6 +10,7 @@ function registerCoreHandlers() {
         globalShortcutImage: state.shortcuts.draw, globalShortcutVideo: state.shortcuts.video,
         globalShortcutOcr: state.shortcuts.ocr,
         globalShortcutColor: state.shortcuts.color,
+        globalShortcutScroll: state.shortcuts.scroll,
         shortcutsEnabled: state.shortcuts.enabled,
         globalShortcutPaste: state.shortcuts.paste,
         autoStart: state.autoStart, videoQuality: state.videoQuality,

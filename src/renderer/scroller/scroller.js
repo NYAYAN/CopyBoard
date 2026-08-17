@@ -50,6 +50,12 @@ const MIN_CROP_H = 240;
 // the natural end of a scroll capture, so the user should not have to say so twice.
 const IDLE_FINISH_MS = 2500;
 const IDLE_HINT_MS = 1000;
+// Give up when the region has clearly been scrolling for this long and NOTHING has matched.
+// Timed from the first motion rather than from Start, so a user who takes a while to find
+// their place is not cut off. Without it a capture that can never match has no ending of its
+// own: the idle finish is armed only once something has been committed, which would leave
+// cancelling as the only way out of a content-less capture.
+const STALL_GIVEUP_MS = 8000;
 // Accumulated rows are parked in tiles instead of one canvas that has to be reallocated
 // every time it fills. 2048 rows keeps the slack in the final part-filled tile small.
 const TILE_ROWS = 2048;
@@ -86,6 +92,7 @@ let idleTimer = null;
 let lastSampleAt = 0;
 let lastProgressAt = 0;
 let missStreak = 0;
+let firstMotionAt = 0;   // when the region was first seen to move at all
 let finalCanvas = null;
 
 // ── Backdrop ───────────────────────────────────────────────────────────────────
@@ -216,9 +223,8 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
 function resetSelection() {
     state.isSelecting = state.isMoving = state.isResizing = false;
     state.selectionRect = null;
-    selectionBox.style.display = 'none';
     selectionBox.classList.add('hidden');
-    toolbar.style.display = 'none';
+    toolbar.classList.add('hidden');
     document.body.classList.remove('selecting');
     repaintOverlay();
 }
@@ -233,7 +239,7 @@ function updateDimensions(w, h) {
 function placeToolbar() {
     const r = state.selectionRect;
     if (!r) return;
-    toolbar.style.display = 'flex';
+    toolbar.classList.remove('hidden');
     const tw = toolbar.offsetWidth;
     const th = toolbar.offsetHeight;
     let left = r.x + (r.w - tw) / 2;
@@ -269,7 +275,7 @@ window.addEventListener('mousedown', (e) => {
             const b = selectionBox.getBoundingClientRect();
             state.resizeStartRect = { left: b.left, top: b.top, width: b.width, height: b.height };
             state.startX = e.clientX; state.startY = e.clientY;
-            toolbar.style.display = 'none';
+            toolbar.classList.add('hidden');
             document.body.classList.add('selecting');
             return;
         }
@@ -278,7 +284,7 @@ window.addEventListener('mousedown', (e) => {
             const b = selectionBox.getBoundingClientRect();
             state.dragOffX = e.clientX - b.left;
             state.dragOffY = e.clientY - b.top;
-            toolbar.style.display = 'none';
+            toolbar.classList.add('hidden');
             return;
         }
     }
@@ -291,7 +297,6 @@ window.addEventListener('mousedown', (e) => {
     selectionBox.style.left = state.startX + 'px';
     selectionBox.style.top = state.startY + 'px';
     selectionBox.style.width = selectionBox.style.height = '0px';
-    selectionBox.style.display = 'block';
     selectionBox.classList.remove('hidden');
     updateDimensions(0, 0);
 });
@@ -430,6 +435,7 @@ async function beginCapture() {
     tiles = [];
     totalRows = 0;
     missStreak = 0;
+    firstMotionAt = 0;
     finalCanvas = null;
     stitcher = createStitcher({ outputWidth: crop.w });
 
@@ -459,7 +465,11 @@ function startFrameLoop() {
         if (state.phase !== 'capture') return;
         const now = performance.now();
         refreshHud(now);
-        if (stitcher.started && now - lastProgressAt > IDLE_FINISH_MS) finishCapture(null);
+        if (stitcher.started) {
+            if (now - lastProgressAt > IDLE_FINISH_MS) finishCapture(null);
+        } else if (firstMotionAt && now - firstMotionAt > STALL_GIVEUP_MS) {
+            finishCapture(null); // routes to the "nothing was captured" path
+        }
     }, 250);
 
     // requestVideoFrameCallback fires once per DECODED frame, so the loop follows the
@@ -542,6 +552,9 @@ function sampleFrame(now) {
     if (committed) {
         baseFrame = drawn;
         curFrame = drawn === frameA ? frameB : frameA;
+    }
+    if (decision.offset > 0 || decision.status === 'reject') {
+        if (!firstMotionAt) firstMotionAt = now;
     }
     if (decision.base || decision.add) {
         lastProgressAt = now;
@@ -678,7 +691,7 @@ function showPreview(note, gaps) {
     instruction.classList.add('hidden');
     // Centre the toolbar under the preview panel now that it has a size.
     const pr = preview.getBoundingClientRect();
-    toolbar.style.display = 'flex';
+    toolbar.classList.remove('hidden');
     toolbar.style.left = Math.max(10, pr.left + (pr.width - toolbar.offsetWidth) / 2) + 'px';
     toolbar.style.top = Math.min(pr.bottom + 12, window.innerHeight - toolbar.offsetHeight - 10) + 'px';
 }

@@ -86,6 +86,10 @@ body.selecting * {
 .resize-handle.sw { bottom: -4px; left: -4px; cursor: sw-resize; }
 .resize-handle.w { top: 50%; left: -4px; transform: translateY(-50%); cursor: w-resize; }
 
+/* The one way anything in this window is hidden. It carries !important so it always wins,
+   which means visibility must NEVER be driven by an inline style.display: an inline value
+   loses to !important, and the element stays invisible while the code that set it looks
+   perfectly correct. Toggle this class instead. */
 .hidden {
     display: none !important;
 }
@@ -165,6 +169,15 @@ body.phase-capture .selection-box {
     font-weight: var(--fw-medium);
 }
 
+/* Standing reminder of how a capture ends. Without it the scroll phase gives the user no
+   idea that stopping is the finish gesture. */
+.hud-hint {
+    padding-left: var(--sp-3);
+    border-left: 1px solid var(--overlay-border);
+    color: var(--overlay-text-dim);
+    font-size: var(--fs-xs);
+}
+
 /* ── Review phase ──────────────────────────────────────────────────────────── */
 body.phase-review .selection-box {
     display: none;
@@ -218,7 +231,8 @@ body.phase-review {
 /* ── Toolbar ───────────────────────────────────────────────────────────────── */
 .toolbar {
     position: absolute;
-    display: none;
+    /* Shown/hidden by .hidden; only the position comes from inline styles. */
+    display: flex;
     align-items: center;
     gap: var(--sp-2);
     padding: var(--sp-3);

@@ -74,11 +74,17 @@ function openViewer(id) {
     if (!payload) return;
 
     const CHROME_H = 44 + 64; // toolbar row + bottom thumbnail strip
+    const STAGE_PAD = 10;     // .stage padding in viewer.css — the gutter around the image
+    const PAD_H = STAGE_PAD * 2;
     const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-    // Fit the image (never upscale), keep room for the chrome, center on screen.
-    const scale = Math.min(1, (wa.width * 0.85) / payload.w, (wa.height * 0.85 - CHROME_H) / payload.h);
-    const width = Math.max(480, Math.round(payload.w * scale));
-    const height = Math.max(320, Math.round(payload.h * scale) + CHROME_H);
+    // Fit the image (never upscale), keep room for the chrome and the gutter, center on
+    // screen. The gutter is added back to the window rather than taken out of the
+    // picture: a shot that would show at 1:1 still does, framed instead of flush.
+    const scale = Math.min(1,
+        (wa.width * 0.85 - PAD_H) / payload.w,
+        (wa.height * 0.85 - CHROME_H - PAD_H) / payload.h);
+    const width = Math.max(480, Math.round(payload.w * scale) + PAD_H);
+    const height = Math.max(320, Math.round(payload.h * scale) + CHROME_H + PAD_H);
     const bounds = {
         x: Math.round(wa.x + (wa.width - width) / 2),
         y: Math.round(wa.y + (wa.height - height) / 2),

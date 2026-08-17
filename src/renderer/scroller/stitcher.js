@@ -53,7 +53,8 @@ export const DEFAULTS = {
     stickyTolerance: 3,      // per-sample luma difference still counted as "unchanged"
     stickyMinScroll: 8,      // never judge staticness off a frame that barely moved
     maxStickyPct: 0.35,      // a "header" larger than this is a misread, not chrome
-    stickyFreezeAfter: 5,    // stop revising the estimate once the capture is under way
+    // No re-measuring after the capture starts: the strip is bookkept in units of the moving
+    // band, so revising the band's height mid-capture would displace everything already in it.
 
     // Output bounds — a runaway page must not take the app down with it. RGBA in memory is
     // 4 bytes a pixel and composing the final image needs a second copy, so the area cap is
@@ -139,12 +140,19 @@ export function buildProfile(frame, opts = {}) {
 
 // Mean |difference| between cur.row[y] and base.row[y + offset] across the band.
 // Sub-stepping rows/columns is what makes the coarse sweep affordable.
+//
+// The offset is SIGNED: positive means the content moved up the screen (the user scrolled
+// down the page), negative means it moved down (scrolled up). Both rows have to stay inside
+// the band, which is what the two clamps below express — for a negative offset the usable
+// range starts further down instead of ending further up.
 function bandScore(base, cur, offset, top, bottom, rowStep, colStep) {
     const s = cur.cols;
     const a = cur.data, b = base.data;
+    const yStart = offset < 0 ? top - offset : top;
+    const yEnd = offset < 0 ? bottom : bottom - offset;
     let sum = 0, count = 0;
 
-    for (let y = top; y + offset < bottom; y += rowStep) {
+    for (let y = yStart; y < yEnd; y += rowStep) {
         const ai = y * s, bi = (y + offset) * s;
         for (let i = 0; i < s; i += colStep) {
             const d = a[ai + i] - b[bi + i];
@@ -184,15 +192,17 @@ export function findOffset(base, cur, band, opts = {}) {
     const maxShift = Math.min(Math.floor(bandRows * o.maxScrollPct), bandRows - o.minOverlapRows);
     if (maxShift < o.minScroll) return { candidates: [], reason: 'band-too-short' };
 
-    const prior = (d) => o.overlapPenalty * (d / bandRows);
+    const prior = (d) => o.overlapPenalty * (Math.abs(d) / bandRows);
 
     const step = o.coarseRowStep;
     const cTop = Math.ceil(top / step);
     const cBottom = Math.floor(bottom / step);
     const cMax = Math.floor(maxShift / step);
 
+    // Both directions: scrolling UP is a negative offset, and searching only the positive
+    // half is what made an upward capture match nothing at all.
     const coarse = [];
-    for (let dc = 0; dc <= cMax; dc++) {
+    for (let dc = -cMax; dc <= cMax; dc++) {
         const d = dc * step;
         coarse.push({ d, rank: bandScore(base.coarse, cur.coarse, dc, cTop, cBottom, 1, 1) + prior(d) });
     }
@@ -208,7 +218,7 @@ export function findOffset(base, cur, band, opts = {}) {
 
     const candidates = [];
     for (const seed of seeds) {
-        const lo = Math.max(0, seed - step);
+        const lo = Math.max(-maxShift, seed - step);
         const hi = Math.min(maxShift, seed + step);
         let bestD = seed, bestScore = Infinity, bestRank = Infinity;
         for (let d = lo; d <= hi; d++) {
@@ -238,19 +248,35 @@ export function measureStatic(base, cur, opts = {}) {
     return { header: Math.min(header, cap), footer: Math.min(footer, cap) };
 }
 
-// Incremental stitcher. Feed it frames; it tells you which rows to keep.
+// Incremental stitcher. Feed it frames; it tells you which rows to keep and at which end.
+//
+// The captured page is tracked as an INTERVAL in absolute page coordinates rather than as a
+// pile of rows growing downward. That is what makes direction fall out for free: whichever
+// end of the interval a new frame sticks out of is the end its new rows belong to. Scrolling
+// down extends the bottom, scrolling up extends the top, and scrolling back over ground
+// already captured adds nothing at all. The origin is arbitrary — it is the content top of
+// the first committed frame.
 //
 // Decisions:
 //   'need-more' — first frame, nothing to compare against yet
 //   'idle'      — matched, but the content hasn't moved far enough to commit
-//   'append'    — take `add` rows from THIS frame (plus `base` rows from the previous
-//                 frame on the very first commit)
+//   'seen'      — moved, and every row of it is already captured (scrolled back over)
+//   'append'    — take `add.height` rows from THIS frame starting at `add.top`, and put them
+//                 at `add.side` ('bottom' or 'top') of what you have. On the very first
+//                 commit `base` additionally gives the rows to seed the strip with, taken
+//                 from the PREVIOUS frame.
 //   'reject'    — no confident match; the base is held so the capture can recover
 //   'full'      — the output cap was reached; stop capturing
 //
-// The base frame advances ONLY on a commit. Holding it means a slow crawl accumulates into
-// a measurable offset instead of reading as a permanent standstill, and a too-fast flick
-// can still re-match once the user scrolls back into range.
+// Sticky chrome is NOT part of the strip. The caller places the header above it and the
+// footer below it once, when composing — see headerHeight/footerHeight. Baking the header
+// into the strip would strand it in the middle of the image the moment anything is
+// prepended above it.
+//
+// The base frame advances on a commit or a 'seen'. It is HELD on idle and reject: holding
+// means a crawl too slow to commit accumulates into a measurable offset instead of reading
+// as a permanent standstill, and a flick too fast to match can still re-match once the user
+// scrolls back into range.
 export function createStitcher(opts = {}) {
     const o = { ...DEFAULTS, ...opts };
 
@@ -258,7 +284,6 @@ export function createStitcher(opts = {}) {
     let width = 0;            // width of the frames being pushed
     let outWidth = 0;         // width of the image the caller is building — what the cap sees
     let frameHeight = 0;
-    let committedRows = 0;
     let commits = 0;
     let started = false;             // has anything been written to the output yet?
     let lastOffset = 0;              // scroll velocity hint for the ambiguity tie-break
@@ -266,7 +291,17 @@ export function createStitcher(opts = {}) {
     let stickyKnown = false;
     let gaps = 0;                    // rejections after the capture started = possible loss
 
+    // Absolute coordinates. `pos` is where the CURRENT base frame's content top sits;
+    // [capLo, capHi) is everything captured so far.
+    let pos = 0;
+    let capLo = 0;
+    let capHi = 0;
+
+    const contentTop = () => sticky.header;
     const contentBottom = () => frameHeight - sticky.footer;
+    const bandHeight = () => contentBottom() - contentTop();
+    const chromeRows = () => sticky.header + sticky.footer;
+    const capturedRows = () => capHi - capLo;
 
     // Conservative middle band until sticky chrome has been measured: chrome sits at the
     // very edges, so the middle is clean even when we don't yet know how deep it goes.
@@ -277,14 +312,21 @@ export function createStitcher(opts = {}) {
                 bottom: Math.ceil(frameHeight * 0.85)
             };
         }
-        return { top: sticky.header, bottom: contentBottom() };
+        return { top: contentTop(), bottom: contentBottom() };
     }
 
+    // Chrome is counted against the budget because the caller adds it to the final image.
     function remainingRows() {
-        const byHeight = o.maxHeight - committedRows;
-        const byPixels = outWidth ? Math.floor(o.maxPixels / outWidth) - committedRows : byHeight;
+        const used = capturedRows() + chromeRows();
+        const byHeight = o.maxHeight - used;
+        const byPixels = outWidth ? Math.floor(o.maxPixels / outWidth) - used : byHeight;
         return Math.max(0, Math.min(byHeight, byPixels));
     }
+
+    const decide = (status, extra = {}) => ({
+        status, offset: 0, score: Infinity, base: null, add: null, reason: null,
+        sticky, ...extra
+    });
 
     function push(frame) {
         const profile = buildProfile(frame, o);
@@ -294,30 +336,29 @@ export function createStitcher(opts = {}) {
             outWidth = o.outputWidth || frame.width;
             frameHeight = frame.height;
             baseProfile = profile;
-            return { status: 'need-more', offset: 0, score: 0, base: null, add: null, sticky, reason: null };
+            return decide('need-more', { offset: 0, score: 0 });
         }
         if (frame.width !== width || frame.height !== frameHeight) {
             // The region is fixed for the lifetime of a capture; a size change means the
             // caller handed us frames from two different crops.
-            return { status: 'reject', offset: 0, score: Infinity, base: null, add: null, sticky, reason: 'size-changed' };
+            return decide('reject', { reason: 'size-changed' });
         }
 
         const { candidates, reason } = findOffset(baseProfile, profile, matchBand(), o);
-        if (!candidates.length) {
-            return { status: 'reject', offset: 0, score: Infinity, base: null, add: null, sticky, reason: reason || 'no-candidates' };
-        }
+        if (!candidates.length) return decide('reject', { reason: reason || 'no-candidates' });
 
         const best = candidates[0];
         const runnerUp = candidates[1];
 
         if (best.score > o.acceptScore) {
             if (started) gaps++;
-            return { status: 'reject', offset: 0, score: best.score, base: null, add: null, sticky, reason: 'no-match' };
+            return decide('reject', { score: best.score, reason: 'no-match' });
         }
 
-        // Several offsets fit about as well — repetitive content. Scrolling is continuous,
-        // so the offset near the last committed one is the honest reading; with no history
-        // to lean on, refuse rather than guess.
+        // Several offsets fit about as well — repetitive content. Scrolling is continuous, so
+        // the offset near the last committed one is the honest reading (its SIGN included,
+        // which is most of what rules out a mirror-image match); with no history to lean on,
+        // refuse rather than guess.
         let chosen = best;
         if (runnerUp && best.score >= runnerUp.score * o.ambiguityRatio) {
             const viable = candidates.filter(c => c.score <= o.acceptScore);
@@ -326,90 +367,109 @@ export function createStitcher(opts = {}) {
                 : [];
             if (near.length !== 1) {
                 if (started) gaps++;
-                return { status: 'reject', offset: best.offset, score: best.score, base: null, add: null, sticky, reason: 'ambiguous' };
+                return decide('reject', { offset: best.offset, score: best.score, reason: 'ambiguous' });
             }
             chosen = near[0];
         }
 
-        // Sticky chrome is re-measured for the first few commits and then frozen: the
-        // estimate only ever grows, and letting it grow forever would eventually eat real
-        // content on a page whose body happens to hold still for a moment.
-        if (chosen.offset >= o.stickyMinScroll && commits <= o.stickyFreezeAfter) {
-            const m = measureStatic(baseProfile, profile, o);
-            sticky = {
-                header: Math.max(sticky.header, m.header),
-                footer: Math.max(sticky.footer, m.footer)
-            };
+        const magnitude = Math.abs(chosen.offset);
+
+        // Sticky chrome is measured once, on the frame that starts the capture, and then
+        // frozen. Everything below counts in units of the moving band, so a band that
+        // changed height mid-capture would silently displace every row committed after it.
+        if (!started && magnitude >= o.stickyMinScroll) {
+            sticky = measureStatic(baseProfile, profile, o);
             stickyKnown = true;
         }
 
-        // Not enough motion to commit. Hold the base so the offset keeps accumulating.
-        // Committing before sticky chrome is known would bake a footer into the seam, so a
-        // first match that barely moved waits too.
-        if (chosen.offset < o.minScroll || (!started && !stickyKnown)) {
-            return { status: 'idle', offset: chosen.offset, score: chosen.score, base: null, add: null, sticky, reason: null };
+        // Not enough motion to commit — hold the base so the offset keeps accumulating.
+        // Committing before sticky chrome is known would fix the strip's geometry to a band
+        // we have not measured yet, so a first match that barely moved waits too.
+        if (magnitude < o.minScroll || (!started && !stickyKnown)) {
+            return decide('idle', { offset: chosen.offset, score: chosen.score });
         }
 
-        const bottom = contentBottom();
-        // Rows below `bottom - offset` had no counterpart in the base frame: that is exactly
-        // the new content, and nothing above it may be re-appended.
-        let addTop = bottom - chosen.offset;
-        let addHeight = chosen.offset;
+        const cTop = contentTop();
+        const H = bandHeight();
+        let room = remainingRows();
+        let full = false;
         let baseRange = null;
 
         if (!started) {
-            // First commit also lays down the base frame — everything above the sticky
-            // footer, header included. It has been held until now precisely so that this
-            // happens with the footer already known.
-            baseRange = { top: 0, height: bottom };
+            // Seed the strip with the base frame's whole moving band.
+            const take = Math.min(H, room);
+            if (take < H) full = true;
+            baseRange = { top: cTop, height: take };
+            pos = 0;
+            capLo = 0;
+            capHi = take;
+            room -= take;
         }
 
-        let room = remainingRows();
-        let full = false;
+        const newPos = pos + chosen.offset;
+        let add = null;
 
-        if (baseRange) {
-            if (baseRange.height >= room) {
-                baseRange.height = room;
-                full = true;
+        // A frame is the width of the band, and after the seed the interval is at least that
+        // wide, so it can stick out of AT MOST one end.
+        if (newPos + H > capHi) {
+            const gain = (newPos + H) - capHi;
+            const take = Math.min(gain, room);
+            if (take < gain) full = true;
+            if (take > 0) {
+                // Rows adjacent to the strip come first, so a clamped take drops from the far
+                // end and what is kept still joins on cleanly.
+                add = { top: cTop + (capHi - newPos), height: take, side: 'bottom' };
+                capHi += take;
+                room -= take;
             }
-            room -= baseRange.height;
-        }
-        if (addHeight > room) {
-            // Keep the BOTTOM of the new strip: it is the content closest to where the user
-            // is looking, and clipping the top only re-loses rows the next frame would
-            // have carried anyway.
-            addTop += addHeight - room;
-            addHeight = room;
-            full = true;
+        } else if (newPos < capLo) {
+            const gain = capLo - newPos;
+            const take = Math.min(gain, room);
+            if (take < gain) full = true;
+            if (take > 0) {
+                // Prepending, so the rows adjacent to the strip are at the BOTTOM of the new
+                // range — those are the ones to keep.
+                add = { top: cTop + (capLo - newPos) - take, height: take, side: 'top' };
+                capLo -= take;
+                room -= take;
+            }
         }
 
-        committedRows += (baseRange ? baseRange.height : 0) + addHeight;
+        pos = newPos;
+        baseProfile = profile;
+        lastOffset = chosen.offset;
+
+        if (!baseRange && !add) {
+            // No new rows, for one of two very different reasons: the frame stayed inside
+            // ground already captured ('seen' — the base still advances, because we know
+            // where we are), or there WAS new content and the cap left no room for it, which
+            // has to surface as 'full' or the caller would never learn to stop.
+            return decide(full ? 'full' : 'seen', { offset: chosen.offset, score: chosen.score });
+        }
+
         commits++;
         started = true;
-        lastOffset = chosen.offset;
-        baseProfile = profile;
-
-        return {
-            status: full ? 'full' : 'append',
+        return decide(full ? 'full' : 'append', {
             offset: chosen.offset,
             score: chosen.score,
             base: baseRange,
-            add: addHeight > 0 ? { top: addTop, height: addHeight } : null,
-            sticky,
-            reason: null
-        };
+            add
+        });
     }
 
     return {
         push,
         get width() { return outWidth; },
-        get height() { return committedRows; },
+        // Rows in the strip. The composed image is this plus headerHeight + footerHeight.
+        get height() { return capturedRows(); },
         get commits() { return commits; },
         get sticky() { return sticky; },
         get gaps() { return gaps; },
         get started() { return started; },
-        // Sticky footer of the LAST frame, appended once at the very end so a page with a
-        // pinned toolbar still ends on it instead of cutting away mid-content.
+        // Sticky chrome, placed once by the caller: the header above the strip and the footer
+        // below it, so a page with pinned bars still begins and ends on them. Any frame will
+        // do as the source — chrome is by definition the part that did not change.
+        get headerHeight() { return sticky.header; },
         get footerHeight() { return sticky.footer; },
         get remainingRows() { return remainingRows(); }
     };

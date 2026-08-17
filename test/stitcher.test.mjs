@@ -97,15 +97,15 @@ function viewport(page, scrollY, height, { header = 0, footer = 0 } = {}) {
 }
 
 // ── Replay harness ─────────────────────────────────────────────────────────────
-// Feeds a scroll sequence through the stitcher and records, for every row it accepted,
-// which PAGE row that was — the ground truth the assertions are written against.
+// Feeds a scroll sequence through the stitcher and reproduces what a caller would build:
+// a strip of page row indices, extended at whichever end each decision names. Sticky chrome
+// is deliberately NOT in the strip — the real caller lays it over the two ends when it
+// composes — so every entry here is a content row and the assertions can be exact.
 function replay(page, scrolls, frameHeight, chrome = {}, opts = {}) {
     const stitcher = createStitcher(opts);
-    const header = chrome.header || 0;
-    const footer = chrome.footer || 0;
-    const rows = [];          // page row index per output row; null = sticky chrome
+    const rows = [];          // page row index per strip row, in page order
     const statuses = [];
-    let prevScroll = null;
+    let baseScroll = null;    // scroll position of the frame the stitcher is matching against
 
     for (const scrollY of scrolls) {
         const frame = viewport(page, scrollY, frameHeight, chrome);
@@ -114,34 +114,33 @@ function replay(page, scrolls, frameHeight, chrome = {}, opts = {}) {
 
         // `base` rows come from the PREVIOUS frame, which is why the caller has to keep it.
         if (d.base) {
-            for (let y = d.base.top; y < d.base.top + d.base.height; y++) {
-                rows.push(y < header ? null : prevScroll + y);
-            }
+            for (let y = d.base.top; y < d.base.top + d.base.height; y++) rows.push(baseScroll + y);
         }
         if (d.add) {
-            for (let y = d.add.top; y < d.add.top + d.add.height; y++) {
-                rows.push(y < header ? null : scrollY + y);
-            }
+            const added = [];
+            for (let y = d.add.top; y < d.add.top + d.add.height; y++) added.push(scrollY + y);
+            if (d.add.side === 'top') rows.unshift(...added);
+            else rows.push(...added);
         }
-        if (d.base || d.add) prevScroll = scrollY;
-        else if (prevScroll === null) prevScroll = scrollY;
+
+        // The stitcher advances its base on a commit and on 'seen'; it holds it otherwise.
+        if (d.status === 'need-more' || d.status === 'seen' || d.base || d.add) baseScroll = scrollY;
         if (d.status === 'full') break;
     }
-    return { stitcher, rows, statuses, header, footer };
+    return { stitcher, rows, statuses };
 }
 
-// The content rows must be strictly consecutive: any repeat is a duplicated strip, any jump
-// is content the capture lost.
+// The strip must be strictly consecutive page rows: any repeat is a duplicated band, any
+// jump is content the capture lost.
 function assertContiguous(rows, label) {
-    const content = rows.filter(r => r !== null);
-    assert.ok(content.length > 0, `${label}: nothing was captured`);
-    for (let i = 1; i < content.length; i++) {
+    assert.ok(rows.length > 0, `${label}: nothing was captured`);
+    for (let i = 1; i < rows.length; i++) {
         assert.equal(
-            content[i], content[i - 1] + 1,
-            `${label}: page rows jumped from ${content[i - 1]} to ${content[i]} at output row ${i}`
+            rows[i], rows[i - 1] + 1,
+            `${label}: page rows jumped from ${rows[i - 1]} to ${rows[i]} at strip row ${i}`
         );
     }
-    return content;
+    return rows;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -216,6 +215,8 @@ test('a plain scroll stitches into one contiguous run of page rows', () => {
     assert.equal(content[content.length - 1], 2400 + frameH - 1, 'capture should reach the last visible row');
     assert.equal(stitcher.height, rows.length);
     assert.equal(stitcher.gaps, 0);
+    assert.equal(stitcher.headerHeight, 0);
+    assert.equal(stitcher.footerHeight, 0);
 });
 
 test('sticky header and footer appear once and never inside the content', () => {
@@ -227,15 +228,15 @@ test('sticky header and footer appear once and never inside the content', () => 
 
     const { rows, stitcher } = replay(page, scrolls, frameH, chrome);
 
-    // Chrome rows are the leading run and nothing else: a sticky band that leaked into the
-    // body would show up as a null in the middle of the sequence.
-    const firstContent = rows.findIndex(r => r !== null);
-    assert.ok(firstContent > 0, 'the header should lead the output');
-    assert.ok(rows.slice(firstContent).every(r => r !== null), 'sticky chrome leaked into the content');
+    assert.ok(stitcher.headerHeight >= 60, `header underestimated: ${stitcher.headerHeight}`);
+    assert.ok(stitcher.footerHeight >= 40, `footer underestimated: ${stitcher.footerHeight}`);
 
-    assert.ok(stitcher.sticky.header >= 60, `header underestimated: ${stitcher.sticky.header}`);
-    assert.ok(stitcher.sticky.footer >= 40, `footer underestimated: ${stitcher.sticky.footer}`);
-    assertContiguous(rows, 'sticky chrome');
+    // The strip is pure content: the header band is a flat grey ramp, so a row of it that
+    // leaked in would break contiguity. The caller adds the chrome back at the two ends.
+    const content = assertContiguous(rows, 'sticky chrome');
+    // Nothing above the header can be captured — it is painted over the page there.
+    assert.ok(content[0] >= stitcher.headerHeight,
+        `strip starts at page row ${content[0]}, inside the header band`);
 });
 
 test('a still screen never commits anything', () => {
@@ -353,6 +354,63 @@ test('the output cap stops the capture instead of growing without bound', () => 
     assert.equal(stitcher.height, 1200);
     assert.equal(rows.length, 1200);
     assertContiguous(rows, 'capped output');
+});
+
+test('scrolling UP captures the page just as well as scrolling down', () => {
+    // The user starts at the bottom and scrolls upward. Content moves DOWN the screen, which
+    // is a negative offset — searching only the positive half of the range made every frame
+    // of an upward capture match nothing at all.
+    const page = makePage(400, 4000);
+    const frameH = 600;
+    const scrolls = [];
+    for (let y = 2400; y >= 0; y -= 60) scrolls.push(y);
+
+    const { rows, stitcher, statuses } = replay(page, scrolls, frameH);
+    const content = assertContiguous(rows, 'upward scroll');
+
+    assert.ok(!statuses.includes('reject'), `upward frames were rejected: ${statuses.join(',')}`);
+    // Rows arrive newest-first but the strip must still read in page order, top to bottom.
+    assert.equal(content[0], 0, `strip starts at page row ${content[0]}, expected 0`);
+    assert.equal(content[content.length - 1], 2400 + frameH - 1);
+    assert.equal(stitcher.height, rows.length);
+    assert.equal(stitcher.gaps, 0);
+});
+
+test('reversing direction mid-capture neither duplicates nor loses rows', () => {
+    // Down, then back up past the start, then down again — the overshoot every trackpad
+    // makes. Ground already captured must add nothing, and going past either end must extend
+    // that end.
+    const page = makePage(400, 4000);
+    const frameH = 600;
+    const scrolls = [1000, 1060, 1120, 1180, 1120, 1060, 1000, 940, 880, 940, 1000, 1240, 1300];
+
+    const { rows, stitcher, statuses } = replay(page, scrolls, frameH);
+    const content = assertContiguous(rows, 'direction reversal');
+
+    assert.ok(statuses.includes('seen'), 'scrolling back over captured ground should report "seen"');
+    // The strip must span exactly the union of everything visited.
+    assert.equal(content[0], 880, `strip starts at ${content[0]}, expected the highest point reached`);
+    assert.equal(content[content.length - 1], 1300 + frameH - 1,
+        `strip ends at ${content[content.length - 1]}, expected the lowest point reached`);
+    assert.equal(stitcher.gaps, 0);
+});
+
+test('a cap reached mid-strip clips the far end, keeping the seam intact', () => {
+    // The cap used to be tested only where it landed on an exact multiple of the scroll
+    // step, so the partial-take path never ran. Clipping the WRONG end of a partial take
+    // splices a non-adjacent band onto the strip and tears the page at the very last seam.
+    const page = makePage(200, 20000);
+    const frameH = 400;
+    const scrolls = [];
+    for (let y = 0; y <= 8000; y += 100) scrolls.push(y);
+
+    // 400 seed + n*100 never equals 1150, so the last append must be clipped.
+    const { rows, statuses, stitcher } = replay(page, scrolls, frameH, {}, { maxPixels: 200 * 1150 });
+
+    assert.ok(statuses.includes('full'), 'the cap should surface as a full status');
+    assert.equal(stitcher.height, 1150);
+    assert.equal(rows.length, 1150);
+    assertContiguous(rows, 'clipped cap');
 });
 
 test('a region shorter than the minimum overlap is refused, not mis-stitched', () => {

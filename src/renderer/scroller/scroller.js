@@ -85,7 +85,8 @@ let crop = null;            // { x, y, w, h } in PHYSICAL pixels of the captured
 let frameA = null, frameB = null;   // ping-pong crop canvases
 let curFrame = null, baseFrame = null, lastFrame = null;
 let profileCanvas = null, profileCtx = null;
-let tiles = [];
+let headTiles = [];   // prepended rows, each tile filled bottom-up
+let tailTiles = [];   // appended rows, each tile filled top-down
 let totalRows = 0;
 let frameTimer = null;
 let idleTimer = null;
@@ -432,7 +433,8 @@ async function beginCapture() {
     profileCtx = profileCanvas.getContext('2d', { willReadFrequently: true });
     profileCtx.imageSmoothingEnabled = true; // horizontal box average, not nearest-neighbour
 
-    tiles = [];
+    headTiles = [];
+    tailTiles = [];
     totalRows = 0;
     missStreak = 0;
     firstMotionAt = 0;
@@ -507,21 +509,35 @@ function stopStream() {
     if (video) { try { video.pause(); } catch (e) { } video.srcObject = null; video = null; }
 }
 
-// Copy `height` rows starting at `srcTop` from a crop canvas into the tile chain.
-function appendRows(srcCanvas, srcTop, height) {
+// Copy `height` rows starting at `srcTop` from a crop canvas onto one end of the strip.
+//
+// Two chains, because a capture grows from whichever end the user scrolls towards. `tailTiles`
+// fill downward and are composed in order; `headTiles` fill UPWARD from the bottom of each
+// tile and are composed in reverse, which is what lets rows be prepended without moving any
+// pixels that are already placed.
+function addRows(srcCanvas, srcTop, height, side) {
+    const head = side === 'top';
+    const chain = head ? headTiles : tailTiles;
     let remaining = height;
-    let offset = 0;
+
     while (remaining > 0) {
-        let tile = tiles[tiles.length - 1];
+        let tile = chain[chain.length - 1];
         if (!tile || tile.rows >= TILE_ROWS) {
             tile = { ...makeFrameCanvas(crop.w, TILE_ROWS), rows: 0 };
-            tiles.push(tile);
+            chain.push(tile);
         }
         const n = Math.min(remaining, TILE_ROWS - tile.rows);
-        tile.ctx.drawImage(srcCanvas, 0, srcTop + offset, crop.w, n, 0, tile.rows, crop.w, n);
+        if (head) {
+            // Take rows from the BOTTOM of what is left to place, so the tile fills upward
+            // and the strip stays in page order.
+            tile.ctx.drawImage(srcCanvas, 0, srcTop + remaining - n, crop.w, n,
+                0, TILE_ROWS - tile.rows - n, crop.w, n);
+        } else {
+            tile.ctx.drawImage(srcCanvas, 0, srcTop + (height - remaining), crop.w, n,
+                0, tile.rows, crop.w, n);
+        }
         tile.rows += n;
         remaining -= n;
-        offset += n;
         totalRows += n;
     }
 }
@@ -544,16 +560,19 @@ function sampleFrame(now) {
     profileCtx.drawImage(drawn.canvas, 0, 0, crop.w, crop.h, 0, 0, PROFILE_W, crop.h);
     const decision = stitcher.push(profileCtx.getImageData(0, 0, PROFILE_W, crop.h));
 
-    if (decision.base) appendRows(baseFrame.canvas, decision.base.top, decision.base.height);
-    if (decision.add) appendRows(drawn.canvas, decision.add.top, decision.add.height);
+    if (decision.base) addRows(baseFrame.canvas, decision.base.top, decision.base.height, 'bottom');
+    if (decision.add) addRows(drawn.canvas, decision.add.top, decision.add.height, decision.add.side);
 
     lastFrame = drawn;
-    const committed = decision.status === 'need-more' || decision.base || decision.add;
-    if (committed) {
+    // Whenever the stitcher advanced its base profile, the matching canvas has to advance
+    // too — including on 'seen', where the frame matched but held no new rows.
+    const advanced = decision.status === 'need-more' || decision.status === 'seen'
+        || decision.base || decision.add;
+    if (advanced) {
         baseFrame = drawn;
         curFrame = drawn === frameA ? frameB : frameA;
     }
-    if (decision.offset > 0 || decision.status === 'reject') {
+    if (decision.offset !== 0 || decision.status === 'reject') {
         if (!firstMotionAt) firstMotionAt = now;
     }
     if (decision.base || decision.add) {
@@ -603,39 +622,57 @@ function refreshHud(now) {
 }
 
 // ── Finish & review ────────────────────────────────────────────────────────────
-function composeFinal() {
+function releaseTiles() {
+    [...headTiles, ...tailTiles].forEach(tile => { tile.canvas.width = tile.canvas.height = 0; });
+    headTiles = [];
+    tailTiles = [];
+}
+
+// Head chain in reverse (each of those tiles is filled from its bottom), then the tail chain
+// in order, with the sticky header and footer laid over the two ends.
+function composeFinal(header, footer) {
     const out = document.createElement('canvas');
     out.width = crop.w;
-    out.height = totalRows;
+    out.height = totalRows + header + footer;
     const octx = out.getContext('2d');
     octx.imageSmoothingEnabled = false;
-    let y = 0;
-    for (const tile of tiles) {
+
+    let y = header;
+    for (let i = headTiles.length - 1; i >= 0; i--) {
+        const tile = headTiles[i];
+        octx.drawImage(tile.canvas, 0, TILE_ROWS - tile.rows, crop.w, tile.rows, 0, y, crop.w, tile.rows);
+        y += tile.rows;
+    }
+    for (const tile of tailTiles) {
         octx.drawImage(tile.canvas, 0, 0, crop.w, tile.rows, 0, y, crop.w, tile.rows);
         y += tile.rows;
     }
+
+    // Sticky chrome, once, at the ends. Any frame is a valid source — chrome is by definition
+    // the part that never changed — so the last one is used for both.
+    if (lastFrame) {
+        if (header > 0) octx.drawImage(lastFrame.canvas, 0, 0, crop.w, header, 0, 0, crop.w, header);
+        if (footer > 0) {
+            octx.drawImage(lastFrame.canvas, 0, crop.h - footer, crop.w, footer,
+                0, out.height - footer, crop.w, footer);
+        }
+    }
+
     // Release the tiles as soon as they are composed — at this moment two full copies of a
     // long page are in memory, which is the peak of the whole feature.
-    tiles.forEach(tile => { tile.canvas.width = tile.canvas.height = 0; });
-    tiles = [];
+    releaseTiles();
     return out;
 }
 
 function finishCapture(note) {
     if (state.phase !== 'capture') return;
 
-    // A sticky footer was excluded from every appended strip so it could not stripe through
-    // the page. Put the last frame's copy back at the very bottom, so a pinned toolbar ends
-    // the image the way it ends the screen.
-    const footer = stitcher.sticky.footer;
-    if (stitcher.started && footer > 0 && lastFrame) {
-        const room = stitcher.remainingRows;
-        const n = Math.min(footer, room);
-        if (n > 0) appendRows(lastFrame.canvas, crop.h - n, n);
-    }
-
     const captured = totalRows;
     const gaps = stitcher.gaps;
+    // Sticky chrome is not part of the strip: it would be stranded mid-image the moment
+    // anything was prepended above it. composeFinal lays it over the two ends instead.
+    const header = stitcher.started && lastFrame ? stitcher.headerHeight : 0;
+    const footer = stitcher.started && lastFrame ? stitcher.footerHeight : 0;
 
     stopStream();
     window.api.scrollEnd();
@@ -646,8 +683,7 @@ function finishCapture(note) {
     if (!captured) {
         // Nothing was ever matched — most likely the user never scrolled, or the content
         // moves in a way the stitcher cannot follow. Back to selection rather than a dead end.
-        tiles.forEach(tile => { tile.canvas.width = tile.canvas.height = 0; });
-        tiles = [];
+        releaseTiles();
         setPhase('select');
         paintScreen();
         repaintOverlay();
@@ -658,7 +694,7 @@ function finishCapture(note) {
         return;
     }
 
-    finalCanvas = composeFinal();
+    finalCanvas = composeFinal(header, footer);
     setPhase('review');
     repaintOverlay();          // full dim behind the preview
     showPreview(note, gaps);

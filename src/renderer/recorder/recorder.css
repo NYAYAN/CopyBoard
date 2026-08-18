@@ -106,8 +106,14 @@ body.selecting * {
     position: fixed;
     bottom: 50px;
     /* Taskbar'dan uzak tutmak için yükseltildi */
-    left: 50%;
-    transform: translateX(-50%);
+    /* Centred with auto margins, not translateX(-50%). The quality list anchors itself
+       to its own button, and a transformed ancestor shifts where that anchor resolves —
+       the list opened half a bar's width clear of the control it belongs to. The
+       mouse-ignore region reads getBoundingClientRect, which is identical either way. */
+    left: 0;
+    right: 0;
+    width: max-content;
+    margin-inline: auto;
     display: flex;
     align-items: center;
     gap: var(--sp-2);
@@ -140,7 +146,12 @@ body.is-recording #selection-box {
     font-weight: var(--fw-medium);
 }
 
+/* The open list lives in shared/select.css — the same panel every window uses. This is
+   the closed chip that sits in the capture bar. */
 .toolbar-select {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
     height: 24px;
     padding: 0 var(--sp-2);
     border: 1px solid var(--overlay-border);
@@ -149,15 +160,13 @@ body.is-recording #selection-box {
     color: var(--overlay-text);
     font-family: inherit;
     font-size: var(--fs-sm);
+    white-space: nowrap;
     outline: none;
     cursor: pointer;
 }
 
-/* The open dropdown is drawn by the OS, not by this page, so it cannot inherit the
-   toolbar’s translucency — it takes the theme’s solid panel colours instead. */
-.toolbar-select option {
-    background: var(--bg-raised);
-    color: var(--text-primary);
+.toolbar-select::picker-icon {
+    color: var(--overlay-text-dim);
 }
 
 /* 28px, like the snipper's and the viewer's — the three bars are the same control in

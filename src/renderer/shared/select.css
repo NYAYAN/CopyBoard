@@ -1,0 +1,96 @@
+/* The open dropdown, for every window that has a <select>.
+ *
+ * This list used to be drawn outside the page — by Chromium on Windows, by the system
+ * menu on macOS — which is why it could not be styled. On Windows it took the row
+ * colours from the control but painted the HOVERED row with the system highlight, so in
+ * the light theme a near-black label landed on a saturated blue band and went
+ * unreadable: the one control in the app whose text you lost by pointing at it. No CSS
+ * could reach it; `option:hover` never applied, because the list was not in the page.
+ * The dark theme hid the bug, since near-white text survives the same blue.
+ *
+ * appearance: base-select moves the list into the page as real DOM. Everything below is
+ * then ordinary CSS on ordinary elements, and it renders the same in both themes and on
+ * both platforms. .value, the change event and arrow-key navigation are unaffected.
+ *
+ * Load AFTER tokens.css and BEFORE the window's own stylesheet: each window still skins
+ * its own closed control (the main window's field, the capture bars' translucent chip),
+ * and only the open list is shared.
+ *
+ * One thing deliberately not used here: the author-supplied
+ * <button><selectedcontent></selectedcontent></button> markup. Its clone is taken once
+ * and does NOT re-sync when an <option>'s text changes, so shared/i18n.js — which
+ * rewrites option text in place at load — would leave the closed control reading
+ * Turkish under an English UI. The UA's own button tracks the option live, so it stays.
+ */
+
+select,
+select::picker(select) {
+    appearance: base-select;
+}
+
+/* The UA draws a filled triangle. Every other disclosure in the app is the stroked
+   chevron from .chev, so this is that same path, masked so currentColor still drives
+   it and each window can tint it with its own token. */
+select::picker-icon {
+    content: '';
+    width: 12px;
+    height: 12px;
+    background: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    transition: rotate var(--dur-med) var(--ease-out);
+}
+
+select:open::picker-icon {
+    rotate: 180deg;
+}
+
+/* The colour popover's surface. Every floating panel in this app, one look — including
+   over a capture bar, which is translucent but must not let a screenshot show through
+   the list it is trying to read. */
+select::picker(select) {
+    padding: var(--sp-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    background: var(--bg-overlay);
+    box-shadow: var(--shadow-lg);
+    font-family: var(--font-ui);
+    font-size: var(--fs-sm);
+}
+
+select option {
+    display: flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 var(--sp-4);
+    /* One step down from the panel, per the radius scale. */
+    border-radius: var(--r-sm);
+    color: var(--text-primary);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+select option:hover {
+    background: var(--surface-hover);
+}
+
+/* Keyboard cursor. The UA's ring is the browser's own colour and sits OUTSIDE the row,
+   where the panel's 2px of padding clips it; this is the inset ring the history list
+   already uses for the same job. */
+select option:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
+/* The accent TINT the segmented control and the keyboard cursor already use, not the
+   OS's solid blue band — and the label keeps a colour that reads on it in both themes. */
+select option:checked {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-weight: var(--fw-medium);
+}
+
+/* The tint already says which one is current; the UA's tick says it twice, and reserves
+   a gutter that indents every other row to pay for it. */
+select option::checkmark {
+    display: none;
+}

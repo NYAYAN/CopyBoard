@@ -842,11 +842,34 @@ kbd+kbd {
     box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
+/* The open list lives in shared/select.css — it is the same panel in every window.
+   What stays here is this window's closed control. */
 .select {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
     height: 28px;
-    padding: 0 var(--sp-4);
-    max-width: 150px;
+    /* Tighter on the arrow side than the label side, which is where the eye reads. */
+    padding: 0 var(--sp-3) 0 var(--sp-4);
+    /* No max-width. The native control truncated the value to fit and kept the label's
+       room; this one sizes to its content, and capping it only made the longest value
+       ("Medium (1080p - 30fps)") wrap into a second line that spilled out of the 28px
+       box — the UA draws the closed value in a shadow button no author rule can reach,
+       so there is no ellipsis to fall back to. .set-label is flex: 1 1 auto with
+       min-width: 0, so the description absorbs the difference instead. */
+    white-space: nowrap;
     cursor: pointer;
+}
+
+/* Quieter than the value it sits next to. */
+.select::picker-icon {
+    color: var(--text-tertiary);
+}
+
+/* Open reads like focus, because it is: the control is the thing taking keys. */
+.select:open {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .number {

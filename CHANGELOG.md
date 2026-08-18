@@ -1,3 +1,18 @@
+# CopyBoard v2.11.1 Release Notes
+
+Açık temada açılır listelerin okunmaması.
+
+## 🎛️ Seçim listeleri (açık tema)
+- **Açık temada hover edilen satırın yazısı kayboluyordu.** Liste sayfanın dışında çiziliyordu — Windows'ta Chromium, macOS'ta sistem menüsü tarafından — ve satır renklerini kontrolden alırken **vurgulanan satırı sistem vurgu rengiyle** boyuyordu. `#18181b` yazı, doygun mavi bir bandın üzerine düşüyordu. CSS ile ulaşılamıyordu: liste sayfada olmadığı için `option:hover` hiç uygulanmıyor. Koyu tema hatayı baştan beri gizliyordu, beyaza yakın yazı aynı mavinin üzerinde okunduğu için.
+- `appearance: base-select` (Chromium 135+, uygulama 142 ile geliyor) listeyi sayfanın içine gerçek DOM olarak alıyor; hover, klavye imleci ve seçili satır artık uygulamanın kendi token'larıyla sıradan CSS. Ayrıca iki platformda birebir aynı çiziliyor — düzeltmenin tahminle değil ölçülerek doğrulanabilmesi bu sayede.
+- Kurallar yeni **`shared/select.css`** dosyasında, `shared/overlay-tooltip.css` ile aynı desende: kayıt araç çubuğundaki kalite seçicisinde **tıpatıp aynı hata** vardı, o da aynı düzeltmeyi paylaşıyor. Her pencere yalnızca kendi kapalı kontrolünü biçimlendirmeye devam ediyor. UA'nın dolu üçgeni, uygulamanın her yerindeki çizgisel chevron ile değişti.
+- `.select` üzerindeki **`max-width: 150px` kaldırıldı.** Yerel kontrol sığmayan değeri kırpıp etikete yerini bırakıyordu; bu kontrol içeriğine göre büyüdüğü için sınır, en uzun değeri (İngilizce video kalitesi, "Medium (1080p - 30fps)") 28px'lik kutudan taşan ikinci satıra sarıyordu. Ellipsis'e düşmek mümkün değil: kapalı değeri UA, hiçbir yazar kuralının erişemediği bir gölge düğmede çiziyor ve `text-overflow` oraya miras kalmıyor. `.set-label` zaten `flex: 1 1 auto; min-width: 0` olduğu için genişliği açıklama emiyor.
+- Kayıt araç çubuğu `translateX(-50%)` yerine **otomatik kenar boşluğuyla ortalanıyor.** Dönüştürülmüş bir üst öğe, listenin örtük tutturma noktasının nerede çözüleceğini kaydırıyor ve liste, ait olduğu düğmenin yarım çubuk genişliği sağında açılıyordu. Fare yoksayma bölgesi `getBoundingClientRect` okuduğu için iki yolda da aynı.
+- Bilerek **kullanılmayan** şey: yazarın sağladığı `<button><selectedcontent></selectedcontent></button>` işaretlemesi. Kopyası bir kez alınıyor ve bir `<option>`'ın metni değiştiğinde yenilenmiyor; `shared/i18n.js` ise option metinlerini yüklemede yerinde değiştiriyor — kapalı kontrol İngilizce arayüzde Türkçe kalırdı. Ölçüldü: UA'nın kendi düğmesi option'ı canlı takip ediyor, o yüzden kalıyor.
+- Doğrulama gerçek ayarlar panelinde ve gerçek kayıt kaplamasında, gerçek boyutlarında sürülerek yapıldı: iki temada da hover okunur, klavye imleci görünür, en uzun İngilizce etiket tek satır, ve tıklama hâlâ `change` tetikleyip `.value`'yu güncelliyor.
+
+---
+
 # CopyBoard v2.11.0 Release Notes
 
 Kaydırmalı yakalama, ve bir haftanın ölçülerek bulunmuş düzeltmeleri.

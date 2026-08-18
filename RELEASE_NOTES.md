@@ -1,53 +1,26 @@
-# CopyBoard v2.11.0 - Kaydırmalı Yakalama 📜
+# CopyBoard v2.11.1 - Açılır Listeler 🎛️
 
-Ekrana sığmayan bir sayfayı tek görüntüde yakalayın. Yanında da bu haftanın düzeltmeleri.
+Açık temada seçim listelerinin okunmama sorunu giderildi.
 
-## 📜 Kaydırmalı yakalama
+## 🎛️ Açılır listeler
 
-Uzun bir sayfayı parça parça almak yerine tek bir görüntü olarak alın.
-
-- Alanı seçin, **Başlat**'a basın ve sayfayı **kendiniz kaydırın** — uygulama kareleri
-  saniyede ~25 kez örnekleyip örtüşmelerinden birleştirir.
-- Kaydırmayı bırakınca kendiliğinden biter; dilerseniz **Bitir** düğmesiyle de kapatabilirsiniz.
-- **İki yönlü**: aşağı da yukarı da kaydırabilirsiniz, trackpad'de kaçınılmaz olan
-  ileri-geri salınım da sorun çıkarmaz.
-- **Yapışkan başlık ve altlıkları tanır**: sabit duran çubuklar birleştirmeye karışmaz,
-  sonuçta bir kez, en üstte ve en altta yer alır.
-- Hiçbir tuş vuruşu enjekte edilmez, dolayısıyla macOS'ta **Erişilebilirlik izni istemez**.
-- Sonucu panoya kopyalayabilir veya dosyaya kaydedebilirsiniz; her ikisi de galeriye düşer.
-
-## 🖼️ Büyük görüntüleyici
-
-- Resim artık pencereye yapışık değil: pencere resimden biraz büyük açılıyor, resim
-  **gerçek boyutunda (%100)** kalıyor ve etrafında boşluk oluyor.
-- Ekrandan büyük görüntüler eskisi gibi sığdırılarak açılmaya devam ediyor.
-
-## 🖼️ Ekran görüntüleri galerisi
-
-- **Küçük resimler netleşti.** Eskiden kare bir kutuya sığdırılıyorlardı; bu, ekran
-  şeklinde olmayan her şeyi eziyordu — uzun bir kaydırmalı yakalama 11 piksel genişliğinde
-  bir küçük resme dönüşüyordu. Artık ızgaranın çizdiği şekilde üretiliyorlar.
-- Kaydırmalı yakalamaların küçük resmi artık sayfanın **üst kısmını** gösteriyor — bir sayfa
-  ortasından değil başlığından tanınır.
-- **Galerinizde duran eski kayıtlar da onarılıyor**: uygulama açıldıktan birkaç saniye sonra
-  eski küçük resimler diskteki görüntülerden yeniden üretilir.
-- Kareler biraz büyüdü; sağdaki dört düğme artık tam sığıyor, **Sil** alt kenarda
-  kesilmiyor.
-- İlk kare artık sürekli seçili gibi durmuyor: karartma ve düğmeler yalnızca fareyle
-  üzerine gelince çıkıyor.
-
-## 💾 Kaydetme
-
-- **Kaydet penceresi artık açılıyor.** Eskiden yakalama kaplamasının arkasında açıldığı için
-  görünmüyor, ancak kaplama kapandığında ortaya çıkıyordu — bazen bambaşka bir işin
-  ortasında.
-- Düğme çalıştığını gösteriyor: büyük bir sayfayı PNG'ye çevirmek saniyeler sürüyor,
-  bu sürede düğmede dönen bir gösterge var ve pencere gerçekten açıldığında duruyor.
-- Üst üste basmak artık birden fazla kaydetme penceresi açmıyor.
+- **Açık temada bir seçeneğin üzerine gelince yazısı kayboluyordu.** Ayarlar'da tema,
+  dil ve kayıt kalitesi listelerini açıp herhangi bir satıra gelin — yazı, işletim
+  sisteminin mavi vurgu şeridinin altında neredeyse görünmez oluyordu. Liste sayfanın
+  dışında çizildiği için satır renklerini kontrolden alıyor, ama vurgulanan satırı
+  sistemin kendi rengiyle boyuyordu; koyu tema bunu gizliyordu, çünkü beyaza yakın
+  yazı aynı mavinin üzerinde okunuyor.
+- Liste artık **uygulamanın kendi paneli**: hover, klavye imleci ve seçili satır
+  uygulamanın renkleriyle çiziliyor ve iki temada da okunuyor. Windows ile macOS'ta
+  birebir aynı görünüyor.
+- **Ekran kaydı araç çubuğundaki kalite listesinde de aynı sorun vardı**, o da düzeldi.
+- Listelerin oku, uygulamanın her yerinde kullanılan ince çizgili ok ile aynı artık.
+- İngilizce arayüzde en uzun kalite değeri ("Medium (1080p - 30fps)") kutusuna
+  sığmayıp ikinci satıra taşıyordu; kutu artık değerine göre genişliyor.
 
 ## 📦 Kurulum & Güncelleme
 
-1. CopyBoard-Setup-2.11.0.exe (Windows) veya CopyBoard-2.11.0-arm64.dmg (macOS) dosyasını
+1. CopyBoard-Setup-2.11.1.exe (Windows) veya CopyBoard-2.11.1-arm64.dmg (macOS) dosyasını
    indirip kurun; veya
 2. Açık uygulamada otomatik güncelleme bildirimiyle geçin.
 

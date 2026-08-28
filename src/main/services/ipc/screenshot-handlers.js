@@ -115,6 +115,10 @@ function openViewer(id) {
         minWidth: 480,
         minHeight: 320,
         frame: false,
+        // Every other window of the app is skipTaskbar, so this is the only one whose
+        // taskbar button is ever seen — name its icon rather than leaving Windows to dig
+        // one out of the executable.
+        icon: path.join(__dirname, '../../../../icon.png'),
         backgroundColor: '#1c1c1e',
         show: false,
         webPreferences: {
@@ -126,6 +130,38 @@ function openViewer(id) {
     });
 
     viewerWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    // Maximizing hands a FRAMELESS window its resize border as overhang: on Windows the
+    // window rect lands past the work area on every side (measured: -8,-8 +16x16 at 100%
+    // scale), so the toolbar's top row, the close button's right edge and the filmstrip's
+    // bottom row are all drawn off screen — the bottom one behind the taskbar. The rect is
+    // not ours to correct: Chromium keeps that window style for the drop shadow and the
+    // snap gestures, and setBounds() is ignored while the window is maximized (measured).
+    // The CONTENT is inset by whatever the overhang actually is instead — never a
+    // hardcoded 8, which moves with the DPI — and back to zero on unmaximize.
+    //
+    // The same message carries the maximized flag, because the toolbar's own maximize
+    // button has to show the restore glyph whenever the window IS maximized — including
+    // when that came from a double click on the drag region or a snap gesture, which the
+    // button never hears about.
+    const sendWindowState = () => {
+        if (!viewerWindow || viewerWindow.isDestroyed()) return;
+        const b = viewerWindow.getBounds();
+        const wa = screen.getDisplayMatching(b).workArea;
+        const maximized = viewerWindow.isMaximized();
+        viewerWindow.webContents.send('viewer-window-state', {
+            maximized,
+            inset: maximized ? {
+                top: Math.max(0, wa.y - b.y),
+                right: Math.max(0, (b.x + b.width) - (wa.x + wa.width)),
+                bottom: Math.max(0, (b.y + b.height) - (wa.y + wa.height)),
+                left: Math.max(0, wa.x - b.x)
+            } : { top: 0, right: 0, bottom: 0, left: 0 }
+        });
+    };
+    viewerWindow.on('maximize', sendWindowState);
+    viewerWindow.on('unmaximize', sendWindowState);
+
     viewerWindow.loadFile(path.join(__dirname, '../../../renderer/viewer/viewer.html'));
     viewerWindow.webContents.on('did-finish-load', () => {
         if (viewerWindow && !viewerWindow.isDestroyed() && viewerPayload) {
@@ -214,6 +250,18 @@ function registerScreenshotHandlers() {
         if (viewerWindow && !viewerWindow.isDestroyed()) viewerWindow.close();
     });
 
+    // The window is frameless, so its own toolbar is the only place these can live. The
+    // maximize toggle asks the window what it is rather than tracking it here: a double
+    // click on the drag region and the snap gestures maximize it too.
+    ipcMain.on('viewer-minimize', () => {
+        if (viewerWindow && !viewerWindow.isDestroyed()) viewerWindow.minimize();
+    });
+    ipcMain.on('viewer-toggle-maximize', () => {
+        if (!viewerWindow || viewerWindow.isDestroyed()) return;
+        if (viewerWindow.isMaximized()) viewerWindow.unmaximize();
+        else viewerWindow.maximize();
+    });
+
     // ←/→ inside the viewer: step through the gallery (newest-first order, no wrap).
     ipcMain.on('viewer-nav', (e, dir) => {
         if (!viewerPayload) return;
@@ -226,6 +274,19 @@ function registerScreenshotHandlers() {
 
     // Filmstrip click: jump straight to a shot.
     ipcMain.on('viewer-select', (e, id) => viewerShow(id));
+
+    // The compare grid needs the FULL images: the viewer holds exactly one of those (the
+    // shot on screen) plus the strip's 360px thumbnails, and a comparison run at thumbnail
+    // resolution is not a comparison. Ids that no longer resolve are dropped rather than
+    // faked — shotDataUrl() prunes whatever vanished off disk on the way past, so the grid
+    // and the gallery cannot end up disagreeing about what exists.
+    ipcMain.handle('viewer-compare-images', (e, ids) => {
+        if (!Array.isArray(ids)) return [];
+        return ids.map(id => {
+            const r = shotDataUrl(id);
+            return r && { id: r.shot.id, dataUrl: r.dataUrl, size: r.size, w: r.shot.w, h: r.shot.h, timestamp: r.shot.timestamp };
+        }).filter(Boolean);
+    });
 
     // Edited copy: the viewer flattens its drawing onto the image (cropped to the selected
     // region, if there is one) and sends a PNG data URL. It goes into the gallery as its own

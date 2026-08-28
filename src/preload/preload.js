@@ -97,6 +97,10 @@ contextBridge.exposeInMainWorld('api', {
     viewerSelect: (id) => ipcRenderer.send('viewer-select', id),
     viewerClose: () => ipcRenderer.send('viewer-close'),
     viewerCopyAnnotated: (dataUrl) => ipcRenderer.send('viewer-copy-annotated', dataUrl), // image + drawing, flattened
+    viewerCompareImages: (ids) => ipcRenderer.invoke('viewer-compare-images', ids), // full-size images for the compare grid
+    viewerMinimize: () => ipcRenderer.send('viewer-minimize'),
+    viewerToggleMaximize: () => ipcRenderer.send('viewer-toggle-maximize'),
+    onViewerWindowState: (callback) => ipcRenderer.on('viewer-window-state', (_, state) => callback(state)), // maximized + work-area overhang
 
     // Quick-paste picker
     quickPastePick: (text) => ipcRenderer.send('quickpaste-pick', text),

@@ -47,6 +47,12 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* Maximizing hands a frameless window its resize border as OVERHANG: the window rect
+       runs past the work area on every side, which puts the toolbar's top row, the close
+       button's right edge and the filmstrip's bottom row off screen — the last one behind
+       the taskbar. The main process measures the overhang and sends it (viewer-window-state).
+       Zero in every other state, so nothing is paid for when the window is not maximized. */
+    padding: var(--inset-top, 0px) var(--inset-right, 0px) var(--inset-bottom, 0px) var(--inset-left, 0px);
 }
 
 /* Title row doubles as the drag region for the frameless window. */
@@ -167,7 +173,8 @@ body {
 
 /* −, readout, + read as one control, so they share a single pill and lose their inner
    corners rather than sitting as three separate buttons. */
-.tb-zoom {
+.tb-zoom,
+.cmp-seg {
     display: flex;
     gap: 1px;
     border-radius: var(--r-sm);
@@ -175,13 +182,35 @@ body {
     background: rgba(var(--fg-rgb), 0.08);
 }
 
-.tb-zoom .tb-btn {
+.tb-zoom .tb-btn,
+.cmp-seg .tb-btn {
     border-radius: 0;
     background: transparent;
 }
 
 .tb-btn.zoom-step {
     padding: 6px 7px;
+}
+
+/* Minimize / maximize: icon-only, tighter than the labelled buttons, reading as one group
+   with the close button at the end of the row. */
+.tb-btn.win {
+    padding: 6px 8px;
+}
+
+/* One button, two glyphs — the state comes from the main process (a window can also be
+   maximized by a double click on the drag region or by a snap gesture, so the button can
+   never be the one keeping score). */
+.ic-restore {
+    display: none;
+}
+
+body.maximized .ic-max {
+    display: none;
+}
+
+body.maximized .ic-restore {
+    display: block;
 }
 
 .tb-btn:disabled {
@@ -205,6 +234,13 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* Fit in the grid is a different percentage in every pane, so the readout prints the word
+   instead of a number there (see updateZoomLabel). The floor is widened to hold both, so
+   the button does not resize under the cursor while comparing. */
+body.cmp-showing .tb-btn.zoom span {
+    min-width: 46px;
+}
+
 /* Lit while the zoom is manual, so the fit percentage doesn't look like a mode. */
 .tb-btn.zoom.on {
     background: var(--pos-chip-bg);
@@ -217,7 +253,8 @@ body {
 }
 
 /* ── Annotation toolbar (second row, only while drawing is on) ─────────────── */
-.drawbar {
+.drawbar,
+.cmpbar {
     flex: 0 0 auto;
     display: flex;
     flex-wrap: wrap;
@@ -228,7 +265,8 @@ body {
     border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
 }
 
-.drawbar[hidden] {
+.drawbar[hidden],
+.cmpbar[hidden] {
     display: none;
 }
 
@@ -333,6 +371,10 @@ body {
    opened that much larger for it (STAGE_PAD in screenshot-handlers.js), so the gutter
    costs the image nothing at 1:1. viewer.js reads this value back off the element
    instead of repeating the number. */
+.stage[hidden] {
+    display: none;
+}
+
 .stage {
     flex: 1;
     position: relative;
@@ -553,11 +595,11 @@ body {
 }
 
 .nav-btn.prev {
-    left: 10px;
+    left: calc(10px + var(--inset-left, 0px));
 }
 
 .nav-btn.next {
-    right: 10px;
+    right: calc(10px + var(--inset-right, 0px));
 }
 
 body:hover .nav-btn:not(:disabled) {
@@ -601,13 +643,19 @@ body:hover .nav-btn:not(:disabled) {
     border-radius: var(--r-xs);
 }
 
-.strip img {
+.strip-item {
+    position: relative;
     flex: 0 0 auto;
     height: 46px;
+    cursor: pointer;
+}
+
+.strip-item img {
+    display: block;
+    height: 100%;
     border-radius: var(--r-xs);
     border: 2px solid transparent;
     opacity: 0.55;
-    cursor: pointer;
     transition: opacity 0.15s ease, border-color 0.15s ease;
     -webkit-user-drag: none;
 }
@@ -619,11 +667,310 @@ body:hover .nav-btn:not(:disabled) {
     pointer-events: none;
 }
 
-.strip img:hover {
+.strip-item:hover img {
     opacity: 0.85;
 }
 
-.strip img.active {
+.strip-item.active img {
+    opacity: 1;
+}
+
+/* Outside a pick, "on screen now" is the only thing a thumbnail can be, so it takes the
+   accent. While picking, the accent already means "in the comparison" — the picture on
+   screen is ringed instead, in the strip's own gutter, so a thumbnail can carry both marks
+   at once without either one hiding the other. */
+.strip:not(.picking) .strip-item.active img {
+    border-color: var(--accent);
+}
+
+.strip.picking .strip-item.active {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 1px;
+    border-radius: var(--r-xs);
+}
+
+/* ── Compare mode ─────────────────────────────────────────────────────────────
+   Two states, and they want opposite things from the toolbar.
+   PICKING still has one picture on the stage: it is how you decide what goes into the
+   comparison, so paging, the ‹ › arrows and the chips that describe the picture all stay.
+   What leaves are the editing actions — a pick is not the moment to draw on, reveal or
+   delete a shot, and they would crowd out the one button that matters there. */
+body.comparing .tb-single,
+/* SHOWING has a grid: no current shot for the arrows to move, and the chips (dimensions,
+   weight, "1 / 10") would read as a caption for all of it. */
+body.cmp-showing .nav-btn,
+body.cmp-showing .title {
+    display: none;
+}
+
+/* With the chips gone, space-between has one child left to place and puts it at the START:
+   the buttons — the window controls included — slid to the left edge of the window. They
+   live in the top-right corner in every other state, and a maximize button that moves when
+   the mode changes is a maximize button you hunt for. */
+body.cmp-showing .toolbar {
+    justify-content: flex-end;
+}
+
+/* While picking, the strip does double duty: a click SHOWS a picture on the stage, the
+   badge puts it in the comparison. So the ones that are not in it only recede to the
+   strip's own resting opacity — they are still things to go and look at, not rejects. */
+.strip.picking .strip-item.picked img {
     opacity: 1;
     border-color: var(--accent);
 }
+
+/* The badge is the pick control AND the position readout: a + on everything that is out,
+   the grid position on everything that is in. One control in one place, so adding and
+   reordering read as the same thing seen twice. */
+.pick-no {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    display: none;
+    place-items: center;
+    padding: 0 3px;
+    border: none;
+    border-radius: 8px;
+    background: var(--float-bg);
+    color: var(--float-text);
+    font-family: inherit;
+    font-size: 10px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.strip.picking .pick-no {
+    display: grid;
+}
+
+.strip-item.picked .pick-no,
+.pick-no:hover {
+    /* A shade off the accent, not the accent: white on the dark theme's lighter purple
+       measures 4.23:1 at 10px, under the 4.5:1 a label this small needs — the same
+       measurement that moved the danger buttons onto --danger-solid. Mixing black in suits
+       both themes; the light accent is already past the limit and only gets further from
+       it. Measured after: 5.44:1 dark, 7.13:1 light. */
+    background: color-mix(in srgb, var(--accent) 86%, #000);
+    color: #fff;
+}
+
+.cmp-hint {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cmp-spacer {
+    flex: 1 1 auto;
+}
+
+/* Each half of the bar belongs to one state: add + start while picking, the layout picker
+   once the grid is up. */
+body.cmp-showing .cmp-go,
+body.cmp-showing .cmp-add,
+body:not(.cmp-showing) .cmp-seg {
+    display: none;
+}
+
+/* The picture is already in: the button removes now, so it stops looking like an
+   invitation and starts looking like the state it reports. */
+.cmp-add.on {
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
+}
+
+.cmp-go:not(:disabled) {
+    background: var(--accent);
+    color: #fff;
+}
+
+.cmp-go:not(:disabled):hover {
+    background: var(--accent);
+    filter: brightness(0.9);
+}
+
+.cmp-mode.active {
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
+}
+
+.cmp-mode.active:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* The row height comes from viewer.js as --cmp-pane-h. A percentage cannot do it: a
+   percentage row measures against the content box and the padding is then added on top,
+   which leaves a permanent scrollbar around a grid that actually fits. */
+.cmp-grid[hidden] {
+    display: none;
+}
+
+.cmp-grid {
+    flex: 1;
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    overflow: auto;
+    align-content: start;
+}
+
+.cmp-grid.pair,
+.cmp-grid.quad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: var(--cmp-pane-h, 50%);
+}
+
+/* Yatay: one row, all of them, scrolled sideways — with a floor per pane, so a dozen
+   shots do not collapse into a dozen slivers. */
+.cmp-grid.row {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(300px, 1fr);
+    grid-template-rows: var(--cmp-pane-h, 100%);
+}
+
+.cmp-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--bg-raised);
+    border: 1px solid rgba(var(--fg-rgb), 0.1);
+    border-radius: var(--r-md);
+    overflow: hidden;
+}
+
+.cmp-pane.dragging {
+    opacity: 0.45;
+    border-color: var(--accent);
+}
+
+/* The header is the drag handle — all of it, not a 12px grip nobody hits. */
+.cmp-head {
+    flex: 0 0 26px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px 0 6px;
+    background: rgba(var(--fg-rgb), 0.06);
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    cursor: grab;
+    touch-action: none;
+}
+
+.cmp-pane.dragging .cmp-head {
+    cursor: grabbing;
+}
+
+.cmp-grip {
+    flex: 0 0 auto;
+    display: flex;
+    opacity: 0.55;
+}
+
+.cmp-grip svg {
+    width: 12px;
+    height: 12px;
+}
+
+.cmp-no {
+    flex: 0 0 auto;
+    min-width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    padding: 0 3px;
+    border-radius: var(--r-xs);
+    background: var(--pos-chip-bg);
+    color: var(--pos-chip-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.cmp-dim {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cmp-drop {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: var(--r-xs);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.cmp-drop:hover {
+    background: var(--danger-solid);
+    color: #fff;
+}
+
+.cmp-drop svg {
+    width: 12px;
+    height: 12px;
+}
+
+.cmp-shot {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    background: var(--bg-base);
+}
+
+.cmp-shot img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    box-shadow: var(--image-edge);
+    -webkit-user-drag: none;
+}
+
+/* Zoomed: the picture is laid out at a pixel width and the pane scrolls around it — the
+   same arrangement (and the same reasoning) as .stage.zoomed, down to the auto margins.
+   They centre a picture smaller than the pane but collapse to zero once it overflows, so
+   its top-left corner stays reachable by scrolling; justify-content would centre the
+   overflow instead and push that corner out of reach. */
+.cmp-shot.zoomed {
+    overflow: auto;
+    justify-content: flex-start;
+}
+
+.cmp-shot.zoomed img {
+    max-width: none;
+    max-height: none;
+    height: auto;
+    flex: none;
+    margin: auto;
+}
+
+/* A click on a picture toggles fit ↔ 1:1, so the cursor has to say which way it will go.
+   .zoomed comes after .zoomable on purpose: equal specificity, later wins. */
+.cmp-shot.zoomable img {
+    cursor: zoom-in;
+}
+
+.cmp-shot.zoomed img {
+    cursor: zoom-out;
+}
+
+.cmp-shot.zoomed.shrunk img {
+    cursor: zoom-in;
+}
+

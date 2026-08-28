@@ -17,7 +17,9 @@
         <div class="title" id="viewer-title">Ekran Görüntüsü</div>
         <div class="toolbar-actions">
             <!-- One segmented control: out · readout (click = 1:1) · in. Label and
-                 disabled states are filled by viewer.js. -->
+                 disabled states are filled by viewer.js. Deliberately NOT .tb-single: it is
+                 the one "current shot" control that still means something over a grid,
+                 where it drives every pane at once. -->
             <div class="tb-zoom" role="group" aria-label="Yakınlaştırma">
                 <button id="zoom-out" class="tb-btn zoom-step" title="Uzaklaştır (Ctrl/Cmd −)"
                     aria-label="Uzaklaştır">
@@ -41,14 +43,23 @@
                     </svg>
                 </button>
             </div>
-            <button id="draw-btn" class="tb-btn" title="Çizim Araçları">
+            <!-- Opens the picker; the button stays out of .tb-single because it is the way
+                 back out of compare mode too. -->
+            <button id="compare-btn" class="tb-btn" title="Resimleri Karşılaştır">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+                    <rect x="3" y="5" width="7.5" height="14" rx="1.5" />
+                    <rect x="13.5" y="5" width="7.5" height="14" rx="1.5" />
+                </svg>
+                Karşılaştır
+            </button>
+            <button id="draw-btn" class="tb-btn tb-single" title="Çizim Araçları">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
                 </svg>
                 Çiz
             </button>
-            <button id="copy-btn" class="tb-btn" title="Panoya Kopyala">
+            <button id="copy-btn" class="tb-btn tb-single" title="Panoya Kopyala">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -56,19 +67,38 @@
                 </svg>
                 <span id="copy-label">Kopyala</span>
             </button>
-            <button id="folder-btn" class="tb-btn" title="Klasörde Göster">
+            <button id="folder-btn" class="tb-btn tb-single" title="Klasörde Göster">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                 </svg>
                 Klasör
             </button>
-            <button id="delete-btn" class="tb-btn danger" title="Bu ekran görüntüsünü sil">
+            <button id="delete-btn" class="tb-btn danger tb-single" title="Bu ekran görüntüsünü sil">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
                 </svg>
                 Sil
+            </button>
+            <!-- Window controls. The window is frameless, so these are ours to draw. They are
+                 NOT .tb-single: the frame is not the picture, and stays operable while
+                 comparing. The maximize glyph swaps for a restore one via body.maximized. -->
+            <button id="min-btn" class="tb-btn win" title="Küçült" aria-label="Küçült">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M5 12h14" />
+                </svg>
+            </button>
+            <button id="max-btn" class="tb-btn win" title="Tam ekran" aria-label="Tam ekran">
+                <svg class="ic-max" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linejoin="round">
+                    <rect x="5" y="5" width="14" height="14" rx="2" />
+                </svg>
+                <svg class="ic-restore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="9" width="11" height="11" rx="2" />
+                    <path d="M9 9V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" />
+                </svg>
             </button>
             <button id="close-btn" class="tb-btn close" title="Kapat (Esc)" aria-label="Kapat">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -157,6 +187,25 @@
         </div>
     </div>
 
+    <!-- Compare mode's second row, in the same slot as the drawbar (the two modes are
+         mutually exclusive). While picking it counts the selection and offers the start
+         button; while showing it carries the layout choice. -->
+    <div class="cmpbar" id="cmpbar" hidden>
+        <span class="cmp-hint" id="cmp-hint"></span>
+        <div class="cmp-spacer"></div>
+        <div class="cmp-seg" id="cmp-layout" role="group" aria-label="Yerleşim">
+            <button class="tb-btn cmp-mode" data-layout="pair" title="Ekranda iki resim">2'li</button>
+            <button class="tb-btn cmp-mode" data-layout="quad" title="Ekranda dört resim">4'lü</button>
+            <button class="tb-btn cmp-mode active" data-layout="row" title="Hepsi tek sırada, yan yana">Yatay</button>
+        </div>
+        <!-- Only while picking, and it acts on the picture ON THE STAGE — which is the
+             point: you look at it first, then decide. The strip's badges do the same job
+             without leaving the picture you are on. -->
+        <button class="tb-btn cmp-add" id="cmp-add">Karşılaştırmaya ekle</button>
+        <button class="tb-btn cmp-go" id="cmp-start" disabled>Karşılaştır</button>
+        <button class="tb-btn" id="cmp-exit" title="Karşılaştırmayı kapat (Esc)">Kapat</button>
+    </div>
+
     <div class="stage" id="viewer-stage">
         <img id="viewer-img" alt="Ekran görüntüsü">
         <canvas id="viewer-canvas"></canvas>
@@ -173,6 +222,9 @@
             <button class="cb-btn" id="crop-cancel">İptal</button>
         </div>
     </div>
+    <!-- Compare grid: the panes are built in viewer.js — the set changes with every pick,
+         and this window's CSP forbids the inline styles a static markup version would need. -->
+    <div class="cmp-grid" id="cmp-grid" hidden></div>
     <button id="nav-prev" class="nav-btn prev" title="Önceki (←)" aria-label="Önceki">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
             stroke-linejoin="round">

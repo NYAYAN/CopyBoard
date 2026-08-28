@@ -1,27 +1,49 @@
-# CopyBoard v2.11.1 - Açılır Listeler 🎛️
+# CopyBoard v2.12.0 - Karşılaştırma 🔍
 
-Açık temada seçim listelerinin okunmama sorunu giderildi.
+Ekran görüntülerini yan yana koyup karşılaştırma, ve çerçevesiz görüntüleyici
+penceresinin eksik küçültme / tam ekran düğmeleri.
 
-## 🎛️ Açılır listeler
+## 🔍 Görüntüleri karşılaştırma
 
-- **Açık temada bir seçeneğin üzerine gelince yazısı kayboluyordu.** Ayarlar'da tema,
-  dil ve kayıt kalitesi listelerini açıp herhangi bir satıra gelin — yazı, işletim
-  sisteminin mavi vurgu şeridinin altında neredeyse görünmez oluyordu. Liste sayfanın
-  dışında çizildiği için satır renklerini kontrolden alıyor, ama vurgulanan satırı
-  sistemin kendi rengiyle boyuyordu; koyu tema bunu gizliyordu, çünkü beyaza yakın
-  yazı aynı mavinin üzerinde okunuyor.
-- Liste artık **uygulamanın kendi paneli**: hover, klavye imleci ve seçili satır
-  uygulamanın renkleriyle çiziliyor ve iki temada da okunuyor. Windows ile macOS'ta
-  birebir aynı görünüyor.
-- **Ekran kaydı araç çubuğundaki kalite listesinde de aynı sorun vardı**, o da düzeldi.
-- Listelerin oku, uygulamanın her yerinde kullanılan ince çizgili ok ile aynı artık.
-- İngilizce arayüzde en uzun kalite değeri ("Medium (1080p - 30fps)") kutusuna
-  sığmayıp ikinci satıra taşıyordu; kutu artık değerine göre genişliyor.
+- **İki ila beş ekran görüntüsünü yan yana koyun.** Büyük görüntüleyicide
+  `Karşılaştır`a basın: alt şerit seçim kipine geçer, seçtikleriniz sahnenin yerini
+  alan bir ızgarada yan yana açılır.
+- **Önce görün, sonra ekleyin.** Şeritte bir küçük resme tıklamak onu büyük gösterir
+  (`←`/`→` ile gezinebilir, yakınlaştırabilirsiniz) — 68px'lik bir küçük resimden
+  karşılaştıracağınız resmi seçemezsiniz. Beğendiğinizi `Karşılaştırmaya ekle`
+  düğmesiyle ya da küçük resmin köşesindeki `+` ile eklersiniz; eklenenler ızgaradaki
+  sıra numarasıyla işaretlenir.
+- **Üç gösterim biçimi:** hepsi `Yatay` tek sırada (varsayılan), `2'li` ya da `4'lü`.
+- **Panelleri başlığından sürükleyerek sıralayın.** Şeritteki numaralar da anında
+  yeni sıraya döner.
+- **Yakınlaştırma her panel için ayrı:** bir resme tıklayın ya da üzerinde
+  `Ctrl/Cmd`+tekerlek çevirin (trackpad'de iki parmakla sıkıştırın) — yalnızca o panel
+  ölçeklenir ve imlecin altındaki nokta yerinde kalır. Hepsini birlikte aynı ölçeğe
+  getirmek için araç çubuğundaki yakınlaştırma kontrolü ya da `Ctrl/Cmd ±`.
+- **Karşılaştırma açıkken şerit canlı kalır:** ızgaradan çıkmadan resim ekleyip
+  çıkarabilirsiniz.
+
+## 🪟 Pencere düğmeleri
+
+- Görüntüleyici penceresine **küçültme** ve **tam ekran** düğmeleri geldi, kapatmanın
+  solunda. Pencereyi başlık çubuğuna çift tıklayarak ya da `Win+↑` ile büyüttüğünüzde
+  de simge "önceki boyut"a döner.
+- **Tam ekran yapılan pencerenin kenarları ekranın dışında kalıyordu:** araç
+  çubuğunun üst satırı, kapatma düğmesinin sağ kenarı ve alt şeridin alt kenarı
+  kırpılıyor, alt kenar görev çubuğunun arkasına giriyordu. İçerik artık taşma kadar
+  içeri alınıyor.
+- Görüntüleyicinin **görev çubuğu düğmesi uygulamanın kendi simgesini** taşıyor.
+
+## 🎨 Ayrıca
+
+- Karşılaştırma kipinde araç çubuğu düğmeleri pencerenin sol üstüne kayıyordu; artık
+  her kipte sağ üst köşede duruyorlar.
+- Koyu temada şeritteki seçim numarasının okunurluğu düzeltildi (4.23:1 → 5.44:1).
 
 ## 📦 Kurulum & Güncelleme
 
-1. CopyBoard-Setup-2.11.1.exe (Windows) veya CopyBoard-2.11.1-arm64.dmg (macOS) dosyasını
-   indirip kurun; veya
+1. CopyBoard-Setup-2.12.0.exe (Windows) veya CopyBoard-2.12.0-arm64.dmg (macOS)
+   dosyasını indirip kurun; veya
 2. Açık uygulamada otomatik güncelleme bildirimiyle geçin.
 
 ---

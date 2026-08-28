@@ -71,6 +71,7 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 ### 🖼️ 9. Ekran Görüntüleri Galerisi
 - **Tek Yerde:** Kaydettiğiniz görüntüler uygulamanın içindeki galeride toplanır; tek veya iki sütunlu ızgara arasında geçiş yapın.
 - **Büyük Görüntüleyici:** Görüntüyü büyütün, üzerine çizin, kırpın; alttaki şeritten diğerlerine geçin.
+- **Karşılaştırma:** `Karşılaştır`a bastıktan sonra şerit gezinmeye açık kalır: bir küçük resme tıklayınca **büyük hali sahnede açılır** (`←`/`→` ile de gezinirsiniz), beğendiğinizi **Karşılaştırmaya ekle** düğmesiyle ya da küçük resmin köşesindeki `+` ile eklersiniz — eklenenler sıra numarasıyla işaretlenir. İki ila beş resim eklenince (beşi bir ekranda okunur kalanın sonu) `Karşılaştır` yan yana koyar: hepsi **yatay** tek sırada (varsayılan), **2'li** ya da **4'lü** gösterilir, panelleri başlığından sürükleyerek sıralarsınız. Yakınlaştırma **her panel için ayrı**: bir resme tıklamak ya da üzerinde `Ctrl/Cmd`+tekerlek çevirmek yalnızca o paneli ölçekler. Araç çubuğundaki yakınlaştırma kontrolü ile `Ctrl/Cmd ±` **hepsini birlikte** aynı ölçeğe getirir.
 - **Dosyaya Erişim:** Görüntüyü panoya kopyalayın, klasörde gösterin veya galeriden silin.
 
 ### 🌟 10. Yüzen Kısayol Aracı (Floating Widget)
@@ -217,7 +218,7 @@ Aşağıdaki görüntüler uygulamanın kendi arayüz kodundan üretilmiştir; i
 | `Cmd / Ctrl + +` `-` | Yakınlaştırır / uzaklaştırır |
 | `Cmd / Ctrl + 0` | Pencereye sığdırır |
 | `Cmd / Ctrl + 1` | Gerçek boyuta döner |
-| `ESC` | Pencereyi kapatır |
+| `ESC` | Bir adım geri alır (kırpma, çizim, karşılaştırma); son adımda pencereyi kapatır |
 
 ---
 

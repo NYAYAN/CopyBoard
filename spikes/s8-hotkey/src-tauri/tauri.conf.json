@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "s8-hotkey",
+  "version": "0.1.0",
+  "identifier": "dev.copyboard.spike.s8",
+  "build": { "frontendDist": "../ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "security": { "csp": null },
+    "windows": [{ "label": "main", "title": "S8 — Carbon Hotkey", "url": "index.html", "width": 640, "height": 480 }]
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+}

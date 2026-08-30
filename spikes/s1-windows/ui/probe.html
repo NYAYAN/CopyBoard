@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- S7 ÖLÇÜMÜ: bu, sayfanın İLK script'i. CopyBoard'da shared/theme.js burada
+     çalışıp <html data-theme> basıyor. initialization_script bundan ÖNCE
+     çalışmazsa __COPYBOARD_BOOT__ undefined olur ve tema bir kare titrer. -->
+<script>
+  window.__FIRST_SCRIPT_AT__ = performance.now();
+  window.__BOOT_PRESENT__ = typeof window.__COPYBOARD_BOOT__ !== 'undefined';
+  if (window.__BOOT_PRESENT__) {
+    document.documentElement.dataset.theme = window.__COPYBOARD_BOOT__.theme.resolved;
+  }
+</script>
+<style>
+  html, body { margin:0; height:100%; font:13px -apple-system,system-ui,sans-serif; }
+  body { background: rgba(28,28,30,.72); color:#eee; padding:14px; box-sizing:border-box;
+         border:1px solid rgba(255,255,255,.14); border-radius:12px;
+         backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+  html:not([data-theme]) body { background:#8b0000; }   /* S7 BAŞARISIZ = kırmızı */
+  h1 { font-size:13px; margin:0 0 8px; letter-spacing:.02em; }
+  pre { font:11px ui-monospace,Menlo,monospace; white-space:pre-wrap; margin:0; opacity:.85 }
+  .ok { color:#4ade80 } .bad { color:#f87171 }
+  input { width:100%; box-sizing:border-box; margin-top:10px; padding:6px 8px;
+          background:#0003; border:1px solid #fff3; border-radius:6px; color:#fff; }
+</style>
+</head>
+<body>
+  <h1 id="t">probe</h1>
+  <pre id="out">…</pre>
+  <input id="typehere" placeholder="S2: buraya YAZAMAMALISINIZ (focusable:false ise)">
+<script>
+  const b = window.__COPYBOARD_BOOT__;
+  document.getElementById('t').textContent = 'probe: ' + (b ? b.kind : '???');
+  const lines = [
+    (window.__BOOT_PRESENT__ ? '✅' : '❌') + ' S7 initialization_script ilk script\'ten önce',
+    '   boot@' + (window.__BOOT_SEEN_AT__ ?? -1).toFixed(3) + 'ms  firstScript@' + window.__FIRST_SCRIPT_AT__.toFixed(3) + 'ms',
+    'platform: ' + (b ? b.platform : '-'),
+    'i18n.t("Kaydet") → ' + (b ? b.i18n.dict['Kaydet'] : '-'),
+    'dpr: ' + window.devicePixelRatio,
+    'backdrop-filter destekli: ' + (CSS.supports('backdrop-filter','blur(1px)') || CSS.supports('-webkit-backdrop-filter','blur(1px)')),
+  ];
+  document.getElementById('out').innerHTML = lines.join('\n')
+    .replace(/✅/g,'<span class="ok">✅</span>').replace(/❌/g,'<span class="bad">❌</span>');
+  // Ölçümü Rust'a geri yolla (auto modda toplanıp JSON olarak basılır)
+  if (window.__TAURI__) {
+    window.__TAURI__.core.invoke('report_probe', { r: {
+      kind: b ? b.kind : 'unknown',
+      bootPresent: !!window.__BOOT_PRESENT__,
+      bootAt: window.__BOOT_SEEN_AT__ ?? -1,
+      firstScriptAt: window.__FIRST_SCRIPT_AT__,
+      dpr: window.devicePixelRatio,
+      backdropFilter: CSS.supports('backdrop-filter','blur(1px)') || CSS.supports('-webkit-backdrop-filter','blur(1px)'),
+      dictOk: !!(b && b.i18n && b.i18n.dict['Kaydet'] === 'Save')
+    }}).catch(e => console.error(e));
+  }
+  document.addEventListener('keydown', e => {
+    document.getElementById('out').textContent += '\n⚠ KEYDOWN ALINDI: ' + e.key + '  → odak ÇALINDI';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# BULGU S4-a: screencapturekit, ScreenCaptureKit.framework üzerinden Swift
+# concurrency runtime'ına bağlanır. Cargo'nun ürettiği binary'de LC_RPATH
+# olmadığı için çalışma anında dyld şunu der:
+#     Library not loaded: @rpath/libswift_Concurrency.dylib
+#     Reason: no LC_RPATH's found
+# macOS'un Swift runtime'ı /usr/lib/swift altındadır; rpath elle eklenmeli.
+# Gerçek uygulamada bu, src-tauri/.cargo/config.toml'a girecek.
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]

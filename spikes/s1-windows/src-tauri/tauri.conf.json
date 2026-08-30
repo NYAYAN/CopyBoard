@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "s1-windows",
+  "version": "0.1.0",
+  "identifier": "dev.copyboard.spike.s1",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "control",
+        "title": "S1 — Pencere Bayrakları Spike",
+        "url": "index.html",
+        "width": 720,
+        "height": 640,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

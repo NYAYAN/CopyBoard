@@ -1,0 +1,8 @@
+target/
+out/
+node_modules/
+*/src-tauri/gen/
+
+# Spike'lar Tauri'nin derlemesi için bir ikon dosyası istiyor ama depoda üç kopya
+# tutmanın anlamı yok — çalıştırmadan önce kökteki ikonu kopyalayın (bkz. README).
+*/src-tauri/icons/

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>S8 — Carbon Hotkey</title>
+<style>
+ body{font:13px -apple-system,system-ui,sans-serif;background:#141416;color:#e8e8ea;margin:0;padding:20px}
+ h3{margin:0 0 4px;font-size:15px} .sub{opacity:.6;margin:0 0 16px;font-size:12px}
+ .big{font-size:44px;font-weight:700;letter-spacing:-.02em;margin:10px 0 2px}
+ .big.hit{color:#4ade80}
+ .card{border:1px solid #2a2a30;border-radius:10px;padding:14px;margin-bottom:14px;background:#0f0f11}
+ table{width:100%;border-collapse:collapse;font-size:12px}
+ td{padding:5px 0;border-bottom:1px solid #1e1e22;vertical-align:top}
+ td:last-child{text-align:right;white-space:nowrap;padding-left:12px}
+ kbd{background:#26262c;border:1px solid #3a3a42;border-bottom-width:2px;border-radius:5px;
+     padding:2px 7px;font:12px ui-monospace,Menlo,monospace}
+ pre{font:11px ui-monospace,Menlo,monospace;white-space:pre-wrap;margin:0;
+     max-height:220px;overflow:auto;opacity:.85}
+ .ok{color:#4ade80} .bad{color:#f87171} .warn{color:#fbbf24}
+</style></head><body>
+ <h3>S8 — Carbon Hotkey</h3>
+ <p class="sub">Aşağıdaki kombinasyonlara basın. Pencere odakta OLMASA da çalışmalı.</p>
+
+ <div class="card">
+   <div class="big" id="count">0</div>
+   <div class="sub" style="margin:0">yakalanan kısayol <span style="opacity:.7">(yalnız <code>pressed</code>)</span></div>
+ </div>
+
+ <div class="card">
+   <table>
+     <tr><td><kbd>Cmd</kbd> + <kbd>Option</kbd> + <kbd>K</kbd> &nbsp;<span class="warn">← önce bunu deneyin</span><br>
+            <span class="sub">kontrol grubu — her klavyede var, Carbon mekanizmasını kanıtlar</span></td>
+         <td id="s4">—</td></tr>
+     <tr><td><kbd>Cmd</kbd> + <kbd>"</kbd><br>
+            <span class="sub">Esc'in altındaki tuş — yalnız ISO klavyelerde fiziksel olarak var.
+            Electron bu tuşu adlandıramıyor, Tauri eklentisi de reddetti.</span></td>
+         <td id="s1">—</td></tr>
+     <tr><td><kbd>Alt</kbd> + <kbd>9</kbd> &nbsp;<span class="sub">(Tauri global-shortcut — karşılaştırma)</span></td>
+         <td id="tauri">—</td></tr>
+   </table>
+ </div>
+
+ <div class="card">
+   <div class="sub" style="margin:0 0 8px">olaylar</div>
+   <pre id="log">bekleniyor…</pre>
+ </div>
+
+<script>
+ const { listen } = window.__TAURI__.event;
+ let n = 0;
+ const log = document.getElementById('log');
+ const count = document.getElementById('count');
+ const mark = (el) => { const e = document.getElementById(el); if (e) e.innerHTML = '<span class="ok">✅ geldi</span>'; };
+
+ listen('hotkey', (e) => {
+   const p = e.payload;
+   // BULGU S8-a: tauri eklentisi hem basma hem bırakmada tetikliyor.
+   // Yalnız "pressed" sayılır; "released" satırı sorunu görünür kılmak için loglanır.
+   const counts = p.counted !== false;
+   if (counts) { n++; count.textContent = n; count.classList.add('hit'); }
+   if (p.source === 'carbon' && p.id === 4) mark('s4');
+   if (p.source === 'carbon' && p.id === 1) mark('s1');
+   if (p.source === 'tauri' && counts) mark('tauri');
+   const t = new Date().toLocaleTimeString('tr-TR');
+   const st = p.state ? `  <${p.state}>` : '';
+   const dim = counts ? '' : ' style="opacity:.45"';
+   log.innerHTML = `<span${dim}>${t}  [${p.source}]  ${p.label || p.id}${st}${counts?'':'   ← SAYILMADI'}</span>\n`
+     + log.innerHTML.replace(/^bekleniyor…\n?/,'');
+ });
+
+ listen('registrations', (e) => {
+   const r = e.payload;
+   const lines = [];
+   lines.push('carbon handler: ' + JSON.stringify(r.carbon_handler_installed));
+   for (const [k,v] of Object.entries(r.carbon_registrations || {})) lines.push('  carbon  ' + v + '  ' + k);
+   for (const [k,v] of Object.entries(r.tauri_global_shortcut || {})) lines.push('  tauri   ' + v + '  ' + k);
+   log.textContent = lines.join('\n') + '\n\nbekleniyor…';
+ });
+</script>
+</body></html>

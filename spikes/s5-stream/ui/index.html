@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>S5 — Kare Akışı</title>
+<style>
+ body{font:13px -apple-system,system-ui,sans-serif;background:#141416;color:#e8e8ea;margin:0;padding:18px}
+ h3{margin:0 0 4px;font-size:15px} .sub{opacity:.6;margin:0 0 14px;font-size:12px}
+ .card{border:1px solid #2a2a30;border-radius:10px;padding:12px;margin-bottom:12px;background:#0f0f11}
+ button{background:#2a2a2e;color:#e8e8ea;border:1px solid #3a3a40;border-radius:7px;
+        padding:7px 12px;cursor:pointer;font:12px inherit;margin-right:6px}
+ button.p{background:#8957e5;border-color:#8957e5} button:disabled{opacity:.45;cursor:default}
+ table{width:100%;border-collapse:collapse;font:11px ui-monospace,Menlo,monospace}
+ th{text-align:left;opacity:.55;font-weight:500;padding:4px 8px 4px 0;border-bottom:1px solid #2a2a30}
+ td{padding:4px 8px 4px 0;border-bottom:1px solid #1c1c20}
+ td.n{text-align:right;font-variant-numeric:tabular-nums}
+ .ok{color:#4ade80} .bad{color:#f87171} .warn{color:#fbbf24}
+ canvas{border:1px solid #2a2a30;border-radius:6px;max-width:100%;height:auto;display:block}
+ pre{font:11px ui-monospace,Menlo,monospace;white-space:pre-wrap;margin:0;max-height:160px;overflow:auto;opacity:.85}
+</style></head><body>
+ <h3>S5 — Kaydırmalı yakalama kare akışı</h3>
+ <p class="sub">Gerçek ScreenCaptureKit kareleri → Tauri <code>Channel</code> → webview canvas.
+    Soru: 15 fps kalkıyor mu, yoksa <code>stitcher.js</code> de Rust'a mı gitmeli?</p>
+
+ <div class="card">
+   <button class="p" id="sweep">Tam ölçüm (6 senaryo × 5 sn)</button>
+   <button id="stop">Durdur</button>
+   <span class="sub" id="status" style="margin-left:8px">hazır</span>
+ </div>
+
+ <div class="card">
+   <table id="results">
+     <thead><tr>
+       <th>senaryo</th><th class="n">kare/sn</th><th class="n">MB/sn</th>
+       <th class="n">kare boyutu</th><th class="n">düşen</th><th class="n">çizim</th><th class="n">birikme</th><th>karar</th>
+     </tr></thead><tbody></tbody>
+   </table>
+ </div>
+
+ <div class="card"><canvas id="cv" width="320" height="180"></canvas></div>
+ <div class="card"><pre id="log">—</pre></div>
+
+<script>
+const { invoke, Channel } = window.__TAURI__.core;
+const $ = (id) => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d', { willReadFrequently: false });
+const rows = [];
+const errors = [];
+
+// CopyBoard'un gerçek kaydırmalı yakalama senaryoları.
+// crop NOKTA cinsinden; scale=2 retina ekranda gerçek piksel sayısını verir.
+const SCENARIOS = [
+  { name: '900x700 @1x  ham RGBA',  mode: 'rgba', q: 0,  w: 900, h: 700, scale: 1, fps: 15 },
+  { name: '900x700 @2x  ham RGBA',  mode: 'rgba', q: 0,  w: 900, h: 700, scale: 2, fps: 15 },
+  { name: '900x700 @2x  JPEG q90',  mode: 'jpeg', q: 90, w: 900, h: 700, scale: 2, fps: 15 },
+  { name: '1280x800 @2x ham RGBA',  mode: 'rgba', q: 0,  w: 1280, h: 800, scale: 2, fps: 15 },
+  { name: '1280x800 @2x JPEG q90',  mode: 'jpeg', q: 90, w: 1280, h: 800, scale: 2, fps: 15 },
+  { name: '1280x800 @2x JPEG q90 30fps', mode: 'jpeg', q: 90, w: 1280, h: 800, scale: 2, fps: 30 },
+];
+
+let stopFlag = false;
+
+function log(m){ $('log').textContent = m + '\n' + $('log').textContent; }
+
+async function runOne(sc, seconds) {
+  const m = { recv: 0, bytes: 0, drops: 0, lastSeq: -1, drawMs: 0,
+              firstRecv: 0, lastRecv: 0, firstSent: 0, lastSent: 0, lagStart: 0, lagEnd: 0 };
+
+  const ch = new Channel();
+  ch.onmessage = (buf) => {
+    const t = performance.now();
+    const ab = buf instanceof ArrayBuffer ? buf : (buf.buffer || buf);
+    const dv = new DataView(ab);
+    const seq = dv.getUint32(0, true), w = dv.getUint32(4, true),
+          h = dv.getUint32(8, true), mode = dv.getUint32(12, true),
+          sentMs = dv.getFloat64(16, true);
+
+    if (m.recv === 0) { m.firstRecv = t; m.firstSent = sentMs; m.lagStart = t - sentMs; }
+    m.lastRecv = t; m.lastSent = sentMs; m.lagEnd = t - sentMs;
+
+    if (m.lastSeq >= 0 && seq > m.lastSeq + 1) m.drops += seq - m.lastSeq - 1;
+    m.lastSeq = seq;
+    m.recv++; m.bytes += ab.byteLength;
+
+    const d0 = performance.now();
+    if (mode === 1) {                       // ham RGBA → doğrudan ImageData
+      const px = new Uint8ClampedArray(ab, 24);
+      if (px.length >= w * h * 4) {
+        if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+        ctx.putImageData(new ImageData(px.subarray(0, w * h * 4), w, h), 0, 0);
+      }
+    } else {                                 // JPEG → createImageBitmap
+      const blob = new Blob([new Uint8Array(ab, 24)], { type: 'image/jpeg' });
+      createImageBitmap(blob).then(bmp => {
+        if (cv.width !== bmp.width || cv.height !== bmp.height) { cv.width = bmp.width; cv.height = bmp.height; }
+        ctx.drawImage(bmp, 0, 0); bmp.close();
+      }).catch(()=>{});
+    }
+    m.drawMs += performance.now() - d0;
+  };
+
+  $('status').textContent = sc.name + ' — ' + seconds + ' sn…';
+  const info = await invoke('start_stream', {
+    channel: ch, mode: sc.mode, jpegQuality: sc.q,
+    cropW: sc.w, cropH: sc.h, scale: sc.scale, fps: sc.fps
+  });
+  await new Promise(r => setTimeout(r, seconds * 1000));
+  let rustStats = {};
+  try { rustStats = await invoke('stop_stream'); }
+  catch (e) { errors.push(sc.name + ' stop_stream: ' + e); }
+  await new Promise(r => setTimeout(r, 300));   // uçuştaki kareler
+
+  const span = Math.max(1, m.lastRecv - m.firstRecv) / 1000;
+  const recvFps = (m.recv - 1) / span;
+  const mbps = m.bytes / 1048576 / span;
+  const frameKB = m.recv ? (m.bytes / m.recv / 1024) : 0;
+  const lagGrowth = m.lagEnd - m.lagStart;     // birikme: pozitifse webview geride kalıyor
+  const dropPct = rustStats.framesSent ? (m.drops / rustStats.framesSent * 100) : 0;
+
+  const keeps = recvFps >= sc.fps * 0.9 && lagGrowth < 500 && dropPct < 2;
+  const row = {
+    scenario: sc.name, targetFps: sc.fps,
+    outputPixels: info.outputPixels, rawFrameBytes: info.rawFrameBytes,
+    framesCapturedRust: rustStats.framesCaptured, framesSentRust: rustStats.framesSent,
+    framesReceivedJs: m.recv, dropped: m.drops, dropPct: +dropPct.toFixed(2),
+    recvFps: +recvFps.toFixed(1), mbPerSec: +mbps.toFixed(1), frameKB: +frameKB.toFixed(0),
+    drawMsPerFrame: +(m.drawMs / Math.max(1, m.recv)).toFixed(2),
+    convertMsPerFrameRust: +(rustStats.convertMsPerFrame || 0).toFixed(2),
+    lagGrowthMs: +lagGrowth.toFixed(0),
+    verdict: keeps ? 'YETİŞİYOR' : 'GERİ KALIYOR'
+  };
+  rows.push(row);
+
+  const tb = $('results').querySelector('tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${sc.name}</td>
+    <td class="n">${row.recvFps} / ${sc.fps}</td>
+    <td class="n">${row.mbPerSec}</td>
+    <td class="n">${row.frameKB} KB</td>
+    <td class="n ${row.dropPct>2?'bad':''}">${row.dropped} (${row.dropPct}%)</td>
+    <td class="n">${row.drawMsPerFrame} ms</td>
+    <td class="n ${row.lagGrowthMs>500?'bad':''}">${row.lagGrowthMs} ms</td>
+    <td class="${keeps?'ok':'bad'}">${keeps?'✅ yetişiyor':'❌ geri kalıyor'}</td>`;
+  tb.appendChild(tr);
+  return row;
+}
+
+$('sweep').onclick = async () => {
+  stopFlag = false;
+  $('sweep').disabled = true;
+  rows.length = 0;
+  $('results').querySelector('tbody').innerHTML = '';
+  for (const sc of SCENARIOS) {
+    if (stopFlag) break;
+    try { await runOne(sc, 5); }
+    catch (e) { const msg = sc.name + ': ' + (e && e.message ? e.message : e); errors.push(msg); log('❌ ' + msg); }
+    await new Promise(r => setTimeout(r, 700));   // SCStream'in tam kapanması için nefes payı
+  }
+  $('status').textContent = 'bitti';
+  $('sweep').disabled = false;
+  await invoke('report_result', { result: {
+    spike: 'S5', scenariosRun: rows.length, scenariosPlanned: SCENARIOS.length,
+    errors, scenarios: rows } });
+};
+
+$('stop').onclick = async () => { stopFlag = true; await invoke('stop_stream'); $('status').textContent='durduruldu'; };
+
+// --auto ile açıldıysa kendi kendine başlat
+invoke('is_auto').then(auto => { if (auto) setTimeout(() => $('sweep').click(), 600); });
+</script>
+</body></html>

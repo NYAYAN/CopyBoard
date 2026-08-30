@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "spike",
+  "windows": ["*"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,1 @@
+{ "identifier": "default", "description": "spike", "windows": ["*"], "permissions": ["core:default"] }

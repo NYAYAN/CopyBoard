@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>S1 — Pencere Bayrakları</title>
+<style>
+  body { font:13px -apple-system,system-ui,sans-serif; background:#141416; color:#e8e8ea;
+         margin:0; padding:18px; }
+  h1 { font-size:15px; margin:0 0 4px } p.sub { margin:0 0 16px; opacity:.6; font-size:12px }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
+  button { background:#2a2a2e; color:#e8e8ea; border:1px solid #3a3a40; border-radius:7px;
+           padding:7px 12px; cursor:pointer; font:12px inherit }
+  button:hover { background:#35353a } button.p { background:#8957e5; border-color:#8957e5 }
+  #focusbox { border:1px solid #3a3a40; border-radius:8px; padding:10px; margin-bottom:14px }
+  #focusbox input { width:100%; box-sizing:border-box; padding:8px; background:#0d0d0f;
+                    border:1px solid #3a3a40; border-radius:6px; color:#fff; font:12px inherit }
+  pre { background:#0d0d0f; border:1px solid #26262a; border-radius:8px; padding:12px;
+        font:11px ui-monospace,Menlo,monospace; white-space:pre-wrap; max-height:300px; overflow:auto }
+  .hint { font-size:11px; opacity:.55; margin:6px 0 0 }
+</style>
+</head>
+<body>
+  <h1>S1 / S2 / S7 — Pencere bayrakları spike'ı</h1>
+  <p class="sub">CopyBoard'un 6 pencere tipi, gerçek bayraklarıyla.</p>
+
+  <div class="row">
+    <button class="p" data-k="main">main (transparent+vibrancy+1000)</button>
+    <button data-k="widget">widget (transparent+ontop)</button>
+    <button data-k="quickpaste">quickpaste (focusable:false) ← S2</button>
+    <button data-k="toast">toast (ignoreCursor)</button>
+    <button data-k="capture">capture (fullscreen+protected)</button>
+    <button data-k="viewer">viewer (resizable)</button>
+  </div>
+  <div class="row">
+    <button id="focus">Odak raporu</button>
+    <button id="mon">Monitörler</button>
+    <button id="closeall">Hepsini kapat</button>
+  </div>
+
+  <div id="focusbox">
+    <strong style="font-size:12px">S2 testi</strong>
+    <p class="hint">Aşağıya yazmaya başlayın, sonra <em>quickpaste</em>'i açın.
+       Yazmaya devam edebiliyorsanız odak çalınmadı → S2 GEÇTİ.</p>
+    <input id="typing" placeholder="buraya yazın…">
+    <p class="hint" id="typed">yazılan: (yok)</p>
+  </div>
+
+  <pre id="log">hazır.</pre>
+
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const log = (m) => { const el=document.getElementById('log');
+    el.textContent = (typeof m==='string'? m : JSON.stringify(m,null,2)) + '\n\n' + el.textContent; };
+
+  document.querySelectorAll('button[data-k]').forEach(btn => {
+    btn.onclick = async () => {
+      try { log(await invoke('spawn_probe', { kind: btn.dataset.k })); }
+      catch (e) { log('❌ ' + e); }
+    };
+  });
+  document.getElementById('focus').onclick = async () => log(await invoke('focus_report'));
+  document.getElementById('mon').onclick   = async () => log(await invoke('monitors'));
+  document.getElementById('closeall').onclick = async () => {
+    for (const k of ['main','widget','quickpaste','toast','capture','viewer'])
+      await invoke('close_probe', { kind: k });
+    log('kapatıldı.');
+  };
+  const t = document.getElementById('typing');
+  t.addEventListener('input', () => document.getElementById('typed').textContent = 'yazılan: ' + t.value);
+  t.focus();
+</script>
+</body>
+</html>

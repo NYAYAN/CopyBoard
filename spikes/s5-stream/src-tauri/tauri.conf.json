@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "s5-stream",
+  "version": "0.1.0",
+  "identifier": "dev.copyboard.spike.s5",
+  "build": { "frontendDist": "../ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "security": { "csp": null },
+    "windows": [{ "label": "main", "title": "S5 — Kare Akışı", "url": "index.html", "width": 860, "height": 760 }]
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+}

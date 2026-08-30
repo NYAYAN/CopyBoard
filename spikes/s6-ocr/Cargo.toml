@@ -1,0 +1,11 @@
+[package]
+name = "s6-ocr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tesseract-rs = { version = "0.4", features = ["build-tesseract", "embed-tessdata"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[profile.release]
+opt-level = 3

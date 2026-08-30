@@ -96,78 +96,75 @@ function isOverMainButton(clientX, clientY, margin = HIT_MARGIN) {
     return dx * dx + dy * dy <= radius * radius;
 }
 
-// True only over an actually-visible widget surface: the round main button (always),
-// the round menu items (when the menu is open), or the history panel rect (when open).
-// Everything else — the wide transparent panel-gap left of the buttons AND the gaps
-// between icons — forwards clicks to the app underneath.
-function isOverInteractive(x, y) {
+// --- Tıklama geçirgenliği: karar Rust'ta, geometri burada -------------------
+//
+// Electron `setIgnoreMouseEvents(true, { forward: true })` sunuyordu — pencere
+// tıklama-geçirgen oluyor AMA mousemove almaya devam ediyordu, ve widget bu iletilen
+// hareketlerle imlecin bir düğmeye geldiğini görüp geçirgenliği kaldırıyordu.
+//
+// Tauri'de `forward` yok ve macOS'ta geçirgen bir pencere HİÇ mousemove almıyor.
+// O modelle widget kalıcı olarak tıklanamaz kalıyordu.
+//
+// Yeni bölüşüm: burası yalnız YÜZEY GEOMETRİSİNİ bildiriyor (yuvarlak düğmeler +
+// açık panel dikdörtgeni); imleci ana süreç yokluyor ve geçirgenliği o açıp kapatıyor.
+// Kullanıcıya görünen davranış birebir aynı.
+
+// Yüzeyleri topla. Koordinatlar CSS pikseli (client) — ana süreç zoom'u hesaba katıyor.
+function collectHitAreas() {
+    // Sürükleme/basılı tutma sırasında TÜM pencere yakalasın ki hareket kaybolmasın.
+    if (isDragging || isPointerDown) return [{ kind: 'everything' }];
+
+    const areas = [];
     if (isHistoryOpen) {
         const p = historyPanel.getBoundingClientRect();
-        if (x >= p.left && x <= p.right && y >= p.top && y <= p.bottom) return true;
+        if (p.width > 0 && p.height > 0) {
+            areas.push({ kind: 'rect', x: p.left, y: p.top, w: p.width, h: p.height });
+        }
     }
-    if (isOverMainButton(x, y)) return true;
+    const m = mainBtn.getBoundingClientRect();
+    if (m.width > 0) {
+        areas.push({
+            kind: 'circle',
+            cx: m.left + m.width / 2,
+            cy: m.top + m.height / 2,
+            r: m.width / 2 + HIT_MARGIN,
+        });
+    }
     if (isOpen) {
         for (const b of menu.querySelectorAll('.menu-item')) {
             const r = b.getBoundingClientRect();
-            const cx = r.left + r.width / 2;
-            const cy = r.top + r.height / 2;
-            const radius = r.width / 2 + HIT_MARGIN;
-            const dx = x - cx;
-            const dy = y - cy;
-            if (dx * dx + dy * dy <= radius * radius) return true;
+            if (r.width <= 0) continue;
+            areas.push({
+                kind: 'circle',
+                cx: r.left + r.width / 2,
+                cy: r.top + r.height / 2,
+                r: r.width / 2 + HIT_MARGIN,
+            });
         }
     }
-    return false;
+    return areas;
 }
 
-// --- setIgnoreMouseEvents (only fire IPC when the state actually changes) ---
-let lastIgnoreState = null;
-function setIgnore(ignore, options) {
-    if (lastIgnoreState === ignore) return;
-    lastIgnoreState = ignore;
-    // The cursor just landed on a widget surface, so we are still NOT the frontmost
-    // app — this is the last moment we can see which app the user is typing in. The
-    // click that follows makes CopyBoard frontmost, and a Quick-Paste pick has to be
-    // handed back to that app. macOS-only; a no-op elsewhere.
-    if (!ignore) window.api.widgetAction('note-front-app');
-    window.api.setIgnoreMouseEvents(ignore, options);
+// Bildirimi bir sonraki kareye erteler: `widgetAction('expand')` pencereyi ASENKRON
+// büyütüyor, hemen ölçmek eski dikdörtgenleri gönderirdi.
+let reportPending = false;
+function reportHitAreas() {
+    if (reportPending) return;
+    reportPending = true;
+    requestAnimationFrame(() => {
+        reportPending = false;
+        window.api.setHitAreas(collectHitAreas());
+    });
 }
 
-// Last known cursor position (client coords). Lets refreshIgnore() re-evaluate the
-// capture/forward decision after a state change (open/close) even when the mouse has
-// NOT moved — otherwise closing the menu with a stationary cursor over the button
-// would leave the window in forward mode and the button unclickable until a mousemove.
-let lastMouseX = 0, lastMouseY = 0, haveMousePos = false;
-
-function refreshIgnore() {
-    // During an active drag/press keep capturing so the gesture isn't lost.
-    if (isDragging || isPointerDown) {
-        setIgnore(false);
-        return;
-    }
-    // Capture only when the cursor is over a real widget surface (round buttons /
-    // open panel); forward everywhere else so the app underneath stays clickable —
-    // including the empty panel-area beside the buttons when the menu is open.
-    if (haveMousePos && isOverInteractive(lastMouseX, lastMouseY)) {
-        setIgnore(false);
-    } else {
-        setIgnore(true, { forward: true });
-    }
-}
-
-// Public name used by the action/timeout handlers; now position-aware (re-uses the
-// last cursor position) so transitions with a stationary cursor are handled correctly.
-function updateMouseEvents() { refreshIgnore(); }
+// Eylem/zaman aşımı işleyicilerinin kullandığı ad — artık geometri bildirimi.
+function updateMouseEvents() { reportHitAreas(); }
 updateMouseEvents();
 
-// Use mousemove (not mouseenter/leave) so setIgnoreMouseEvents(true,{forward})
-// forwarded events still trigger detection even when the mouse was already over a button.
-document.addEventListener('mousemove', (e) => {
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-    haveMousePos = true;
-    refreshIgnore();
-}, { passive: true });
+// Yerleşim değiştiğinde (pencere büyüdü/küçüldü) geometri de değişiyor.
+window.addEventListener('resize', reportHitAreas);
+// Yüzey üzerindeyken hareket, açılan/kapanan alt öğelerin geometrisini değiştirebiliyor.
+document.addEventListener('mousemove', reportHitAreas, { passive: true });
 
 // --- Tooltip ---
 const tooltip = document.createElement('div');
@@ -595,7 +592,6 @@ btnSnippet.addEventListener('click', async () => {
     isHistoryOpen = !isHistoryOpen;
     if (isHistoryOpen) {
         mainBtn.style.opacity = '1';
-        setIgnore(false);
         window.api.widgetAction('expand-history');
         await loadHistory();
         setTimeout(() => { if (isHistoryOpen) historyPanel.classList.add('open'); }, 10);

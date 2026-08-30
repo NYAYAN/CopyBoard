@@ -8,12 +8,13 @@
          one dynamic colour — the type swatch — is set through the CSSOM, which CSP
          doesn't govern), so the policy can be the strict one the viewer window already uses. -->
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; img-src 'self' data:; script-src 'self'; style-src 'self';">
+        content="default-src 'none'; connect-src ipc: http://ipc.localhost asset: http://asset.localhost; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' blob: asset: http://asset.localhost; style-src 'self'; script-src 'self';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CopyBoard</title>
     <link rel="stylesheet" href="../shared/tokens.css">
     <link rel="stylesheet" href="../shared/select.css">
     <link rel="stylesheet" href="styles.css">
+    <script src="../shared/api-tauri.js"></script>
     <script src="../shared/theme.js"></script>
 </head>
 
@@ -29,7 +30,7 @@
         <header class="titlebar">
             <div class="titlebar-lead">
                 <div class="brand" data-when="history">
-                    <img class="brand-mark" src="../../../icon.png" alt="">
+                    <img class="brand-mark" src="../shared/icon.png" alt="">
                     <span class="brand-name">CopyBoard</span>
                 </div>
                 <button id="back-btn" class="icon-btn back-btn" data-when="sub" title="Geri"

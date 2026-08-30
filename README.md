@@ -252,18 +252,37 @@ Aşağıdaki görüntüler uygulamanın kendi arayüz kodundan üretilmiştir; i
 
 Proje modern bir mimariye taşınmış ve modüler hale getirilmiştir.
 
+> **v3.0.0'dan itibaren ana süreç Rust'ta (Tauri).** Arayüz (`src/renderer/`) aynı kaldı;
+> `window.api` köprüsü Electron'un preload'u yerine `src/renderer/shared/api-tauri.js`
+> üzerinden Tauri komutlarına bağlanıyor. Electron sürümü geri dönüş için depoda
+> duruyor (`src/main/`, `npm run start:electron`).
+
 ### Gereksinimler
-- **Node.js** 18.17+ veya 20+ (CI, Node 18 ile derliyor)
+- **Rust** (stable) — [rustup](https://rustup.rs) ile
+- **Node.js** 18.17+ veya 20+ (testler için Node 21+, aşağıya bakın)
 - **npm**
-- **macOS için:** Xcode Command Line Tools — `native/mac-hotkey` yerel eklentisi kurulumdan
-  sonra derlenir. Derlenemezse kurulum yine de tamamlanır; yalnızca Electron'un
-  adlandıramadığı fiziksel tuşlar (Esc altındaki ISO tuşu, JIS tuşları) kısayol olarak
-  atanamaz.
+- **CMake** — OCR motoru (`tesseract-rs`) kaynaktan derleniyor
+- **macOS için:** Xcode Command Line Tools
+
+  Electron'un adlandıramadığı fiziksel tuşlar (Esc altındaki ISO tuşu, JIS tuşları)
+  artık yerel bir N-API eklentisi gerektirmiyor: Carbon `RegisterEventHotKey` doğrudan
+  Rust'tan çağrılıyor (`src-tauri/src/platform/macos/hotkey_carbon.rs`).
 
 ### Proje Yapısı
 ```
+src-tauri/             # Ana süreç (Rust / Tauri) — v3.0.0'dan itibaren
+├── src/
+│   ├── windows/       # Pencere kurulumu, yerleşim, tıklama geçirgenliği
+│   ├── commands/      # Renderer'a açılan IPC komutları
+│   ├── clipboard/     # Pano izleyici + geçmiş/favoriler
+│   ├── capture/       # Ekran görüntüsü, video, kaydırmalı yakalama
+│   ├── platform/      # macOS / Windows'a özgü katman (pano, yapıştırma, kısayol)
+│   ├── shortcuts/     # Global kısayol kaydı ve accelerator çevirisi
+│   └── lib.rs         # Uygulama kurulumu
+└── tauri.conf.json    # Pencere, güvenlik (CSP), paketleme ayarları
+
 src/
-├── main/              # Backend (Electron Main Process)
+├── main/              # Backend (Electron Main Process — geri dönüş için duruyor)
 │   ├── services/      # Ayrıştırılmış Servisler (State, Window, Tray, Tema, i18n vb.)
 │   │   └── ipc/       # Konularına ayrılmış IPC işleyicileri
 │   └── main.js        # Ana giriş noktası
@@ -280,13 +299,17 @@ src/
 │   ├── toast/         # Bildirim (Toast)
 │   └── shared/        # Ortak Varlıklar (tokens.css, i18n, içerik türü, cursor)
 ├── shared/i18n/       # Çeviri sözlükleri (en.json)
-└── preload/           # Preload Scriptleri
+└── preload/           # Preload Scriptleri (yalnız Electron yolu)
 
-native/mac-hotkey/     # macOS yerel kısayol eklentisi (N-API)
+native/mac-hotkey/     # macOS yerel kısayol eklentisi (yalnız Electron yolu)
 scripts/               # Yardımcı betikler (yerel derleme, imzalama, ekran görüntüsü)
 test/                  # node:test birim testleri + Electron kontrol betikleri
-docs/screenshots/      # README'deki ekran görüntüleri
+docs/                  # Göç planı, spike ölçümleri, ekran görüntüleri
 ```
+
+> `src/renderer/` içindeki alt klasörler (`main-window/`, `widget/`, `quickpaste/`,
+> `snipper/`, `ocr/`, `recorder/`, `scroller/`, `viewer/`, `update/`, `toast/`,
+> `shared/`) iki sürümde de ORTAK — göç sırasında yalnız dördü değişti.
 
 ### Kurulum ve Çalıştırma
 
@@ -303,21 +326,29 @@ docs/screenshots/      # README'deki ekran görüntüleri
 
 3. **Geliştirme modunda başlatın:**
    ```bash
-   npm start
+   npm run dev
    ```
+   *İlk çalıştırma Rust bağımlılıklarını derlediği için birkaç dakika sürer; sonrakiler
+   saniyeler içinde açılır. Electron sürümünü çalıştırmak için `npm run start:electron`.*
 
 4. **Testleri çalıştırın:**
    ```bash
    npm test
    ```
-   *Test betiği `node --test`'in glob desteğini kullandığı için bu adım **Node 21+**
-   ister; uygulamanın kendisi 18 ile derleniyor.*
+   *Arayüz testleri. `node --test`'in glob desteğini kullandığı için **Node 21+** ister.*
+
+   ```bash
+   npm run test:rust
+   ```
+   *Ana sürecin birim testleri (yerleşim, pano, mağaza, kısayol çevirisi, OCR).*
 
 5. **Production Build (Setup) oluşturun:**
    ```bash
-   npm run dist
+   npm run build
    ```
-   *Not: Bu işlem `dist/` klasöründe kurulum dosyasını oluşturur.*
+   *macOS'ta `.app` + `.dmg`, Windows'ta `.msi` + `.exe` üretir; çıktı
+   `src-tauri/target/release/bundle/` altında. İmzalama ve notarizasyon için
+   `SIGNING.md`, sürüm akışı için `RELEASE_GUIDE.md`.*
 
 6. **README'deki ekran görüntülerini yeniden üretin:**
    ```bash

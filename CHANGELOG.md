@@ -1,3 +1,62 @@
+# CopyBoard v3.0.0 Release Notes
+
+Uygulamanın ana süreci Electron'dan **Tauri**'ye (Rust) taşındı. Arayüz aynı: ne
+göründüğü ne de nasıl kullanıldığı değişti — değişen, altındaki motor.
+
+## 📦 Ölçülen fark
+
+| | Electron 39 | Tauri 2 |
+|---|---|---|
+| Uygulama boyutu | 305 MB | **36 MB** |
+| Boştaki bellek | 670 MB | **252 MB** |
+| Süreç sayısı | 10 | **4** |
+
+Bellek 252 MB'ta duruyor çünkü CopyBoard açılışta üç webview açıyor (ana pencere,
+widget, hızlı yapıştır) — bunlar önceden kurulmazsa ilk kısayol gözle görülür şekilde
+gecikirdi. Tek pencereli bir Tauri uygulamasının rakamı bunun çok altında olurdu.
+
+## 🔐 İzinler azaldı
+
+- **macOS'ta Otomasyon (Apple Events) izni artık İSTENMİYOR.** Hızlı Yapıştır, tuş
+  olayını `CGEventPost` ile doğrudan gönderiyor; System Events üzerinden AppleScript
+  çalıştırmıyor. Yalnız **Erişilebilirlik** izni yetiyor — ve Electron sürümünde
+  kullanıcıların karşılaştığı `-1743` hata sınıfı tamamen ortadan kalktı.
+- **Windows'ta arka planda bekleyen PowerShell süreci yok.** Yapıştırma `SendInput`
+  ile yapılıyor.
+- **Video kaydı sistem sesini BlackHole gibi bir sanal aygıt olmadan alıyor**
+  (ScreenCaptureKit, macOS 13+).
+
+## ⌨️ Kısayollar
+
+Electron'un adlandıramadığı fiziksel tuşlar (Türkçe-Q klavyedeki `"` tuşu, Esc
+altındaki ISO tuşu, JIS tuşları) artık yerel bir eklenti gerektirmiyor: Carbon
+`RegisterEventHotKey` doğrudan Rust'tan çağrılıyor. Kurulum sırasında derlenmesi
+gereken bir N-API modülü kalmadı.
+
+## 🗃 Verileriniz
+
+Pano geçmişiniz, favorileriniz, galeriniz ve ayarlarınız **kopyalanarak** taşınıyor,
+taşınmıyor — v2 verisi yerinde duruyor, istediğiniz zaman eski sürüme dönebilirsiniz.
+
+## 🔧 Göç sırasında düzeltilen davranışlar
+
+Port, Electron kaynağıyla satır satır karşılaştırıldı. Kullanıcıya değen düzeltmeler:
+
+- **Pano geçmişinde kayıt düşmesi.** Ayarlar aynı anda iki yerden yazıldığında (örneğin
+  siz bir kaydı silerken arka planda yeni bir kopya gelirse) yazmalardan biri
+  kaybolabiliyordu. Ölçüldü: eski kalıpta 400 yazmadan 5'i düşüyordu, şimdi hiçbiri.
+- **Makine uyurken son kopyalanan içerik kaybolabiliyordu.** Uyku ve ekran kilidi artık
+  bekleyen kaydı diske indiriyor; uyurken pano yoklaması da duruyor (pil).
+- **Uzun Türkçe metinler sessizce reddediliyordu.** Uzunluk sınırı karakter yerine bayt
+  sayıyordu; Türkçe harfler iki bayt olduğu için sınır fiilen yarıya iniyordu.
+- **Harici ekran çıkarıldığında widget kayboluyordu.** Monitör düzeni değişimi izleniyor,
+  widget kalan ekrana geri alınıyor. Widget'ın hangi ekranda durduğu da hatırlanıyor.
+- **Galerideki eski küçük resimler bulanık kalıyordu.** Açılışta arka planda yenileniyor.
+- **Sistem teması** değiştiğinde "Sistem" modundaki pencereler artık takip ediyor.
+- **Ekran görüntüsü kaydetme paneli** bazen öndeki başka uygulamanın arkasında açılıyordu.
+
+---
+
 # CopyBoard v2.12.0 Release Notes
 
 Ekran görüntülerini yan yana karşılaştırma, ve çerçevesiz pencerenin eksik düğmeleri.

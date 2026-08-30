@@ -20,3 +20,7 @@ __pycache__
 
 # Native addon build output — rebuilt by scripts/build-native.js on install
 native/*/build
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/

@@ -1,0 +1,13 @@
+# Spike-4 bulgusu (S4-a): ScreenCaptureKit, ScreenCaptureKit.framework üzerinden Swift
+# concurrency runtime'ına bağlanır. Cargo'nun ürettiği binary'de LC_RPATH olmadığı için
+# çalışma anında dyld şunu der:
+#     Library not loaded: @rpath/libswift_Concurrency.dylib — no LC_RPATH's found
+# macOS'un Swift runtime'ı /usr/lib/swift altındadır.
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]
+
+[env]
+# ScreenCaptureKit macOS 12.3+ ister. Spike-4/S4-d kararı: video kaydı bu sürümü
+# dayattığı için taban 12.3'e çekildi (Electron sürümü 11.0 diyordu ama o sürümde
+# ekran yakalama zaten çalışmıyordu).
+MACOSX_DEPLOYMENT_TARGET = "12.3"

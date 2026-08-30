@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Tauri bu dosyayı ürettiği Info.plist ile BİRLEŞTİRİYOR. -->
+
+    <!-- Ekran yakalama, OCR, renk seçici, video ve kaydırmalı yakalama. -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>CopyBoard, ekran görüntüsü almak, metin taramak ve video kaydetmek için ekranınıza erişir.</string>
+
+    <!-- Video kaydında mikrofon sesi. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>CopyBoard, ekran kaydınıza mikrofon sesinizi eklemek için mikrofona erişim ister.</string>
+
+    <!--
+      NSAppleEventsUsageDescription KASITLI OLARAK YOK.
+
+      Electron sürümü hızlı yapıştırmayı `osascript` ile yapıyordu ve bu, Erişilebilirlik'e
+      EK OLARAK Automation (Apple Events) izni istiyordu; reddedildiğinde `-1743` hatası
+      veriyordu ve paste-service.js'te o hatayı ayırt edip kullanıcıya anlatan bir
+      sınıflandırıcı bile vardı. Tauri sürümü `CGEventPost` kullanıyor — yalnız
+      Erişilebilirlik yetiyor. Bir izin ve bir hata sınıfı tamamen ortadan kalktı.
+    -->
+
+    <!-- Tepsi uygulaması: Dock'ta görünmüyor. -->
+    <key>LSUIElement</key>
+    <true/>
+</dict>
+</plist>

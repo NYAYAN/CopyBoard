@@ -1,0 +1,68 @@
+[package]
+name = "copyboard"
+version = "3.0.0"
+description = "Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR Uygulaması"
+authors = ["Nurullah YAYAN"]
+license = "ISC"
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "copyboard_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "protocol-asset"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4"] }
+sha1 = "0.10"
+hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+arboard = { version = "3", features = ["image-data"] }
+xcap = "0.9"
+log = "0.4"
+# OCR. Tesseract + Leptonica'yı KAYNAKTAN derler → **cmake ön koşuldur**
+# (GitHub Actions imajlarında hazır gelir). eng+tur verisi binary'ye gömülür,
+# yani 9,9 MB'lık .traineddata dosyaları paketten çıkar.
+tesseract-rs = { version = "0.4", features = ["build-tesseract", "embed-tessdata"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Video kaydı ve kaydırmalı yakalama kare akışı. macOS 12.3+ (Spike-4/S4-d kararı).
+screencapturekit = { version = "8", features = ["macos_15_0"] }
+window-vibrancy = "0.8"
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Debug'da bağımlılıkları optimize et: Spike-3'te `image` crate'inin debug build'i
+# release'ten 85 KAT yavaş çıktı (PNG encode 2890ms → 34ms). Kendi kodumuz
+# optimize edilmeden kalır ki derleme hızlı olsun ve backtrace okunabilsin.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

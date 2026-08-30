@@ -1,0 +1,338 @@
+//! Ekran yakalama servisi — `src/main/services/capture-service.js`'in karşılığı.
+//!
+//! ## Sıra: overlay'ler ÖNCE
+//!
+//! Her monitörün overlay penceresi HEMEN açılıyor, böylece pencere kurulumu ve sayfa
+//! yüklemesi yakalamalarla PARALEL yürüyor — karartma, yakala-sonra-yükle sırasının
+//! toplamı yerine ikisinden geç olanı kadar sonra beliriyor. Overlay, kendi ekran
+//! görüntüsü gelene dek tamamen şeffaf olduğu için, zaten ekranda olması yakalanan
+//! görüntüyü kirletemiyor.
+//!
+//! ## Kare teslimi
+//!
+//! Electron `webContents.send('capture-screen', pngBuffer, …)` ile itiyordu. Tauri'nin
+//! `emit`'i JSON serialize ediyor — 3,6 MB'lık bir PNG, ~15 MB'lık sayı dizisine
+//! dönerdi. Bunun yerine METADATA itiliyor, renderer da kareyi `invoke` ile ÇEKİYOR
+//! ([`take_capture_frame`]); `tauri::ipc::Response` ham bayt döndürüyor.
+//! `api-tauri.js` bu iki adımı birleştirip `onCaptureScreen`'in eski imzasını koruyor.
+
+#[cfg(target_os = "macos")]
+pub mod recorder;
+pub mod screenshot;
+#[cfg(target_os = "macos")]
+pub mod scroll_stream;
+
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+use serde::Serialize;
+use tauri::Manager;
+
+use crate::geom;
+use crate::state::AppState;
+
+/// Aynı anda kaç monitör yakalanacak. Yeterince paralel ki karartma hızlı belirsin,
+/// ama sınırlı ki tepe bellek monitör sayısıyla karesel büyümesin.
+const CONCURRENCY: usize = 2;
+
+#[derive(Default)]
+pub struct CaptureState {
+    /// Pencere etiketi → o pencereye ait kare.
+    frames: Mutex<HashMap<String, screenshot::Frame>>,
+    /// Pencere etiketi → kaç kez yeniden yakalama istendi.
+    retries: Mutex<HashMap<String, u32>>,
+}
+
+/// Renderer'a itilen metadata. Kare AYRI çekiliyor.
+#[derive(Serialize, Clone)]
+pub struct CaptureMeta {
+    pub mode: String,
+    /// Electron'da video/kaydırma için `chromeMediaSourceId` idi. Tauri'de kaynak
+    /// Rust tarafında, ama alan imza uyumu için korunuyor.
+    #[serde(rename = "sourceId")]
+    pub source_id: String,
+    pub quality: String,
+    pub width: u32,
+    pub height: u32,
+    #[serde(rename = "multiMonitor")]
+    pub multi_monitor: bool,
+}
+
+pub const MAX_RETRIES: u32 = 2;
+
+/// Yakalamayı başlatır. `mode`: `draw` | `ocr` | `color` | `video` | `scroll`.
+pub fn start(app: &tauri::AppHandle, mode: &str) {
+    // ── macOS ekran kaydı izni ───────────────────────────────────────────────
+    #[cfg(target_os = "macos")]
+    if !crate::platform::macos::permissions::has_screen_recording() {
+        request_screen_permission(app);
+        return;
+    }
+
+    {
+        let state = app.state::<AppState>();
+        let mut rt = state.runtime.lock().unwrap();
+        if rt.is_capturing {
+            drop(rt);
+            crate::windows::toast::show(app, "İşlem devam ediyor...", "warning");
+            return;
+        }
+        rt.is_capturing = true;
+        rt.last_mode = mode.to_string();
+    }
+
+    let monitors = geom::all_monitors(app);
+    if monitors.is_empty() {
+        finish(app);
+        crate::windows::toast::show(app, "Ekran kaynakları alınamadı", "error");
+        return;
+    }
+    let multi = monitors.len() > 1;
+
+    // Yakalama sırasında widget yakalanan görüntüye girmemeli.
+    crate::windows::hide_if_open(app, "widget");
+
+    // Overlay'leri ÖNCE aç — yükleme yakalamalarla paralel yürüsün.
+    let mut labels = Vec::new();
+    for (i, m) in monitors.iter().enumerate() {
+        match crate::windows::capture::create(app, mode, i, m) {
+            Ok(w) => labels.push(w.label().to_string()),
+            Err(e) => {
+                log::error!("yakalama overlay'i kurulamadı ({i}): {e}");
+                labels.push(String::new());
+            }
+        }
+    }
+
+    let quality = app.state::<AppState>().settings().video_quality();
+    let handle = app.clone();
+    let mode_owned = mode.to_string();
+    let monitors_owned = monitors.clone();
+
+    // Yakalama arka planda: ana thread pencereleri çizmeye devam etsin.
+    std::thread::spawn(move || {
+        let mut any = false;
+        for chunk_start in (0..monitors_owned.len()).step_by(CONCURRENCY) {
+            let end = (chunk_start + CONCURRENCY).min(monitors_owned.len());
+            let batch: Vec<_> = (chunk_start..end).collect();
+
+            let results: Vec<_> = std::thread::scope(|s| {
+                let handles: Vec<_> = batch
+                    .iter()
+                    .map(|&i| {
+                        let m = monitors_owned[i];
+                        s.spawn(move || (i, screenshot::capture_monitor(&m)))
+                    })
+                    .collect();
+                handles.into_iter().filter_map(|h| h.join().ok()).collect()
+            });
+
+            for (i, frame) in results {
+                let Some(label) = labels.get(i).filter(|l| !l.is_empty()) else { continue };
+                match frame {
+                    Some(f) => {
+                        any = true;
+                        deliver(&handle, label, f, &mode_owned, &quality, multi);
+                    }
+                    None => crate::windows::close_if_open(&handle, label),
+                }
+            }
+        }
+
+        if !any {
+            let h = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                close_all(&h, None);
+                crate::windows::toast::show(&h, "Ekran görüntüsü alınamadı. Lütfen tekrar deneyin.", "error");
+            });
+        }
+    });
+}
+
+/// Kareyi sakla ve pencereye "hazır" de. Pencere henüz yüklenmemiş olabilir —
+/// `api-tauri.js` olayı aldığında kareyi çekiyor, o yüzden sıralama güvenli.
+fn deliver(
+    app: &tauri::AppHandle,
+    label: &str,
+    frame: screenshot::Frame,
+    mode: &str,
+    quality: &str,
+    multi: bool,
+) {
+    let meta = CaptureMeta {
+        mode: mode.to_string(),
+        source_id: label.to_string(),
+        quality: quality.to_string(),
+        width: frame.width,
+        height: frame.height,
+        multi_monitor: multi,
+    };
+    log::debug!("kare teslim: {label} {}x{} ({} bayt PNG)", frame.width, frame.height, frame.png.len());
+    app.state::<CaptureState>()
+        .frames
+        .lock()
+        .unwrap()
+        .insert(label.to_string(), frame);
+    crate::windows::emit_to(app, label, "capture-screen", meta);
+}
+
+#[cfg(target_os = "macos")]
+fn request_screen_permission(app: &tauri::AppHandle) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+    let handle = app.clone();
+    app.dialog()
+        .message(
+            "CopyBoard ekran görüntüsü alabilmek için \"Ekran Kaydı\" iznine ihtiyaç duyar.\n\n\
+             Sistem Ayarları > Gizlilik ve Güvenlik > Ekran Kaydı bölümünden uygulamaya izin verin.",
+        )
+        .title("Ekran Kaydı İzni Gerekli")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom("Ayarları Aç".into(), "İptal".into()))
+        .show(move |open_settings| {
+            if !open_settings {
+                return;
+            }
+            // Sistemin kendi istem akışını da tetikle: kullanıcı listeye eklenmemişse
+            // Ayarlar'ı açmak tek başına yetmiyor.
+            crate::platform::macos::permissions::request_screen_recording();
+            use tauri_plugin_opener::OpenerExt;
+            let _ = handle.opener().open_url(
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+                None::<&str>,
+            );
+        });
+}
+
+/// Renderer'ın kareyi çektiği yer. Ham PNG baytları döner (JSON DEĞİL).
+#[tauri::command]
+pub fn take_capture_frame(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, CaptureState>,
+) -> tauri::ipc::Response {
+    let frames = state.frames.lock().unwrap();
+    let png = frames.get(window.label()).map(|f| f.png.clone()).unwrap_or_default();
+    log::debug!(
+        "kare çekildi: {} → {} bayt (önbellekteki etiketler: {:?})",
+        window.label(), png.len(), frames.keys().collect::<Vec<_>>()
+    );
+    drop(frames);
+    tauri::ipc::Response::new(png)
+}
+
+/// Overlay kullanılamaz bir görüntü aldı (boş, ya da çözülemeyen bir PNG).
+/// Hata göstermek yerine kendini onarıyor: o monitörü yeniden yakalayıp gönderiyor.
+/// Overlay yalnız kullanılabilir bir görüntü geldikten sonra görünür olduğu için
+/// yeniden denemeler kullanıcıya görünmüyor.
+#[tauri::command]
+pub fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) {
+    let label = window.label().to_string();
+    let count = {
+        let state = app.state::<CaptureState>();
+        let mut retries = state.retries.lock().unwrap();
+        let c = retries.entry(label.clone()).or_insert(0);
+        *c += 1;
+        *c
+    };
+    if count > MAX_RETRIES {
+        close_all(&app, None);
+        crate::windows::toast::show(&app, "Ekran görüntüsü alınamadı. Lütfen tekrar deneyin.", "error");
+        return;
+    }
+
+    let Some(index) = label.rsplit('-').next().and_then(|s| s.parse::<usize>().ok()) else { return };
+    let monitors = geom::all_monitors(&app);
+    let Some(m) = monitors.get(index).copied() else { return };
+    let multi = monitors.len() > 1;
+    let state = app.state::<AppState>();
+    let mode = state.runtime.lock().unwrap().last_mode.clone();
+    let quality = state.settings().video_quality();
+
+    // Yeniden yakalamada overlay'in KENDİSİ görüntüye girmemeli.
+    let _ = window.hide();
+
+    let handle = app.clone();
+    std::thread::spawn(move || match screenshot::capture_monitor(&m) {
+        Some(frame) => deliver(&handle, &label, frame, &mode, &quality, multi),
+        None => {
+            let h = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                close_all(&h, None);
+                crate::windows::toast::show(&h, "Ekran görüntüsü alınamadı. Lütfen tekrar deneyin.", "error");
+            });
+        }
+    });
+}
+
+/// Overlay kullanılabilir bir görüntü aldı → göster.
+#[tauri::command]
+pub fn snip_ready(window: tauri::WebviewWindow) {
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Bir monitörde yeni seçim başladı → DİĞER monitörlere seçimlerini temizlemelerini
+/// söyle. Overlay'ler açık, karanlık VE etkileşimli kalıyor, böylece yalnız en son
+/// seçim var oluyor ve kullanıcı serbestçe başka monitörde yeniden seçebiliyor.
+#[tauri::command]
+pub fn capture_claim_monitor(app: tauri::AppHandle, window: tauri::WebviewWindow) {
+    for (label, w) in app.webview_windows() {
+        if label.starts_with(crate::windows::capture::PREFIX) && label != window.label() {
+            let _ = w.emit_to(&label, "capture-reset", ());
+        }
+    }
+}
+
+#[tauri::command]
+pub fn snip_close(app: tauri::AppHandle) {
+    close_all(&app, None);
+}
+
+/// Her monitörün overlay'ini kapatır. `keep` verilirse o pencere hayatta kalır —
+/// video kaydı bir monitörde başladığında diğerlerinin gitmesi gerekiyor.
+pub fn close_all(app: &tauri::AppHandle, keep: Option<&str>) {
+    let labels: Vec<String> = app
+        .webview_windows()
+        .keys()
+        .filter(|l| l.starts_with(crate::windows::capture::PREFIX))
+        .cloned()
+        .collect();
+    for label in labels {
+        if Some(label.as_str()) == keep {
+            continue;
+        }
+        crate::windows::close_if_open(app, &label);
+    }
+    finish(app);
+}
+
+/// Bir pencere HARİÇ diğer overlay'leri kapatır — video/kaydırma tek monitörde
+/// sürerken diğerlerinin gitmesi gerekiyor. Oturumu BİTİRMEZ.
+pub fn close_all_except(app: &tauri::AppHandle, keep: &str) {
+    let labels: Vec<String> = app
+        .webview_windows()
+        .keys()
+        .filter(|l| l.starts_with(crate::windows::capture::PREFIX) && l.as_str() != keep)
+        .cloned()
+        .collect();
+    for label in labels {
+        crate::windows::close_if_open(app, &label);
+    }
+}
+
+/// Yakalama oturumu bitti: bayrağı düşür, widget'ı geri getir, kare önbelleğini boşalt.
+pub fn finish(app: &tauri::AppHandle) {
+    {
+        let state = app.state::<AppState>();
+        state.runtime.lock().unwrap().is_capturing = false;
+    }
+    let cs = app.state::<CaptureState>();
+    cs.frames.lock().unwrap().clear();
+    cs.retries.lock().unwrap().clear();
+
+    if app.state::<AppState>().settings().show_widget() {
+        crate::windows::show_if_open(app, "widget");
+    }
+}
+
+use tauri::Emitter;

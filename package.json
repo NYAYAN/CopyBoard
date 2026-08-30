@@ -8,14 +8,16 @@
     "url": "https://github.com/NYAYAN/CopyBoard.git"
   },
   "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "start:electron": "electron .",
+    "dist:electron": "electron-builder",
     "screenshots": "electron scripts/capture-screens.js",
     "test": "node --test \"test/**/*.test.mjs\"",
     "test:electron": "electron test/electron-accelerator-check.js",
     "test:scroller": "electron test/electron-scroller-check.js",
-    "postinstall": "node scripts/build-native.js",
-    "build:native": "node scripts/build-native.js"
+    "test:rust": "cd src-tauri && cargo test"
   },
   "keywords": [],
   "author": "Nurullah YAYAN",
@@ -91,10 +93,9 @@
     ]
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "electron": "^39.2.7",
-    "electron-builder": "^25.1.8",
-    "node-addon-api": "^8.5.0",
-    "node-gyp": "^11.0.0"
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
     "electron-store": "^8.1.0",

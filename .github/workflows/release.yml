@@ -10,40 +10,62 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    runs-on: ${{ matrix.os }}
-
+  build:
     strategy:
-      # Run the platform builds one at a time: two parallel electron-builder
-      # --publish always jobs race to find an existing draft for the tag and
-      # can each create their OWN draft release (duplicate v2.8.3 drafts, one
-      # with the win assets, one with mac). Sequential jobs make the second
-      # build find and append to the first build's draft.
-      max-parallel: 1
+      # Electron sürümünde `max-parallel: 1` gerekiyordu: iki paralel
+      # `electron-builder --publish always` işi aynı etiket için taslak yarışına girip
+      # AYRI taslaklar yaratabiliyordu. `tauri-action` aynı taslağa güvenle eklediği
+      # için matris artık paralel koşabiliyor.
+      fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        include:
+          - platform: macos-latest      # Apple Silicon
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-13          # Intel
+            args: '--target x86_64-apple-darwin'
+          - platform: windows-latest
+            args: ''
 
+    runs-on: ${{ matrix.platform }}
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 18
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+
+      # tesseract-rs, Tesseract + Leptonica'yı KAYNAKTAN derliyor. Önbelleksiz ilk
+      # derleme uzun sürüyor; bu önbellek onu ~3 dakikaya indiriyor.
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.platform }}
+
+      # cmake tesseract-rs'in ön koşulu. GitHub imajlarında hazır gelir;
+      # kontrol, bir imaj değişikliğinin sessizce derlemeyi bozmasını engelliyor.
+      - name: cmake doğrula
+        run: cmake --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
-        run: npm ci
+      - run: npm ci
 
-      - name: Build and Publish Windows
-        if: matrix.os == 'windows-latest'
+      - uses: tauri-apps/tauri-action@v0
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist -- --win --publish always
-
-      - name: Build and Publish Mac
-        if: matrix.os == 'macos-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist -- --mac --publish always
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `tauri signer generate` ile üretilir; özel anahtar ASLA depoya girmez.
+          # Ayarlanmadıklarında imzasız yapı üretilir ve güncelleyici çalışmaz.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'CopyBoard ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

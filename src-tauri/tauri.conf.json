@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CopyBoard",
+  "version": "3.0.0",
+  "identifier": "com.nurullahyayan.copyboard",
+  "build": {
+    "frontendDist": "../src/renderer"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost asset: http://asset.localhost; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "dmg",
+      "app",
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
+    "category": "Utility",
+    "copyright": "Nurullah YAYAN",
+    "shortDescription": "Pano yöneticisi, ekran görüntüsü ve OCR aracı",
+    "macOS": {
+      "minimumSystemVersion": "12.3"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    },
+    "publisher": "Nurullah YAYAN",
+    "licenseFile": "../LICENSE"
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/NYAYAN/CopyBoard/releases/latest/download/latest.json"
+      ],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

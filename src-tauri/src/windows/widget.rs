@@ -90,10 +90,18 @@ pub fn create(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
         },
     )?;
 
-    let _ = geom::place(&window, window_x(bx, &side, s), by, FULL_W * s, COLLAPSED_H * s);
     // Ölçek pencereyi büyütmüyor, İÇERİĞİ büyütüyor.
     let _ = window.set_zoom(s);
+
+    // Electron widget'ı `showInactive()` ile gösteriyordu: yüzen bir araç, kullanıcının
+    // yazdığı yerden odağı ÇALMAMALI. Tauri'de karşılığı, pencereyi odak istemeden
+    // göstermek — `set_focus()` çağırmamak yetmiyor, macOS'ta `show()` zaten
+    // `makeKeyAndOrderFront` yapıyor. `focusable(false)` ile kuruluyor olsaydı
+    // sürükleme çalışmazdı, o yüzden odak gösterimden SONRA geri veriliyor.
     let _ = window.show();
+    let _ = geom::place(&window, window_x(bx, &side, s), by, FULL_W * s, COLLAPSED_H * s);
+    let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
+    let _ = crate::platform::order_front(&window);
 
     notify_side(app);
     push_config(app);
@@ -133,6 +141,7 @@ fn start_topmost_keeper(app: &tauri::AppHandle) {
                 if let Some(w) = h.get_webview_window(LABEL) {
                     if w.is_visible().unwrap_or(false) {
                         let _ = crate::platform::set_window_level(&w, WindowLevel::ScreenSaver);
+                        let _ = crate::platform::order_front(&w);
                     }
                 }
             })
@@ -194,6 +203,7 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
         let h = h_base * s;
         let _ = geom::place(&window, win_x, top_y_for(by, h, is_up, s), FULL_W * s, h);
         let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
+        let _ = crate::platform::order_front(&window);
     };
 
     match action {
@@ -204,6 +214,7 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
             let h = COLLAPSED_H * s;
             let _ = geom::place(&window, win_x, by, FULL_W * s, h);
             let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
+            let _ = crate::platform::order_front(&window);
         }
         "drag" => {
             let dx = data.as_ref().and_then(|d| d.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -215,6 +226,7 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
                 .unwrap_or(COLLAPSED_H * s);
             let _ = geom::place(&window, window_x(nx, &side, s), ny, FULL_W * s, h);
             let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
+            let _ = crate::platform::order_front(&window);
         }
         "drag-end" => finish_drag(app, &window, s),
         "open-list" => crate::windows::main_window::show(app),
@@ -261,6 +273,8 @@ fn finish_drag(app: &tauri::AppHandle, window: &tauri::WebviewWindow, s: f64) {
             "relX": (fx - m.work_x) / (m.work_width - btn).max(1.0),
             "relY": (fy - m.work_y) / (m.work_height - col_h).max(1.0),
             "side": side,
+            // Widget'ın yerleştiği FİZİKSEL ekran — bkz. `ensure_in_bounds`.
+            "displayName": m.name,
         }),
     );
 
@@ -276,11 +290,36 @@ pub fn ensure_in_bounds(app: &tauri::AppHandle) {
     let btn = BTN_W * s;
     let (bx, by) = saved_pos(app);
 
-    let m = geom::monitor_nearest_point(app, bx, by).or_else(|| geom::primary_monitor(app));
-    let Some(m) = m else { return };
-
     let store = &app.state::<AppState>().store;
     let dock = store.get_value("widgetDockParams");
+
+    // Hedef monitör seçimi — Electron'un sırasını izliyor:
+    //   1. Kayıtlı konum bir monitörün İÇİNDEyse o monitör (`getDisplayMatching`).
+    //   2. Değilse, widget'ın en son yerleştiği EKRAN ADI hâlâ bağlıysa o
+    //      (Electron'un `dockParams.displayId` yedeği).
+    //   3. O da yoksa en yakın monitör, sonra birincil.
+    //
+    // 2. adım olmadan şu yaşanıyordu: dizüstü harici ekranla kullanılıyor, widget
+    // sağdaki ekranda; kapak kapanıp açılınca ya da ekran uykudan geç dönünce widget
+    // "en yakın" monitöre, yani yanlış ekrana taşınıyor ve orada KALIYORDU — çünkü
+    // taşındıktan sonra kayıtlı konum da yeni ekranı gösteriyor.
+    let monitors = geom::all_monitors(app);
+    let saved_name = dock
+        .as_ref()
+        .and_then(|d| d.get("displayName")?.as_str().map(str::to_string));
+    let m = monitors
+        .iter()
+        .find(|m| m.contains(bx, by))
+        .or_else(|| {
+            saved_name
+                .as_deref()
+                .and_then(|want| monitors.iter().find(|m| m.name.as_deref() == Some(want)))
+        })
+        .cloned()
+        .or_else(|| geom::monitor_nearest_point(app, bx, by))
+        .or_else(|| geom::primary_monitor(app));
+    let Some(m) = m else { return };
+
     let rel = dock.as_ref().and_then(|d| {
         Some((d.get("relX")?.as_f64()?, d.get("relY")?.as_f64()?))
     });
@@ -305,6 +344,7 @@ pub fn ensure_in_bounds(app: &tauri::AppHandle) {
             "relX": (nx - m.work_x) / (m.work_width - btn).max(1.0),
             "relY": (ny - m.work_y) / (m.work_height - btn).max(1.0),
             "side": side,
+            "displayName": m.name,
         }),
     );
 }
@@ -320,13 +360,62 @@ pub fn update_scale(app: &tauri::AppHandle) {
     push_config(app);
 }
 
+/// Monitör değişimlerini izler ve widget'ı ekranda tutar.
+///
+/// ## Neden yoklama, olay değil
+///
+/// Electron `screen.on('display-added' | 'display-removed' | 'display-metrics-changed')`
+/// dinliyordu. Tauri'de bunun doğrudan karşılığı yok; macOS'ta
+/// `NSApplicationDidChangeScreenParametersNotification` için bir Objective-C sınıfı
+/// tanımlamak gerekiyor. Monitör düzeni saniyede bir kez bile değişmediği için
+/// düşük frekanslı bir parmak izi karşılaştırması yeterli ve taşınabilir.
+///
+/// Bu bağlanmadığında widget, artık var olmayan koordinatlarda kalıp görünmez ve
+/// tıklanamaz oluyordu — kurtuluşu yalnız uygulamayı yeniden başlatmaktı.
+pub fn start_display_watcher(app: &tauri::AppHandle) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static RUNNING: AtomicBool = AtomicBool::new(false);
+    if RUNNING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+
+    fn fingerprint(app: &tauri::AppHandle) -> String {
+        crate::geom::all_monitors(app)
+            .iter()
+            .map(|m| format!("{:.0},{:.0},{:.0},{:.0},{:.2}", m.x, m.y, m.width, m.height, m.scale))
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let mut last = fingerprint(&handle);
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            let now = fingerprint(&handle);
+            if now == last {
+                continue;
+            }
+            log::info!("monitör düzeni değişti — widget yeniden yerleştiriliyor");
+            last = now;
+            handle_display_change(&handle);
+        }
+    });
+}
+
 /// Monitör eklendi/çıkarıldı/yeniden boyutlandı.
 pub fn handle_display_change(app: &tauri::AppHandle) {
     // Üçlü kontrol: çok monitörlü geçişler sırasında OS'un yeniden yerleşimlerini yakala.
+    // Electron her olayda birikmiş timeout'ları İPTAL ediyordu; olay yağmurunda
+    // thread yığılmasını nesil sayacı engelliyor.
+    let generation = SYNC_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
     for delay in [500u64, 2000, 5000] {
         let h = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(delay));
+            if SYNC_GENERATION.load(std::sync::atomic::Ordering::Acquire) != generation {
+                return; // daha yeni bir değişim var; bu tur geçersiz
+            }
             let inner = h.clone();
             let _ = h.run_on_main_thread(move || {
                 if inner.get_webview_window(LABEL).is_none() {
@@ -339,6 +428,8 @@ pub fn handle_display_change(app: &tauri::AppHandle) {
         });
     }
 }
+
+static SYNC_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[cfg(test)]
 mod tests {

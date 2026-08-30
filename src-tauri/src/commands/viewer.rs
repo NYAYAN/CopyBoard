@@ -41,9 +41,14 @@ pub fn open(app: &tauri::AppHandle, id: &str) {
 
     *CURRENT.lock().unwrap() = Some(id.to_string());
 
+    // `ensure` mevcut pencereyi döndürdüyse olaylar zaten bağlı; yalnız YENİ
+    // pencerede bağlanıyor.
+    let existed = tauri::Manager::get_webview_window(app, LABEL).is_some();
     match crate::windows::viewer::ensure(app, w, h) {
         Ok(window) => {
-            wire_events(app, &window);
+            if !existed {
+                wire_events(app, &window);
+            }
             let _ = window.show();
             let _ = window.set_focus();
             send_state(app);
@@ -55,12 +60,13 @@ pub fn open(app: &tauri::AppHandle, id: &str) {
 /// Maksimize/geri al olaylarını bağlar. Araç çubuğundaki düğmenin, sürükleme
 /// alanına çift tıklamayla ya da yapıştırma hareketiyle gelen maksimizeyi de
 /// öğrenmesi gerekiyor — bu yüzden durum pencereden SORULUYOR, burada takip edilmiyor.
+/// Olayları YENİ kurulan pencereye bağlar.
+///
+/// Önceki hâli süreç ömrü boyunca tek sefer izin veren statik bir bayrak kullanıyordu;
+/// görüntüleyici kapatılıp yeniden açıldığında yeni pencereye hiçbir olay bağlanmıyor,
+/// `viewer-window-state` gönderilmiyor ve maximize taşma düzeltmesi uygulanmıyordu.
+/// Electron her yeni `BrowserWindow` için yeniden bağlıyordu.
 fn wire_events(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static WIRED: AtomicBool = AtomicBool::new(false);
-    if WIRED.swap(true, Ordering::AcqRel) {
-        return;
-    }
     let handle = app.clone();
     let w = window.clone();
     window.on_window_event(move |event| {

@@ -40,6 +40,9 @@ const RESERVED_KEYS: [&str; 5] = ["C", "V", "X", "A", "Z"];
 /// için tutuluyor.
 static LIVE: Mutex<Option<HashMap<String, ShortcutKey>>> = Mutex::new(None);
 static SUSPENDED: AtomicBool = AtomicBool::new(false);
+/// Askıya alma nesli — 60 sn'lik güvenlik ağının eski bir askıya almayı geri
+/// almasını engelliyor.
+static SUSPEND_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn live() -> std::sync::MutexGuard<'static, Option<HashMap<String, ShortcutKey>>> {
     let mut g = LIVE.lock().unwrap();
@@ -111,6 +114,13 @@ fn claim_native(app: &tauri::AppHandle, accel: &str) -> bool {
     });
 
     let Some(p) = accelerator::parse(accel) else { return false };
+    // Değiştiricisiz bir global bağlama, o fiziksel tuşu SİSTEM ÇAPINDA ele geçirir —
+    // kullanıcı o tuşu hiçbir uygulamada yazamaz olur. Kaydedici zaten buna izin
+    // vermiyor (`accelerator.js`), ama elle düzenlenmiş bir config.json geçebilir.
+    if !(p.cmd_or_ctrl || p.meta || p.ctrl || p.alt || p.shift) {
+        log::warn!("'{accel}' değiştiricisiz — çıplak tuşu sistem çapında ele geçirmemek için reddedildi");
+        return false;
+    }
     let Some(code) = accelerator::native_keycode(p.key) else { return false };
     hotkey_carbon::register(
         accel,
@@ -163,12 +173,30 @@ pub fn suspend(app: &tauri::AppHandle) {
     for accel in accels {
         release(app, &accel);
     }
+
+    // Menünün kapanma olayı bir sebeple gelmezse uygulamayı KALICI olarak kısayolsuz
+    // bırakmayalım. Electron'da da aynı emniyet vardı (`resumeWatchdog`).
+    let generation = SUSPEND_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        // Bu arada normal bir resume olduysa nesil değişmiştir; karışma.
+        if SUSPEND_GENERATION.load(Ordering::Acquire) != generation {
+            return;
+        }
+        let h = handle.clone();
+        let _ = handle.run_on_main_thread(move || {
+            log::warn!("kısayol askıya alma 60 sn sürdü — güvenlik ağı devrede, geri alınıyor");
+            resume(&h);
+        });
+    });
 }
 
 pub fn resume(app: &tauri::AppHandle) {
     if !SUSPENDED.swap(false, Ordering::AcqRel) {
         return;
     }
+    SUSPEND_GENERATION.fetch_add(1, Ordering::AcqRel);
     let entries: Vec<(String, ShortcutKey)> = live()
         .as_ref()
         .map(|m| m.iter().map(|(a, k)| (a.clone(), *k)).collect())
@@ -246,6 +274,10 @@ pub fn register_all(app: &tauri::AppHandle) {
         registered.join(", "),
         if failed.is_empty() { String::new() } else { format!(" · BAŞARISIZ: [{}]", failed.join(", ")) }
     );
+
+    // sanitize_persisted bir bağlamayı varsayılana döndürmüş olabilir; tepsi menüsü
+    // aksi hâlde eski (rezerve) accelerator'ı göstermeye devam eder.
+    crate::tray::rebuild(app);
 
     // Gecikmeli, tek seferlik açılış geri bildirimi. Bu olmadan, kapılmış bir Hızlı
     // Yapıştır kısayolu "bazı bilgisayarlarda açılmıyor" gizemine dönüşüyor.
@@ -373,15 +405,64 @@ pub fn set_enabled(app: &tauri::AppHandle, key: ShortcutKey, enabled: bool) {
 /// Tepsi, o öğeleri tuş ipucu OLMADAN gösteriyor — hiç göstermemek yerine.
 pub fn menu_accelerator(accel: &str) -> Option<String> {
     if accel.is_empty() || accelerator::is_native_only(accel) {
-        None
-    } else {
-        Some(accel.to_string())
+        return None;
     }
+    Some(muda_key_names(accel))
+}
+
+/// Electron'un numpad kısaltmalarını menü ayrıştırıcısının tanıdığı adlara çevirir.
+///
+/// Tepsi menüsü accelerator'ları `muda` ile ayrıştırıyor. muda `numadd`i (ve `num0..9`u)
+/// tanıyor ama diğer dört numpad işlecinde Electron'dan AYRILIYOR: uzun adları istiyor.
+/// Çevrilmezse `MenuItemBuilder::accelerator` hata veriyor, `tray::rebuild` öğeyi
+/// accelerator'sız kuruyor ve kullanıcı numpad'e kısayol atadıysa tuş ipucu menüden
+/// sessizce kayboluyor.
+///
+/// | Ayarlarda saklanan | muda'nın istediği |
+/// |---|---|
+/// | `numsub`  | `NumSubtract` |
+/// | `nummult` | `NumMultiply` |
+/// | `numdiv`  | `NumDivide`   |
+/// | `numdec`  | `NumDecimal`  |
+fn muda_key_names(accel: &str) -> String {
+    accel
+        .split('+')
+        .map(|part| match part.to_ascii_lowercase().as_str() {
+            "numsub" => "NumSubtract",
+            "nummult" => "NumMultiply",
+            "numdiv" => "NumDivide",
+            "numdec" => "NumDecimal",
+            _ => part,
+        })
+        .collect::<Vec<_>>()
+        .join("+")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Kaydedicinin üretebildiği HER tuş, tepsi menüsünün gerçek ayrıştırıcısından
+    /// geçmeli. Elle tutulan bir liste değil, `muda`nın kendisi doğruluyor: muda bir
+    /// sürümde tuş adı değiştirirse bu test kırılır, üretimde menü sessizce
+    /// accelerator'ını kaybetmez.
+    #[test]
+    fn menu_accelerator_ciktisi_muda_tarafindan_ayristirilabiliyor() {
+        use std::str::FromStr;
+        let uretilen = [
+            "Space", "Tab", "Enter", "Backspace", "Delete", "Insert", "Home", "End",
+            "PageUp", "PageDown", "Up", "Down", "Left", "Right",
+            ",", ".", "/", "\\", ";", "'", "[", "]", "`", "-", "=",
+            "numadd", "numsub", "nummult", "numdiv", "numdec",
+            "A", "Z", "0", "9", "num0", "num9", "F1", "F12",
+        ];
+        for key in uretilen {
+            let accel = format!("CommandOrControl+Shift+{key}");
+            let out = menu_accelerator(&accel).expect("menüde gösterilebilmeli");
+            muda::accelerator::Accelerator::from_str(&out)
+                .unwrap_or_else(|e| panic!("'{accel}' -> '{out}' muda tarafından ayrıştırılamadı: {e}"));
+        }
+    }
 
     #[test]
     fn rezerve_tuslar_yakalaniyor() {

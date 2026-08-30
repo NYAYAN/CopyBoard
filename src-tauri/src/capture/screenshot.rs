@@ -36,11 +36,11 @@ pub struct Frame {
 }
 
 /// Bir monitörü FİZİKSEL piksel çözünürlüğünde yakalar.
-pub fn capture_monitor(target: &MonitorInfo) -> Option<Frame> {
+pub fn capture_monitor(target: &MonitorInfo, index: usize) -> Option<Frame> {
     let (want_w, want_h) = target.physical_size();
 
     for attempt in 1..=ATTEMPTS {
-        match try_capture(target) {
+        match try_capture(target, index) {
             Some(frame) => return Some(frame),
             None if attempt < ATTEMPTS => {
                 log::warn!(
@@ -55,21 +55,27 @@ pub fn capture_monitor(target: &MonitorInfo) -> Option<Frame> {
     None
 }
 
-fn try_capture(target: &MonitorInfo) -> Option<Frame> {
+fn try_capture(target: &MonitorInfo, index: usize) -> Option<Frame> {
     let monitors = xcap::Monitor::all().ok()?;
 
-    // Tauri monitörünü xcap monitörüyle FİZİKSEL konumdan eşleştir. İsimler iki
-    // kütüphanede farklı biçimlerde; konum ikisinde de aynı koordinat uzayında.
-    let target_x = (target.x * target.scale).round() as i32;
-    let target_y = (target.y * target.scale).round() as i32;
+    // ── ⚠ Koordinat uzayı ────────────────────────────────────────────────────
+    // İlk hâli `target.x * target.scale`i xcap'in `m.x()`iyle karşılaştırıyordu.
+    // Bu YANLIŞ: xcap macOS'ta `x()/y()`yi doğrudan `CGDisplayBounds.origin` olarak,
+    // yani NOKTA cinsinden veriyor (ölçeksiz). Sol taraf fiziksel, sağ taraf noktaydı.
+    // Sonuç: orijinde olmayan ve ölçeği 1'den farklı monitörlerde eşleşme başarısız
+    // oluyor, fallback birincil ekrana düşüyor ve ÇOK MONİTÖRLÜ bir kurulumda TÜM
+    // overlay'ler aynı (yanlış) görüntüyü alıyordu — hiçbir hata vermeden.
+    //
+    // İki taraf da NOKTA: `MonitorInfo.x/y` zaten mantıksal.
+    let (tx, ty) = (target.x.round() as i32, target.y.round() as i32);
 
     let monitor = monitors
         .iter()
-        .find(|m| m.x().unwrap_or(i32::MIN) == target_x && m.y().unwrap_or(i32::MIN) == target_y)
-        // Eşleşme yoksa (koordinat uzayları ayrışmışsa) birincil ekrana düş — boş
-        // dönmektense yanlış monitörü yakalamak daha iyi değil, ama hiç yakalamamak
-        // kullanıcıya "hiçbir şey olmadı" gösterirdi.
-        .or_else(|| monitors.iter().find(|m| m.is_primary().unwrap_or(false)))
+        .find(|m| m.x().unwrap_or(i32::MIN) == tx && m.y().unwrap_or(i32::MIN) == ty)
+        // Eşleşme yoksa İNDEKS sırasına düş — Electron'un fallback'i de buydu
+        // (`sources[index] || sources[0]`), ve önemli farkı şu: her monitör yine
+        // FARKLI bir kaynak alıyor, hepsi birden birincil ekrana çökmüyor.
+        .or_else(|| monitors.get(index))
         .or_else(|| monitors.first())?;
 
     let image = monitor.capture_image().ok()?;

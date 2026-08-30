@@ -721,3 +721,158 @@ aynı şekilde çözülüyor, yani iki sürüm de çalışıyor.
 
 **macOS/Windows çekirdeği için Faz 0 TAMAMLANDI.** Yedi spike, yedi geçiş, dokuz bulgu.
 Faz 1'e (iskelet + pencere altyapısı) geçilebilir.
+
+---
+
+## Cerrahi gözden geçirme — bulgular ve düzeltmeler
+
+Faz 6 sonunda tüm port, Electron kaynağıyla satır satır karşılaştırıldı. Aşağıdakiler
+DÜZELTİLDİ; her biri ya Electron'da açıkça çözülmüş bir davranışın portta kaybolması,
+ya da Tauri'nin Electron'dan sessizce ayrıldığı bir nokta.
+
+### 🔴 BULGU R-1 — Dil değişimi hiç çalışmıyordu
+
+`set_language` ayarı yazıp pencereleri `location.reload()` ediyordu. Ama sözlük
+`initialization_script` ile enjekte ediliyor ve o script **yeniden yüklemede de
+ESKİ yükün kopyasıyla** çalışıyor — pencere Türkçe geri geliyordu.
+
+Düzeltme: `set_language` taze yükü `sessionStorage`'a yazıp sonra reload ediyor;
+`boot_script` varsa `sessionStorage`'ı tercih ediyor.
+
+Ampirik doğrulama (`--set-lang=en`, üç pencere):
+
+```
+[DIL] lang=tr Kaydet=null      ×3     ← önce
+[DIL] lang=en Kaydet="Save"    ×3     ← sonra
+```
+
+### 🔴 BULGU R-2 — Monitör değişimi izlenmiyordu
+
+`widget::handle_display_change` YAZILMIŞ ama HİÇ ÇAĞRILMIYORDU. Electron
+`screen.on('display-added'|'display-removed'|'display-metrics-changed')` dinliyordu.
+Sonuç: harici ekran çıkarılınca widget artık var olmayan koordinatlarda kalıyor,
+görünmez ve tıklanamaz oluyordu — kurtuluşu yalnız yeniden başlatmaktı.
+
+Tauri'de olay karşılığı yok (macOS'ta `NSApplicationDidChangeScreenParameters` için
+Objective-C sınıfı tanımlamak gerekir). 3 sn'de bir monitör parmak izi karşılaştırması
+kuruldu; ayrıca 500/2000/5000 ms üçlü senkron artık **nesil sayacıyla iptal edilebilir**
+(Electron birikmiş timeout'ları iptal ediyordu, port etmiyordu).
+
+### 🟠 BULGU R-3 — Kaydetme paneli görünmüyordu
+
+`commands/capture.rs`'teki kaydetme paneli **parent'sız** açılıyor ve always-on-top
+yakalama overlay'i indirilmiyordu. Electron'da bu, ölçümle bulunmuş bir hatanın
+düzeltmesiydi: overlay uygulamayı ön plana almadığı için panel öndeki BAŞKA uygulamanın
+arkasında açılıyordu. `set_parent` + overlay'i indir/geri kaldır eklendi; eksik
+`title` de kondu.
+
+### 🟠 BULGU R-4 — Eşik UTF-8 baytı sayıyordu
+
+`MAX_ITEM_CHARS` Electron'da `content.length` yani **UTF-16 kod birimi**ydi.
+`str::len()` ise **bayt** sayıyor: Türkçe harf 2, CJK 3, emoji 4 bayt. Tam Türkçe bir
+metinde eşik fiilen YARIYA iniyor ve Electron'da rahatça geçen bir kayıt Tauri'de
+sessizce reddediliyordu. `utf16_len()` eklendi; regresyon testi kondu.
+
+### 🟠 BULGU R-5 — Oku-değiştir-yaz yarışı veri düşürüyordu
+
+`store.get()` ve `store.set()` kilidi AYRI alıyor. `get → değiştir → set` kalıbında
+araya giren bir yazma kayboluyordu — geçmiş, favoriler ve galeri, hepsi bu kalıptaydı.
+
+Atomik `Store::update()` eklendi. Testle ölçüldü (8 thread × 50 ekleme):
+
+| Kalıp | Hayatta kalan |
+|---|---|
+| `get` + `set` | **395 / 400** |
+| `update` | **400 / 400** |
+
+### 🟠 BULGU R-6 — OCR sonucu ana thread dışından panoya yazılıyordu
+
+BULGU S1-a'nın (NSPasteboard ana thread kuralı) ihlali: `spawn_blocking`den dönen
+async komut worker thread'de çalışıyordu. `run_on_main_thread`e alındı.
+
+### 🟠 BULGU R-7 — Uyku / ekran kilidi hiç ele alınmıyordu
+
+Electron `powerMonitor.on('suspend'|'lock-screen')` ile pano yoklamasını durduruyor ve
+**bekleyen yazmaları diske boşaltıyordu** ("sleep can outlive its 500ms window").
+Portta hiçbiri yoktu: uyanmadan kapanan bir makinede son kopyalanan içerik kayboluyordu.
+
+`platform/macos/power.rs` eklendi — uyku `NSWorkspace`in bildirim merkezinden, ekran
+kilidi `NSDistributedNotificationCenter`den (iki AYRI merkez).
+
+### 🟠 BULGU R-8 — Küçük resim yükseltmesi yazılmamıştı
+
+Electron açılışta `upgradeThumbnails()` çağırıyordu. Portta yoktu: v2'den göç eden
+HER kullanıcının galerisi bulanık kalıyordu. Ölçüt Electron'unkiyle aynı — bir girdi
+kendi boyutlarının hak ettiğinden küçük küçük resim taşıyorsa yenileniyor, yani
+orijinali zaten küçük olan girdi her açılışta boşuna işlenmiyor.
+
+### 🟡 BULGU R-9 — Yakalama overlay'inde yükleme yarışı
+
+Overlay'ler yakalamayla PARALEL açılıyor, yani `capture-screen` olayı pencere sayfası
+yüklenmeden yayınlanabiliyordu — o durumda olay sessizce düşer ve overlay donuk bir
+karartmadan ibaret kalır. Electron'da bu yarış YOKTU (`did-finish-load` bekleniyordu).
+Ölçülen marj ~100 ms; 3 denemede tekrarlanmadı ama makine yüklüyken ters dönecek kadar
+dar. Genel `window_ready` el sıkışmasına bağlandı (BULGU F1-c'nin aynı ailesi);
+`quickpaste-show` da aynı sebeple bağlandı.
+
+### 🟡 BULGU R-10 — Tepsi menüsü numpad tuş ipuçlarını kaybediyordu
+
+Tepsi accelerator'ları `muda` ile ayrıştırılıyor. muda `numadd`i tanıyor ama diğer dört
+numpad işlecinde Electron'dan AYRILIYOR — uzun ad istiyor:
+
+| Ayarlarda saklanan | muda'nın istediği |
+|---|---|
+| `numsub`  | `NumSubtract` |
+| `nummult` | `NumMultiply` |
+| `numdiv`  | `NumDivide`   |
+| `numdec`  | `NumDecimal`  |
+
+Çeviri eklendi. Test elle tutulan bir listeyle değil, **muda'nın kendi ayrıştırıcısıyla**
+doğruluyor (dev-dependency) — muda sürüm atlayınca test kırılır, üretimde menü sessizce
+accelerator'ını kaybetmez.
+
+### 🟡 BULGU R-11 — `theme: 'system'` OS'u izlemiyordu
+
+Electron'da `nativeTheme.on('updated')` vardı. Pencere başına `ThemeChanged` olayına
+bağlandı. (Tauri'de `on_window_event` dinleyicileri **birikiyor**, birbirini ezmiyor —
+`AddEventListener` benzersiz id ile kaydediyor; kontrol edildi.)
+
+### 🟡 BULGU R-12 — Widget yerleşim monitörü unutuluyordu
+
+Electron `widgetDockParams.displayId` ile widget'ın yerleştiği FİZİKSEL ekranı
+hatırlıyordu; portta bu alan göç sırasında düşürülüyor ve yerine konmuyordu. Tauri'de
+sayısal ekran kimliği yok, **ad** var (`Monitor::name()`); `displayName` olarak
+saklanıyor ve Electron'un seçim sırası birebir kuruldu: kayıtlı konumu İÇEREN monitör →
+kayıtlı ekran adı → en yakın → birincil.
+
+### 🟡 BULGU R-13 — İsabet testi boşta da yokluyordu
+
+Electron'da yoklama YOKTU (OS `mousemove` itiyordu). Port 30 ms'de bir sonsuza dek
+uyanıyordu. İki kademeli düzeltme: kayıt boşken thread **condvar'da uyuyor**; imleç
+kıpırdamadığında pencere sunucusu sorguları atlanıyor (en fazla 10 tur, sonra tam
+kontrol — imleç sabitken PENCERE hareket edebilir). Ölçüm: boşta **%0,0 CPU**.
+
+### 🟡 BULGU R-14 — Açılıştaki pano içeriği
+
+Electron her açılışta panodaki içeriği geçmişe ekliyordu; yan etkisi, bir saat önce
+kopyalanan şeyin her açılışta listenin başına atlamasıydı. Port bunu tamamen yok
+sayıyordu; yan etkisi, kullanıcı bir şey kopyalayıp SONRA CopyBoard'u açtıysa o içeriğin
+hiç yakalanmamasıydı. **İkisi de değil:** sayaç tohumlanıyor (tekrar tekrar başa
+taşınmıyor) ama içerik geçmişte hiç yoksa bir kez ekleniyor.
+
+### 🟡 BULGU R-15 — Ölü komutlar
+
+`toast_ready` ve `update_dialog_ready` komut olarak açıktı ama renderer'da **sıfır**
+çağrısı vardı (el sıkışma `window_ready` üzerinden yürüyor). IPC yüzeyinden kaldırıldı.
+
+---
+
+### Doğrulama
+
+| Kontrol | Sonuç |
+|---|---|
+| `cargo test --lib` | **72 geçti**, 0 başarısız |
+| `npm test` | **52 geçti**, 0 başarısız |
+| Hata ayıklama çalıştırması | ayakta, panik yok, boşta %0,0 CPU |
+| Sürüm çalıştırması | ayakta, 100 MB RSS, uyarı/hata yok |
+| Sürüm binary'sinde `--capture=`/`--viewer`/`--record-test`/`--set-lang=` | **yok** (hepsi `debug_assertions` arkasında) |

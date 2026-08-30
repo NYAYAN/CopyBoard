@@ -102,6 +102,19 @@ pub fn show(app: &tauri::AppHandle) {
         return;
     };
 
+    {
+        let state = app.state::<AppState>();
+        let mut rt = state.runtime.lock().unwrap();
+        rt.main_shown_at = Some(Instant::now());
+        rt.main_was_focused = false;
+    }
+
+    // SIRA: önce göster, SONRA konumlandır. Gizli bir pencereye `set_position`
+    // macOS'ta sessizce kayboluyor (bkz. geom::place doc'u) — bu kural burada
+    // ihlal ediliyordu ve pencere imleç monitöründe değil, macOS'un seçtiği yerde
+    // açılabiliyordu.
+    let _ = window.show();
+
     if let Some(m) = geom::monitor_at_cursor(app).or_else(|| geom::primary_monitor(app)) {
         let x = m.work_x + m.work_width - MARGIN_RIGHT;
         let y = m.work_y + m.work_height - MARGIN_BOTTOM;
@@ -111,15 +124,7 @@ pub fn show(app: &tauri::AppHandle) {
     }
 
     let _ = platform::set_window_level(&window, WindowLevel::ScreenSaver);
-
-    {
-        let state = app.state::<AppState>();
-        let mut rt = state.runtime.lock().unwrap();
-        rt.main_shown_at = Some(Instant::now());
-        rt.main_was_focused = false;
-    }
-
-    let _ = window.show();
+    let _ = platform::order_front(&window);
     // Dock gizli (accessory app) olduğu için show()+focus() tek başına CopyBoard'u
     // aktif uygulama yapmaya yetmiyor ve taze pencere odağı hemen kaybedebiliyor.
     platform::activate_app();

@@ -23,7 +23,16 @@ pub const SUBSCRIBERS: [&str; 3] = ["main", "widget", "quickpaste"];
 ///
 /// Bu eşik aynı zamanda config dosyasını sınırlı tutuyor: dosya her değişiklikte
 /// baştan yazılıyor ve açılışta okunuyor.
-const MAX_ITEM_CHARS: usize = 1_000_000; // diske ~1-3 MB, kodlamaya göre
+/// Electron `content.length`i sayıyordu — yani JS'in UTF-16 KOD BİRİMİ sayısını.
+/// `str::len()` ise UTF-8 BAYTI sayar: Türkçe harfler 2, CJK 3, emoji 4 bayt.
+/// Bayt saymak, Electron'da rahatça geçen bir metni Tauri'de sessizce reddeder —
+/// tam Türkçe bir metinde eşik fiilen yarıya iner.
+const MAX_ITEM_CHARS: usize = 1_000_000;
+
+/// JS `String.length` ile aynı: UTF-16 kod birimi sayısı.
+fn utf16_len(s: &str) -> usize {
+    s.chars().map(char::len_utf16).sum()
+}
 
 // ── Okuma ────────────────────────────────────────────────────────────────────
 
@@ -66,49 +75,51 @@ fn content_of(item: &Value) -> Option<&str> {
 /// tekilleştirme kaydı yeniden yarattığı için, not aktarılmazsa kullanıcının
 /// "Müşteri Mail Taslağı" notu bir kopyala hareketiyle sessizce silinirdi.
 pub fn add(app: &tauri::AppHandle, content: &str) {
-    if content.is_empty() || content.len() > MAX_ITEM_CHARS {
+    if content.is_empty() || utf16_len(content) > MAX_ITEM_CHARS {
         return;
     }
     let state = app.state::<AppState>();
-    let store = &state.store;
-
-    let mut items = history(store);
-    let previous_note = items
-        .iter()
-        .position(|i| content_of(i) == Some(content))
-        .map(|idx| {
-            let note = items[idx].get("note").cloned();
-            items.remove(idx);
-            note
-        })
-        .flatten();
-
-    let mut entry = json!({
-        "id": new_id(),
-        "content": content,
-        "timestamp": crate::migrate::now_iso(),
-    });
-    if let Some(note) = previous_note {
-        if !note.as_str().unwrap_or("").is_empty() {
-            entry["note"] = note;
-        }
-    }
-    items.insert(0, entry);
-
     let max = state.settings().max_items().max(1) as usize;
-    items.truncate(max);
 
-    store.set("history", &items);
+    // Oku-değiştir-yaz TEK kilit altında: `get` + `set` ayrı alınırsa, kullanıcı bu
+    // sırada arayüzden bir kayıt silerse silme sessizce geri alınır.
+    state.store.update("history", Vec::<Value>::new(), |items: &mut Vec<Value>| {
+        let previous_note = items
+            .iter()
+            .position(|i| content_of(i) == Some(content))
+            .and_then(|idx| {
+                let note = items[idx].get("note").cloned();
+                items.remove(idx);
+                note
+            });
+
+        let mut entry = json!({
+            "id": new_id(),
+            "content": content,
+            "timestamp": crate::migrate::now_iso(),
+        });
+        if let Some(note) = previous_note {
+            if !note.as_str().unwrap_or("").is_empty() {
+                entry["note"] = note;
+            }
+        }
+        items.insert(0, entry);
+        items.truncate(max);
+        true
+    });
     broadcast(app);
 }
 
 pub fn delete(app: &tauri::AppHandle, id: &str) {
     let state = app.state::<AppState>();
-    let mut items = history(&state.store);
-    let before = items.len();
-    items.retain(|i| i.get("id").and_then(|v| v.as_str()) != Some(id));
-    if items.len() != before {
-        state.store.set("history", &items);
+    let mut removed = false;
+    state.store.update("history", Vec::<Value>::new(), |items: &mut Vec<Value>| {
+        let before = items.len();
+        items.retain(|i| i.get("id").and_then(|v| v.as_str()) != Some(id));
+        removed = items.len() != before;
+        removed
+    });
+    if removed {
         broadcast(app);
     }
 }
@@ -125,10 +136,15 @@ pub fn clear(app: &tauri::AppHandle) {
 pub fn trim_to_max(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
     let max = state.settings().max_items().max(1) as usize;
-    let mut items = history(&state.store);
-    if items.len() > max {
-        items.truncate(max);
-        state.store.set("history", &items);
+    let mut trimmed = false;
+    state.store.update("history", Vec::<Value>::new(), |items: &mut Vec<Value>| {
+        trimmed = items.len() > max;
+        if trimmed {
+            items.truncate(max);
+        }
+        trimmed
+    });
+    if trimmed {
         broadcast(app);
     }
 }
@@ -146,30 +162,36 @@ pub fn add_favorite(app: &tauri::AppHandle, item: &Value) {
 /// Saf hâl — `AppHandle` olmadan test edilebilsin diye ayrı. Eklendiyse `true`.
 fn add_favorite_in_store(store: &Store, item: &Value) -> bool {
     let Some(content) = content_of(item) else { return false };
-    let mut favs = favorites(store);
-    if favs.iter().any(|f| content_of(f) == Some(content)) {
-        return false; // aynı içerik zaten favorilerde
-    }
-    favs.insert(
-        0,
-        json!({
-            "id": new_id(),
-            "content": content,
-            "timestamp": crate::migrate::now_iso(),
-            "note": item.get("note").and_then(|n| n.as_str()).unwrap_or(""),
-        }),
-    );
-    store.set("favorites", &favs);
-    true
+    let mut added = false;
+    store.update("favorites", Vec::<Value>::new(), |favs: &mut Vec<Value>| {
+        if favs.iter().any(|f| content_of(f) == Some(content)) {
+            return false; // aynı içerik zaten favorilerde
+        }
+        favs.insert(
+            0,
+            json!({
+                "id": new_id(),
+                "content": content,
+                "timestamp": crate::migrate::now_iso(),
+                "note": item.get("note").and_then(|n| n.as_str()).unwrap_or(""),
+            }),
+        );
+        added = true;
+        true
+    });
+    added
 }
 
 pub fn remove_favorite(app: &tauri::AppHandle, id: &str) {
     let state = app.state::<AppState>();
-    let mut favs = favorites(&state.store);
-    let before = favs.len();
-    favs.retain(|f| f.get("id").and_then(|v| v.as_str()) != Some(id));
-    if favs.len() != before {
-        state.store.set("favorites", &favs);
+    let mut removed = false;
+    state.store.update("favorites", Vec::<Value>::new(), |favs: &mut Vec<Value>| {
+        let before = favs.len();
+        favs.retain(|f| f.get("id").and_then(|v| v.as_str()) != Some(id));
+        removed = favs.len() != before;
+        removed
+    });
+    if removed {
         broadcast(app);
     }
 }
@@ -182,18 +204,17 @@ pub fn set_note(app: &tauri::AppHandle, id: &str, note: &str) {
     let mut touched = false;
 
     for key in ["favorites", "history"] {
-        let mut items: Vec<Value> = state.store.get(key, Vec::new());
-        let mut changed = false;
-        for item in items.iter_mut() {
-            if item.get("id").and_then(|v| v.as_str()) == Some(id) {
-                item["note"] = json!(note);
-                changed = true;
+        state.store.update(key, Vec::<Value>::new(), |items: &mut Vec<Value>| {
+            let mut changed = false;
+            for item in items.iter_mut() {
+                if item.get("id").and_then(|v| v.as_str()) == Some(id) {
+                    item["note"] = json!(note);
+                    changed = true;
+                }
             }
-        }
-        if changed {
-            state.store.set(key, &items);
-            touched = true;
-        }
+            touched |= changed;
+            changed
+        });
     }
     if touched {
         broadcast(app);
@@ -250,7 +271,7 @@ mod tests {
     /// `add()` bir AppHandle istiyor (yayın için); saf mantığı ayrı test etmek için
     /// aynı adımları store üzerinde yürüten bir yardımcı.
     fn add_pure(store: &Store, content: &str, max: usize) {
-        if content.is_empty() || content.len() > MAX_ITEM_CHARS {
+        if content.is_empty() || utf16_len(content) > MAX_ITEM_CHARS {
             return;
         }
         let mut items: Vec<Value> = store.get("history", Vec::new());
@@ -326,6 +347,20 @@ mod tests {
         let ok = "y".repeat(MAX_ITEM_CHARS);
         add_pure(&s, &ok, 50);
         assert_eq!(history(&s).len(), 1);
+    }
+
+    #[test]
+    fn esik_utf16_kod_birimi_sayiyor_bayt_degil() {
+        // Electron `content.length` (UTF-16) sayıyordu. Bayt saymak, tam Türkçe bir
+        // metinde eşiği fiilen yarıya indirir ve Electron'da geçen bir kayıt
+        // Tauri'de sessizce reddedilirdi.
+        let turkce = "ğ".repeat(MAX_ITEM_CHARS); // UTF-8'de 2 bayt, UTF-16'da 1 birim
+        assert!(turkce.len() > MAX_ITEM_CHARS, "test kurgusu: bayt sayısı eşiği aşmalı");
+        assert_eq!(utf16_len(&turkce), MAX_ITEM_CHARS);
+
+        let s = store();
+        add_pure(&s, &turkce, 50);
+        assert_eq!(history(&s).len(), 1, "Electron'da geçen Türkçe metin reddedildi");
     }
 
     #[test]

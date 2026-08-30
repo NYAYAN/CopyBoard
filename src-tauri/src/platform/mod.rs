@@ -61,6 +61,24 @@ pub fn join_all_spaces(window: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Pencereyi diğer (aynı seviyedeki) pencerelerin ÖNÜNE getirir.
+///
+/// Electron her `setAlwaysOnTop(…, 'screen-saver', 1)` çağrısının ardından `moveTop()`
+/// da çağırıyordu — seviyeyi ayarlamak pencereyi aynı seviyedeki diğer topmost
+/// pencerelerin önüne GETİRMİYOR. Bu olmadan widget, toast ve hızlı yapıştır başka bir
+/// topmost pencerenin altında kalabiliyor.
+pub fn order_front(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::order_front(window)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Windows'ta always_on_top'u yeniden dayatmak HWND_TOPMOST'a taşıyor.
+        window.set_always_on_top(true).map_err(|e| e.to_string())
+    }
+}
+
 /// macOS'ta Dock simgesini gizler (Electron `app.dock.hide()`).
 pub fn hide_dock(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
@@ -153,4 +171,13 @@ pub fn can_paste(prompt: bool) -> bool {
     { macos::permissions::is_trusted_accessibility(prompt) }
     #[cfg(not(target_os = "macos"))]
     { let _ = prompt; true }
+}
+
+/// Uyku/ekran-kilidi bildirimlerini bağlar (Electron `powerMonitor`).
+/// macOS dışında sessizce hiçbir şey yapmaz — orada karşılığı henüz yazılmadı.
+pub fn install_power_observers(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    macos::power::install(app);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
 }

@@ -22,7 +22,7 @@ pub mod screenshot;
 #[cfg(target_os = "macos")]
 pub mod scroll_stream;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -41,6 +41,11 @@ pub struct CaptureState {
     frames: Mutex<HashMap<String, screenshot::Frame>>,
     /// Pencere etiketi → kaç kez yeniden yakalama istendi.
     retries: Mutex<HashMap<String, u32>>,
+    /// Renderer'ı dinleyicisini kurmadan ÖNCE hazırlanan kareler için bekleme odası.
+    /// Bkz. [`deliver`].
+    pending: Mutex<HashMap<String, CaptureMeta>>,
+    /// `window_ready` göndermiş overlay etiketleri.
+    ready: Mutex<HashSet<String>>,
 }
 
 /// Renderer'a itilen metadata. Kare AYRI çekiliyor.
@@ -96,7 +101,33 @@ pub fn start(app: &tauri::AppHandle, mode: &str) {
     let mut labels = Vec::new();
     for (i, m) in monitors.iter().enumerate() {
         match crate::windows::capture::create(app, mode, i, m) {
-            Ok(w) => labels.push(w.label().to_string()),
+            Ok(w) => {
+                // Electron oturumu pencerenin `closed` olayından bitiriyordu — yani
+                // pencere NASIL kapanırsa kapansın. Portta yalnız `close_all` bitiriyordu;
+                // webview çökerse ya da pencere başka yoldan yok olursa `is_capturing`
+                // takılı kalıp yakalamayı KALICI olarak engelliyordu ("İşlem devam
+                // ediyor...") ve widget geri gelmiyordu.
+                let h = app.clone();
+                let closing_label = w.label().to_string();
+                w.on_window_event(move |ev| {
+                    if matches!(ev, tauri::WindowEvent::Destroyed) {
+                        // El sıkışma durumunu bırak — bir sonraki yakalama aynı
+                        // etiketle taze bir pencere açıyor.
+                        forget_window(&h, &closing_label);
+                        // Son overlay gidince oturumu bitir; diğerleri hâlâ açıksa
+                        // bekle (Electron da her monitörün overlay'i gidene dek bekliyordu).
+                        let remaining = h
+                            .webview_windows()
+                            .keys()
+                            .filter(|l| l.starts_with(crate::windows::capture::PREFIX))
+                            .count();
+                        if remaining == 0 {
+                            finish(&h);
+                        }
+                    }
+                });
+                labels.push(w.label().to_string())
+            }
             Err(e) => {
                 log::error!("yakalama overlay'i kurulamadı ({i}): {e}");
                 labels.push(String::new());
@@ -120,8 +151,8 @@ pub fn start(app: &tauri::AppHandle, mode: &str) {
                 let handles: Vec<_> = batch
                     .iter()
                     .map(|&i| {
-                        let m = monitors_owned[i];
-                        s.spawn(move || (i, screenshot::capture_monitor(&m)))
+                        let m = monitors_owned[i].clone();
+                        s.spawn(move || (i, screenshot::capture_monitor(&m, i)))
                     })
                     .collect();
                 handles.into_iter().filter_map(|h| h.join().ok()).collect()
@@ -149,8 +180,24 @@ pub fn start(app: &tauri::AppHandle, mode: &str) {
     });
 }
 
-/// Kareyi sakla ve pencereye "hazır" de. Pencere henüz yüklenmemiş olabilir —
-/// `api-tauri.js` olayı aldığında kareyi çekiyor, o yüzden sıralama güvenli.
+/// Kareyi sakla ve pencereye "hazır" de.
+///
+/// ## Yükleme yarışı
+///
+/// Overlay pencereleri yakalamayla PARALEL açılıyor (yukarıdaki "overlay'ler ÖNCE"
+/// notu) — yani bu fonksiyon çağrıldığında pencerenin sayfası henüz yüklenmemiş,
+/// `listen('capture-screen')` promise'i çözülmemiş olabilir. O durumda olay hiçbir
+/// yere gitmez ve overlay donuk bir karartmadan ibaret kalır: kullanıcı seçim yapar,
+/// hiçbir şey olmaz.
+///
+/// Electron'da bu yarış YOKTU: `webContents.send` ancak `did-finish-load`dan sonra
+/// çağrılıyordu. Buradaki karşılığı genel `window_ready` el sıkışması — hazır
+/// olmayan overlay'in metadatası bekletilip [`window_ready`] geldiğinde teslim
+/// ediliyor. Kare zaten saklandığı için gecikmenin bir bedeli yok.
+///
+/// Pratikte yakalama (~30 ms) sayfa yüklemesinden (~100 ms) hızlı bitiyor, yani bu
+/// yol NORMALDE devreye giriyor — ölçüldüğünde marj ~100 ms'ydi, yani makine
+/// yüklüyken ters dönebilecek kadar dar.
 fn deliver(
     app: &tauri::AppHandle,
     label: &str,
@@ -168,12 +215,35 @@ fn deliver(
         multi_monitor: multi,
     };
     log::debug!("kare teslim: {label} {}x{} ({} bayt PNG)", frame.width, frame.height, frame.png.len());
-    app.state::<CaptureState>()
-        .frames
-        .lock()
-        .unwrap()
-        .insert(label.to_string(), frame);
-    crate::windows::emit_to(app, label, "capture-screen", meta);
+    let state = app.state::<CaptureState>();
+    state.frames.lock().unwrap().insert(label.to_string(), frame);
+
+    if state.ready.lock().unwrap().contains(label) {
+        crate::windows::emit_to(app, label, "capture-screen", meta);
+    } else {
+        state.pending.lock().unwrap().insert(label.to_string(), meta);
+    }
+}
+
+/// Bir overlay renderer'ı dinleyicilerini kurdu. Kare hazırsa şimdi teslim edilir.
+pub fn window_ready(app: &tauri::AppHandle, label: &str) {
+    let pending = {
+        let state = app.state::<CaptureState>();
+        state.ready.lock().unwrap().insert(label.to_string());
+        let taken = state.pending.lock().unwrap().remove(label);
+        taken
+    };
+    if let Some(meta) = pending {
+        log::debug!("{label}: kare bekliyordu, dinleyici kuruldu — şimdi teslim ediliyor");
+        crate::windows::emit_to(app, label, "capture-screen", meta);
+    }
+}
+
+/// Overlay kapandı — el sıkışma durumunu temizle ki sonraki yakalama taze başlasın.
+pub fn forget_window(app: &tauri::AppHandle, label: &str) {
+    let state = app.state::<CaptureState>();
+    state.ready.lock().unwrap().remove(label);
+    state.pending.lock().unwrap().remove(label);
 }
 
 #[cfg(target_os = "macos")]
@@ -242,7 +312,7 @@ pub fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) {
 
     let Some(index) = label.rsplit('-').next().and_then(|s| s.parse::<usize>().ok()) else { return };
     let monitors = geom::all_monitors(&app);
-    let Some(m) = monitors.get(index).copied() else { return };
+    let Some(m) = monitors.get(index).cloned() else { return };
     let multi = monitors.len() > 1;
     let state = app.state::<AppState>();
     let mode = state.runtime.lock().unwrap().last_mode.clone();
@@ -252,7 +322,7 @@ pub fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     let _ = window.hide();
 
     let handle = app.clone();
-    std::thread::spawn(move || match screenshot::capture_monitor(&m) {
+    std::thread::spawn(move || match screenshot::capture_monitor(&m, index) {
         Some(frame) => deliver(&handle, &label, frame, &mode, &quality, multi),
         None => {
             let h = handle.clone();
@@ -320,8 +390,16 @@ pub fn close_all_except(app: &tauri::AppHandle, keep: &str) {
     }
 }
 
-/// Yakalama oturumu bitti: bayrağı düşür, widget'ı geri getir, kare önbelleğini boşalt.
+/// Yakalama oturumu bitti: bayrağı düşür, widget'ı geri getir, kare önbelleğini boşalt,
+/// ve canlı kalmış her akışı/kısayolu bırak.
+///
+/// Electron'da kaydırma evresinin global Escape'i pencerenin `closed` olayına da
+/// bağlıydı — dosyanın kendi yorumu şart koşuyordu: "evreden çıkan HER yol — bitiş,
+/// iptal, pencere kapandı, çıkış — onu bırakır". Akış artık Rust tarafında yaşadığı
+/// için pencerenin kapanması onu KENDİLİĞİNDEN durdurmuyor; teardown buraya taşındı.
 pub fn finish(app: &tauri::AppHandle) {
+    // Kaydırma akışı + onun global Escape'i
+    crate::commands::record::teardown_streams(app);
     {
         let state = app.state::<AppState>();
         state.runtime.lock().unwrap().is_capturing = false;

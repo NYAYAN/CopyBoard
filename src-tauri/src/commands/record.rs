@@ -71,7 +71,7 @@ pub fn record_start(
         let label = window.label().to_string();
         let index = label.rsplit('-').next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
         let monitors = crate::geom::all_monitors(&app);
-        let monitor = *monitors.get(index).ok_or("monitör bulunamadı")?;
+        let monitor = monitors.get(index).ok_or("monitör bulunamadı")?.clone();
 
         // Ayarlar okunup KOPYALANIYOR: `settings()` geçici bir `State` guard'ına
         // bağlı ve borç, kayıt başlatma çağrısı boyunca yaşayamaz.
@@ -177,6 +177,12 @@ pub fn record_stop(app: tauri::AppHandle) {
 
 // ── Kaydırmalı yakalama ──────────────────────────────────────────────────────
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Escape'i şu an kaydırma evresi mi tutuyor? Hızlı Yapıştır seçicisi de aynı tuşu
+/// kaydettiği için sahiplik izleniyor.
+static SCROLL_OWNS_ESCAPE: AtomicBool = AtomicBool::new(false);
+
 fn escape_shortcut() -> Shortcut {
     Shortcut::new(None, Code::Escape)
 }
@@ -210,7 +216,7 @@ pub fn scroll_begin(
         let label = window.label().to_string();
         let index = label.rsplit('-').next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
         let monitors = crate::geom::all_monitors(&app);
-        let monitor = *monitors.get(index).ok_or("monitör bulunamadı")?;
+        let monitor = monitors.get(index).ok_or("monitör bulunamadı")?.clone();
 
         // Kaydırmalı yakalama tek monitörde tek pencereyi izliyor; diğer monitörlerin
         // overlay'leri yalnızca yolda duran karartılmış camlar olurdu.
@@ -229,6 +235,9 @@ pub fn scroll_begin(
         let handle = app.clone();
         // Kaydolamazsa ölümcül değil: overlay'in kendi Escape'i odağı varken hâlâ
         // çalışıyor, araç çubuğundaki iptal düğmesi de her zaman.
+        // Seçici de Escape'i tutuyor olabilir; kaydırma evresi boyunca sahiplik bizde.
+        let _ = app.global_shortcut().unregister(escape_shortcut());
+        SCROLL_OWNS_ESCAPE.store(true, Ordering::Release);
         let _ = app.global_shortcut().on_shortcut(escape_shortcut(), move |_a, _s, e| {
             if e.state == ShortcutState::Pressed {
                 crate::capture::close_all(&handle, None);
@@ -240,9 +249,46 @@ pub fn scroll_begin(
 
 #[tauri::command]
 pub fn scroll_end(app: tauri::AppHandle) {
-    let _ = app.global_shortcut().unregister(escape_shortcut());
+    teardown_streams(&app);
+}
+
+/// Kaydırma/kayıt akışlarını ve kaydırma evresinin global Escape'ini bırakır.
+///
+/// `capture::finish()` de bunu çağırıyor, böylece evreden çıkan HER yol (bitiş, iptal,
+/// ESC, pencere yok oldu, hata) aynı temizliği yapıyor — Electron'un `win.once('closed',
+/// releaseScrollEscape)` garantisinin karşılığı.
+///
+/// Escape SAHİPLİK kontrolüyle bırakılıyor: Hızlı Yapıştır seçicisi de Escape'i
+/// kaydediyor ve koşulsuz `unregister` onun kaydını çalıyordu — seçici açıkken bir
+/// kaydırma yakalaması bitince Esc ile kapanma sessizce ölüyordu.
+pub fn teardown_streams(app: &tauri::AppHandle) {
+    let owned = SCROLL_OWNS_ESCAPE.swap(false, Ordering::AcqRel);
+    if owned {
+        let _ = app.global_shortcut().unregister(escape_shortcut());
+        // Seçici hâlâ açıksa Escape'i ona geri ver.
+        crate::windows::quickpaste::rearm_escape_if_visible(app);
+    }
     #[cfg(target_os = "macos")]
-    if let Some(mut s) = app.state::<crate::capture::scroll_stream::ScrollState>().0.lock().unwrap().take() {
-        s.stop();
+    {
+        if let Some(mut s) = app
+            .state::<crate::capture::scroll_stream::ScrollState>()
+            .0
+            .lock()
+            .unwrap()
+            .take()
+        {
+            s.stop();
+        }
+        if let Some(mut r) = app
+            .state::<crate::capture::recorder::RecorderState>()
+            .0
+            .lock()
+            .unwrap()
+            .take()
+        {
+            // Kayıt yarıda kaldı: dosyayı kapatıp bırak. Kullanıcı kaydetme panelini
+            // görmediği için yolu da söylemiyoruz; geçici dosya sistemin temizliğine kalır.
+            let _ = r.stop();
+        }
     }
 }

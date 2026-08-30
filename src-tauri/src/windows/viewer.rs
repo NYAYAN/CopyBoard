@@ -125,6 +125,7 @@ mod tests {
             x: 0.0, y: 0.0, width: 1800.0, height: 1169.0,
             work_x: 0.0, work_y: 39.0, work_width: 1800.0, work_height: 1074.0,
             scale: 2.0,
+            name: None,
         }
     }
 

@@ -126,10 +126,29 @@ pub fn init(app: &tauri::AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| handle_menu(app, event.id().as_ref()))
         .on_tray_icon_event(move |_tray, event| {
-            if let TrayIconEvent::Click { button, button_state, .. } = event {
-                if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                    crate::windows::main_window::toggle(&handle);
+            let TrayIconEvent::Click { button, button_state, .. } = event else { return };
+            match (button, button_state) {
+                (MouseButton::Left, MouseButtonState::Up) => {
+                    crate::windows::main_window::toggle(&handle)
                 }
+                // ── Menü açıkken global kısayolları askıya al ──────────────────
+                // macOS'ta NSMenu MODAL bir olay izleme döngüsü çalıştırır: menü
+                // açıkken ana süreç kısayol geri çağrılarını servis etmez, bu sırada
+                // basılan her tuş KUYRUĞA girer ve menü kapanınca hepsi birden
+                // ateşlenir — kullanıcı hiçbir şey olmadığını görür, sonra bir seri
+                // ekran görüntüsü/OCR/kayıt patlaması.
+                //
+                // Kapanma anını yakalamanın yolu, sorunun kendisini detektör olarak
+                // kullanmak: menü açılır açılmaz ana thread'e bir iş bırakıyoruz.
+                // O iş, modal döngü bitene kadar ÇALIŞMAZ — yani çalıştığı an menü
+                // kapanmış demektir.
+                (MouseButton::Right, MouseButtonState::Down) => {
+                    crate::shortcuts::suspend(&handle);
+                    let h = handle.clone();
+                    let inner = handle.clone();
+                    let _ = h.run_on_main_thread(move || crate::shortcuts::resume(&inner));
+                }
+                _ => {}
             }
         });
 

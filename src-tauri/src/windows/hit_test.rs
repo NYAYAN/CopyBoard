@@ -56,7 +56,7 @@ struct Entry {
 }
 
 #[derive(Default)]
-pub struct Registry(Mutex<HashMap<String, Entry>>);
+pub struct Registry(Mutex<HashMap<String, Entry>>, std::sync::Condvar);
 
 /// Renderer geometrisini bildirdi.
 pub fn set_areas(
@@ -66,10 +66,13 @@ pub fn set_areas(
     zoom: f64,
     note_front_app: bool,
 ) {
-    app.state::<Registry>().0.lock().unwrap().insert(
+    let reg = app.state::<Registry>();
+    reg.0.lock().unwrap().insert(
         label.to_string(),
         Entry { areas, zoom: if zoom > 0.0 { zoom } else { 1.0 }, note_front_app },
     );
+    // İzleyici kayıt boşken condvar'da uyuyor — uyandır.
+    reg.1.notify_all();
     start_tracker(app);
 }
 
@@ -79,7 +82,20 @@ pub fn clear(app: &tauri::AppHandle, label: &str) {
 
 /// Kayıtlı tüm pencereler için imleci yoklayan TEK thread.
 ///
-/// 30 ms: fare hareketini takip edecek kadar sık, boşta ihmal edilebilir kadar seyrek.
+/// ## Boşta maliyet
+///
+/// 30 ms fare hareketini takip edecek kadar sık — ama Electron'da hiç yoklama YOKTU:
+/// OS `mousemove`u itiyordu ve fare durunca hiçbir şey olmuyordu. Yoklama modelinde
+/// bunun karşılığı iki kademeli:
+///
+/// * **Kayıt boşken** (widget kapalı, kaydedici yok) thread bir condvar'da UYUYOR —
+///   sıfır uyanma. Boşuna dönen bir `sleep(30ms)` döngüsü değil.
+/// * **İmleç kıpırdamadığında** pencere başına konum/ölçek sorguları atlanıyor;
+///   bunlar pencere sunucusuna gidiyor ve turun pahalı kısmı onlar.
+///
+/// Kısa devre SÜRESİZ değil: imleç sabitken PENCERE hareket edebilir (widget sürüklemesi,
+/// kaydedici araç çubuğu) ve o durumda geçirgenlik bayatlar. Bu yüzden en fazla
+/// `FULL_CHECK_EVERY` tur atlanıyor, sonra tam kontrol zorlanıyor.
 fn start_tracker(app: &tauri::AppHandle) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -90,22 +106,36 @@ fn start_tracker(app: &tauri::AppHandle) {
     std::thread::Builder::new()
         .name("copyboard-hit-test".into())
         .spawn(move || {
-            let mut last: HashMap<String, bool> = HashMap::new();
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(30));
+            /// İmleç sabitken en fazla bu kadar tur atlanır (~300 ms).
+            const FULL_CHECK_EVERY: u32 = 10;
 
+            let mut last: HashMap<String, bool> = HashMap::new();
+            let mut last_cursor: Option<(f64, f64)> = None;
+            let mut skipped: u32 = 0;
+            loop {
                 let entries: Vec<(String, Vec<HitArea>, f64, bool)> = {
                     let reg = handle.state::<Registry>();
-                    let map = reg.0.lock().unwrap();
-                    if map.is_empty() {
-                        continue;
+                    let mut map = reg.0.lock().unwrap();
+                    // Kayıt boşsa bir sonraki `register()`e kadar uyu.
+                    while map.is_empty() {
+                        last.clear();
+                        last_cursor = None;
+                        map = reg.1.wait(map).unwrap();
                     }
                     map.iter()
                         .map(|(l, e)| (l.clone(), e.areas.clone(), e.zoom, e.note_front_app))
                         .collect()
                 };
 
+                std::thread::sleep(std::time::Duration::from_millis(30));
+
                 let cursor = crate::geom::cursor_position(&handle);
+                if cursor == last_cursor && skipped < FULL_CHECK_EVERY {
+                    skipped += 1;
+                    continue;
+                }
+                last_cursor = cursor;
+                skipped = 0;
                 for (label, areas, zoom, note) in entries {
                     let Some(window) = handle.get_webview_window(&label) else {
                         last.remove(&label);

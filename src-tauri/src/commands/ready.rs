@@ -26,7 +26,8 @@ pub fn window_ready(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     match window.label() {
         crate::windows::toast::LABEL => crate::windows::toast::ready(&app),
         crate::windows::viewer::LABEL => super::viewer::send_initial_state(&app),
-        crate::windows::update::LABEL => crate::updater::update_dialog_ready(app.clone()),
+        crate::windows::update::LABEL => crate::updater::update_dialog_ready(&app),
+        crate::windows::quickpaste::LABEL => crate::windows::quickpaste::ready(&app),
         crate::windows::widget::LABEL => {
             crate::windows::widget::notify_side(&app);
             crate::windows::widget::push_config(&app);
@@ -35,6 +36,9 @@ pub fn window_ready(app: tauri::AppHandle, window: tauri::WebviewWindow) {
         crate::windows::main_window::LABEL => {
             crate::clipboard::history::push_snapshot(&app, crate::windows::main_window::LABEL);
             crate::gallery::broadcast(&app);
+        }
+        other if other.starts_with(crate::windows::capture::PREFIX) => {
+            crate::capture::window_ready(&app, other)
         }
         other => log::debug!("'{other}' penceresi hazır (ilk durum gerektirmiyor)"),
     }

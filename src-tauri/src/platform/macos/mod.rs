@@ -20,6 +20,7 @@ pub mod hotkey_carbon;
 pub mod paste;
 pub mod permissions;
 pub mod pasteboard;
+pub mod power;
 
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplication, NSWindow, NSWindowCollectionBehavior};

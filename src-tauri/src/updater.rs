@@ -93,8 +93,10 @@ static PENDING: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static INFO: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 
 /// Güncelleme penceresi hazır — bekleyen bilgiyi teslim et.
-#[tauri::command]
-pub fn update_dialog_ready(app: tauri::AppHandle) {
+/// Güncelleme diyaloğu dinleyicilerini kurdu — `window_ready` üzerinden çağrılıyor.
+/// Ayrı bir komut olarak AÇILMIYOR: renderer genel el sıkışmasını kullanıyor,
+/// ikinci bir giriş noktası yalnızca ıraksama riski olurdu.
+pub fn update_dialog_ready(app: &tauri::AppHandle) {
     if let Some(info) = INFO.lock().unwrap().clone() {
         crate::windows::emit_to(&app, crate::windows::update::LABEL, "update-info", info);
     }

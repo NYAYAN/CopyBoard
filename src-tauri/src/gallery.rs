@@ -119,11 +119,126 @@ fn make_thumb(png: &[u8]) -> Option<String> {
     Some(format!("data:image/jpeg;base64,{}", base64(&jpeg)))
 }
 
+/// Eski/bozuk küçük resimleri arka planda yeniden üretir.
+///
+/// ## Neden gerekli
+///
+/// Küçük resim boyutu uygulamanın ömrü boyunca büyüdü. Eski sürümlerle kaydedilmiş
+/// girdiler düşük çözünürlüklü küçük resim taşıyor ve galeride bulanık görünüyor;
+/// bazılarının küçük resmi hiç yok (kaydetme sırasında kodlama başarısız olmuş).
+/// Electron açılışta `upgradeThumbnails()` çağırıyordu, Tauri'de karşılığı yazılmamıştı —
+/// yani v2'den göç eden HER kullanıcının galerisi bulanık kalıyordu.
+///
+/// Ölçüt Electron'unkiyle aynı: bir girdi, `thumb_size_for` KENDİ boyutları için ne
+/// istiyorsa ondan küçük bir küçük resim taşıyorsa yenilenir. Orijinali zaten küçük
+/// olan bir girdi böylece her açılışta boşuna yeniden işlenmiyor.
+pub fn upgrade_thumbnails(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        // Açılış telaşı geçsin: yakalama, OCR ve ilk çizim öncelikli.
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+
+        let pending: Vec<String> = {
+            let state = handle.state::<AppState>();
+            items(&state.store)
+                .iter()
+                .filter(|s| needs_upgrade(s))
+                .filter_map(|s| s.get("id")?.as_str().map(str::to_string))
+                .collect()
+        };
+        if pending.is_empty() {
+            return;
+        }
+        log::info!("{} küçük resim yenileniyor", pending.len());
+
+        let mut repaired = 0usize;
+        for id in pending {
+            // Liste her adımda YENİDEN okunuyor: bu döngü saniyelerce sürebilir ve bu
+            // sırada kullanıcı yakalama yapıp silebilir. Tek bir anlık görüntüyü
+            // baştan sona tutmak o değişiklikleri geri alırdı.
+            let state = handle.state::<AppState>();
+            // Dosya okuma ve yeniden ölçekleme KİLİT DIŞINDA: bunlar yüz milisaniye
+            // sürebilir ve o süre boyunca mağazayı kilitlemek arayüzü dondururdu.
+            let Some(file) = items(&state.store)
+                .iter()
+                .find(|s| s.get("id").and_then(Value::as_str) == Some(id.as_str()))
+                .and_then(|s| s.get("file").and_then(Value::as_str).map(str::to_string))
+            else {
+                continue;
+            };
+            // Okunamayan dosya yenilenmeye değmez: eski küçük resmini korur,
+            // `prune_missing()` sonunda ilgilenir.
+            let Ok(bytes) = std::fs::read(&file) else {
+                continue;
+            };
+            let Some(thumb) = make_thumb(&bytes) else {
+                continue;
+            };
+            // Yazma anında listeyi kilit altında yeniden bul: kayıt bu arada
+            // silinmiş olabilir, silinmişse geri getirmiyoruz.
+            let mut written = false;
+            state.store.update("screenshots", Vec::<Value>::new(), |list: &mut Vec<Value>| {
+                let Some(item) = list
+                    .iter_mut()
+                    .find(|s| s.get("id").and_then(Value::as_str) == Some(id.as_str()))
+                else {
+                    return false;
+                };
+                item["thumb"] = Value::String(thumb);
+                written = true;
+                true
+            });
+            if written {
+                repaired += 1;
+            }
+
+            // Nefes payı — galeri büyükse arayüzü aç kalmasın.
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+
+        if repaired > 0 {
+            log::info!("{repaired} küçük resim yenilendi");
+            broadcast(&handle);
+        }
+    });
+}
+
+/// Bir girdinin küçük resmi, kendi boyutlarının hak ettiğinden küçük mü?
+fn needs_upgrade(item: &Value) -> bool {
+    let Some(thumb) = item.get("thumb").and_then(Value::as_str) else {
+        return true; // küçük resim hiç yok
+    };
+    if thumb.is_empty() {
+        return true;
+    }
+    let (Some(w), Some(h)) = (
+        item.get("w").and_then(Value::as_u64),
+        item.get("h").and_then(Value::as_u64),
+    ) else {
+        return false; // boyut bilinmiyor — ölçüt uygulanamaz, dokunma
+    };
+    let want = thumb_size_for(w as u32, h as u32);
+    match decode_thumb_size(thumb) {
+        Some((have_w, have_h)) => have_w < want.w || have_h < want.h,
+        None => true, // çözülemeyen küçük resim bozuktur
+    }
+}
+
+/// Bir data URL küçük resminin piksel boyutlarını, tamamını çözmeden okur.
+fn decode_thumb_size(data_url: &str) -> Option<(u32, u32)> {
+    let b64 = data_url.split(",").nth(1)?;
+    let bytes = base64_decode(b64)?;
+    let reader = image::ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
+        .ok()?;
+    reader.into_dimensions().ok()
+}
+
 /// Görüntüyü galeriye ekler ve girdiğinin id'sini döner.
 pub fn add(app: &tauri::AppHandle, png: &[u8]) -> Option<String> {
     let state = app.state::<AppState>();
     let store = &state.store;
-    let mut list = items(store);
+    let list = items(store);
 
     // Aynı görüntünün kopyala-sonra-kaydet'i art arda iki ekleme tetikliyor — bir kez indeksle.
     let hash = sha1_hex(png);
@@ -155,22 +270,27 @@ pub fn add(app: &tauri::AppHandle, png: &[u8]) -> Option<String> {
         .unwrap_or((0, 0));
     let thumb = make_thumb(png).unwrap_or_default();
 
-    list.insert(
-        0,
-        json!({
-            "id": id, "file": file.to_string_lossy(), "hash": hash,
-            "timestamp": crate::migrate::now_iso(), "w": w, "h": h, "thumb": thumb,
-        }),
-    );
-    while list.len() > MAX_SCREENSHOTS {
-        if let Some(dropped) = list.pop() {
-            if let Some(p) = dropped.get("file").and_then(|f| f.as_str()) {
-                // Zaten yoksa sorun değil — indeks tek doğru kaynak.
-                let _ = std::fs::remove_file(p);
+    // Kilit ancak BURADA alınıyor: dosya yazma ve küçük resim üretimi yukarıda,
+    // kilidin dışında bitti. `list` yalnızca tekilleştirme kontrolü içindi;
+    // gerçek ekleme, araya giren bir silmeyi ezmemek için taze liste üzerinde.
+    store.update("screenshots", Vec::<Value>::new(), |list: &mut Vec<Value>| {
+        list.insert(
+            0,
+            json!({
+                "id": id, "file": file.to_string_lossy(), "hash": hash,
+                "timestamp": crate::migrate::now_iso(), "w": w, "h": h, "thumb": thumb,
+            }),
+        );
+        while list.len() > MAX_SCREENSHOTS {
+            if let Some(dropped) = list.pop() {
+                if let Some(p) = dropped.get("file").and_then(|f| f.as_str()) {
+                    // Zaten yoksa sorun değil — indeks tek doğru kaynak.
+                    let _ = std::fs::remove_file(p);
+                }
             }
         }
-    }
-    store.set("screenshots", &list);
+        true
+    });
     broadcast(app);
     Some(id)
 }
@@ -183,19 +303,24 @@ pub fn by_id(store: &Store, id: &str) -> Option<Value> {
 
 pub fn delete(app: &tauri::AppHandle, id: &str) {
     let state = app.state::<AppState>();
-    let mut list = items(&state.store);
-    let Some(pos) = list
-        .iter()
-        .position(|s| s.get("id").and_then(|i| i.as_str()) == Some(id))
-    else {
-        return;
-    };
-    if let Some(p) = list[pos].get("file").and_then(|f| f.as_str()) {
-        let _ = std::fs::remove_file(p);
+    let mut removed = false;
+    state.store.update("screenshots", Vec::<Value>::new(), |list: &mut Vec<Value>| {
+        let Some(pos) = list
+            .iter()
+            .position(|s| s.get("id").and_then(|i| i.as_str()) == Some(id))
+        else {
+            return false;
+        };
+        if let Some(p) = list[pos].get("file").and_then(|f| f.as_str()) {
+            let _ = std::fs::remove_file(p);
+        }
+        list.remove(pos);
+        removed = true;
+        true
+    });
+    if removed {
+        broadcast(app);
     }
-    list.remove(pos);
-    state.store.set("screenshots", &list);
-    broadcast(app);
 }
 
 /// PNG'si uygulama dışından silinmiş/taşınmış indeks kayıtlarını düşürür ki ölü
@@ -226,6 +351,31 @@ fn sha1_hex(bytes: &[u8]) -> String {
     let mut h = Sha1::new();
     h.update(bytes);
     hex::encode(h.finalize())
+}
+
+/// base64 çözer. Geçersiz karakterde `None`.
+pub fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let mut acc: u32 = 0;
+    let mut bits = 0u32;
+    for c in s.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' | b'\n' | b'\r' => continue,
+            _ => return None,
+        } as u32;
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
 }
 
 pub fn base64(bytes: &[u8]) -> String {

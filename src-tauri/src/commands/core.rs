@@ -77,11 +77,6 @@ pub fn minimize_window(window: tauri::WebviewWindow) {
 }
 
 #[tauri::command]
-pub fn toast_ready(app: tauri::AppHandle) {
-    toast::ready(&app);
-}
-
-#[tauri::command]
 pub fn toast_finished(app: tauri::AppHandle) {
     toast::finished(&app);
 }
@@ -100,23 +95,38 @@ pub fn debug_log(message: String) {
 /// Dil değişimi. Her pencere kendi metinlerini yüklenirken boyadığı için
 /// yeniden yükleme TÜM güncellemedir — senkronda tutulacak per-surface
 /// yeniden çizim kodu yok. Pencere durumu Rust tarafında yaşıyor, hiçbir şey kaybolmaz.
+/// Dil değişimi.
+///
+/// Her pencere kendi metinlerini yüklenirken boyadığı için yeniden yükleme TÜM
+/// güncellemedir — senkronda tutulacak per-surface yeniden çizim kodu yok.
+///
+/// ## ⚠ Neden `sessionStorage`
+///
+/// İlk hâli sözlüğü `eval` ile yamalayıp `location.reload()` çağırıyordu. Bu
+/// ÇALIŞMIYORDU: `initialization_script` her sayfa yüklemesinde yeniden enjekte
+/// ediliyor ve pencere kurulurken sabitlenen ESKİ sözlükle `__COPYBOARD_BOOT__`ı
+/// yeniden yazıp yamayı eziyordu. Ölçüldü: ayar diske yazılıyor, arayüz Türkçe
+/// kalıyor, yalnız uygulamayı yeniden başlatınca değişiyordu.
+///
+/// Çözüm: açılış verisi artık `sessionStorage`'dan okunuyor (bkz.
+/// `windows::boot_script`). Reload öncesi oraya TAZE yük yazılıyor ve init script
+/// onu tercih ediyor. `sessionStorage` webview oturumuna bağlı, yani pencere
+/// kapanınca temizleniyor ve bayat veri bırakmıyor.
 #[tauri::command]
 pub fn set_language(app: tauri::AppHandle, state: tauri::State<'_, AppState>, lang: String) {
     if !crate::i18n::set_language(&state.store, &lang) {
         return;
     }
-    let dict = crate::i18n::dict_for(&lang);
+    let os_dark = os_prefers_dark(&app);
+    let boot = crate::windows::boot_payload(&app, os_dark);
+    let script = format!(
+        "try {{ sessionStorage.setItem('__COPYBOARD_BOOT__', JSON.stringify({boot})); }} catch (e) {{}} location.reload();"
+    );
     for (_, window) in app.webview_windows() {
-        // Sözlüğü reload ÖNCESİ tazele: `initialization_script` pencere kurulurken
-        // sabitleniyor ve reload'da AYNI (eski) sözlükle yeniden çalışır.
-        let patch = format!(
-            "if (window.__COPYBOARD_BOOT__) {{ window.__COPYBOARD_BOOT__.i18n = {{ lang: {}, dict: {} }}; }}",
-            json!(lang),
-            dict
-        );
-        let _ = window.eval(&patch);
-        let _ = window.eval("location.reload()");
+        let _ = window.eval(&script);
     }
+    // Menü etiketleri de t() ile üretiliyor; yeniden inşa edilmezse eski dilde kalır.
+    crate::tray::rebuild(&app);
 }
 
 /// Tema değişimi. Dilin aksine hiçbir şey yeniden YÜKLENMEZ: her pencere olayı alıp

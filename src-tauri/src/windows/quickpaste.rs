@@ -69,6 +69,22 @@ fn position(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
     let _ = geom::place(window, x, y, W, H);
 }
 
+static READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static PENDING_SHOW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn emit_show(app: &tauri::AppHandle) {
+    let count = app.state::<AppState>().settings().quick_paste_count();
+    super::emit_to(app, LABEL, "quickpaste-show", serde_json::json!({ "count": count }));
+}
+
+/// Renderer dinleyicilerini kurdu. Bekleyen gösterim varsa şimdi teslim edilir.
+pub fn ready(app: &tauri::AppHandle) {
+    READY.store(true, std::sync::atomic::Ordering::Release);
+    if PENDING_SHOW.swap(false, std::sync::atomic::Ordering::AcqRel) {
+        emit_show(app);
+    }
+}
+
 pub fn show(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window(LABEL) else { return };
 
@@ -76,9 +92,20 @@ pub fn show(app: &tauri::AppHandle) {
     let _ = window.show();
     position(app, &window);
     let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
+    // Electron her `setAlwaysOnTop(…, 'screen-saver', 1)` çağrısının ardından
+    // `moveTop()` da çağırıyordu; seviye tek başına pencereyi diğer topmost
+    // pencerelerin ÖNÜNE getirmiyor.
+    let _ = crate::platform::order_front(&window);
 
-    let count = app.state::<AppState>().settings().quick_paste_count();
-    super::emit_to(app, LABEL, "quickpaste-show", serde_json::json!({ "count": count }));
+    // Pencere açılışta ÖNCEDEN kuruluyor, ama `listen()` bir promise: uygulama açılır
+    // açılmaz kısayola basılırsa dinleyici henüz kurulmamış olabilir ve gösterim
+    // olayı sessizce düşer — seçici boş açılır (BULGU F1-c'nin aynısı).
+    // Hazır değilse olay bekletiliyor, `window_ready` gelince teslim ediliyor.
+    if READY.load(std::sync::atomic::Ordering::Acquire) {
+        emit_show(app);
+    } else {
+        PENDING_SHOW.store(true, std::sync::atomic::Ordering::Release);
+    }
 
     // Esc yalnız açıkken bizim olsun.
     let handle = app.clone();
@@ -92,6 +119,24 @@ pub fn show(app: &tauri::AppHandle) {
     if crate::platform::can_paste(true) {
         crate::platform::note_front_app();
     }
+}
+
+/// Kaydırma evresi Escape'i geri bıraktığında, seçici hâlâ açıksa onu yeniden kaydeder.
+/// İki özellik aynı tuşu paylaştığı için sahiplik el değiştiriyor.
+pub fn rearm_escape_if_visible(app: &tauri::AppHandle) {
+    let visible = app
+        .get_webview_window(LABEL)
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    if !visible {
+        return;
+    }
+    let handle = app.clone();
+    let _ = app.global_shortcut().on_shortcut(escape_shortcut(), move |_a, _s, e| {
+        if e.state == ShortcutState::Pressed {
+            hide(&handle);
+        }
+    });
 }
 
 pub fn hide(app: &tauri::AppHandle) {

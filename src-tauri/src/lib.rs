@@ -81,7 +81,6 @@ pub fn run() {
             commands::core::set_clipboard_paused,
             commands::core::close_window,
             commands::core::minimize_window,
-            commands::core::toast_ready,
             commands::core::toast_finished,
             commands::core::toast_resize,
             commands::core::debug_log,
@@ -138,7 +137,6 @@ pub fn run() {
             updater::check_for_updates,
             updater::download_update,
             updater::install_update,
-            updater::update_dialog_ready,
             commands::ready::window_ready,
             commands::record::set_video_quality,
             commands::record::set_audio_mic,
@@ -202,6 +200,15 @@ pub fn run() {
                 }
             }
 
+            // Eski sürümlerden gelen bulanık küçük resimleri arka planda yenile.
+            gallery::upgrade_thumbnails(&handle);
+
+            // Uyku / ekran kilidi: yoklamayı durdur, bekleyen yazmaları boşalt.
+            platform::install_power_observers(&handle);
+
+            // Monitör düzeni değişimlerini izle — widget ekran dışında kalmasın.
+            windows::widget::start_display_watcher(&handle);
+
             // Hızlı yapıştır seçicisini ÖNCEDEN kur (gizli) ki ilk kısayol anında açsın.
             if let Err(e) = windows::quickpaste::create(&handle) {
                 log::error!("hızlı yapıştır önceden kurulamadı: {e}");
@@ -258,7 +265,7 @@ pub fn run() {
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1200));
                     let monitors = geom::all_monitors(&h);
-                    let Some(m) = monitors.first().copied() else {
+                    let Some(m) = monitors.first().cloned() else {
                         println!("RECORD_TEST: monitör yok");
                         return;
                     };
@@ -282,6 +289,21 @@ pub fn run() {
                         Err(e) => println!("RECORD_TEST: başlatma hatası: {e}"),
                     }
                     h.exit(0);
+                });
+            }
+
+            // Geliştirme kolaylığı: `--set-lang=en` — dil değişiminin GERÇEKTEN
+            // uygulanıp uygulanmadığını sınamak için.
+            #[cfg(debug_assertions)]
+            if let Some(lang) = std::env::args().find_map(|a| a.strip_prefix("--set-lang=").map(str::to_string)) {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(2500));
+                    let inner = h.clone();
+                    let _ = h.run_on_main_thread(move || {
+                        let st = inner.state::<AppState>();
+                        commands::core::set_language(inner.clone(), st, lang);
+                    });
                 });
             }
 
@@ -322,7 +344,13 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("CopyBoard başlatılamadı")
         .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
+            // `ExitRequested` VE `Exit` — ilki bir dinleyici tarafından iptal edilebiliyor
+            // ve her çıkış yolunda tetiklenmiyor; `Exit` son sözü söylüyor. İkisi de
+            // idempotent (`stop`/`flush` iki kez çağrılabilir).
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
                 if let Some(w) = app.try_state::<clipboard::watcher::Watcher>() {
                     w.stop();
                 }

@@ -203,7 +203,7 @@
         // (`take_capture_frame` ham ArrayBuffer döndürüyor). snipper.js bunu fark
         // etmiyor: eski imza aynen korunuyor.
         onCaptureScreen: (cb) =>
-            on('capture-screen', async (meta) => {
+            ready(on('capture-screen', async (meta) => {
                 let bytes = null;
                 try {
                     bytes = await invoke('take_capture_frame');
@@ -221,7 +221,7 @@
                 }
                 cb(bytes, meta.mode, meta.sourceId, meta.quality,
                    meta.width, meta.height, meta.multiMonitor);
-            }),
+            })),
         onCaptureReset: (cb) => on('capture-reset', cb),
         notifyReady: () => send('snip_ready'),
         retryCapture: () => send('capture_retry'),
@@ -331,7 +331,7 @@
         // ── Hızlı yapıştır ──────────────────────────────────────────────────
         quickPastePick: (text) => send('quickpaste_pick', { text }),
         quickPasteDismiss: () => send('quickpaste_dismiss'),
-        onQuickPasteShow: (cb) => on('quickpaste-show', cb),
+        onQuickPasteShow: (cb) => ready(on('quickpaste-show', cb)),
 
         // ── Güncelleme ──────────────────────────────────────────────────────
         checkForUpdates: () => send('check_for_updates'),

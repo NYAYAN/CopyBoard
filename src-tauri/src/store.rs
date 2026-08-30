@@ -37,6 +37,19 @@ pub struct Store {
     /// Diskteki hâl bellekten farklı mı? `flush()` gereksiz yazmayı bununla atlıyor.
     dirty: AtomicBool,
     ping: Mutex<Option<Sender<()>>>,
+    /// Disk yazmalarını SERİLEŞTİRİR.
+    ///
+    /// Bu olmadan iki thread — arka plan yazıcısı ve `flush()` çağıran thread —
+    /// `write_now()`a aynı anda girebiliyor. İkisi de aynı geçici dosyayı
+    /// `File::create` (O_TRUNC) ile açtığı için AYNI inode üzerinde çalışıyor; biri
+    /// `rename` ettikten sonra diğerinin hâlâ açık fd'si artık doğrudan `config.json`ı
+    /// gösteriyor ve kalan baytları canlı dosyanın üzerine yazıyor. Sonuç: geçersiz
+    /// JSON → açılışta `.corrupt`a alınıp BOŞ depo ile başlanması, yani tüm geçmiş,
+    /// favoriler, galeri indeksi ve ayarların kaybı.
+    ///
+    /// Electron'da bu yapısal olarak imkânsızdı: `electron-store`un tüm yazmaları tek
+    /// JS thread'inde senkrondu.
+    write_lock: Mutex<()>,
 }
 
 impl Store {
@@ -67,6 +80,7 @@ impl Store {
             data: Mutex::new(data),
             dirty: AtomicBool::new(false),
             ping: Mutex::new(None),
+            write_lock: Mutex::new(()),
         });
         store.clone().spawn_writer();
         store
@@ -116,7 +130,16 @@ impl Store {
         self.data.lock().unwrap().contains_key(key)
     }
 
-    /// Değeri belleğe yazar ve geciktirilmiş bir disk yazması planlar.
+    /// Yalnız bu anahtarların yazması geciktirilir.
+    ///
+    /// Electron `history` dışındaki HER anahtarı ANINDA yazıyordu; geciktirme yalnız
+    /// pano izleyicisinin saniyede bir tetikleyebildiği geçmiş içindi
+    /// (`history-manager.js` `saveHistorySoon`). Ayarları, favorileri ve galeri
+    /// indeksini de geciktirmek, kullanıcı bir ayarı değiştirip 500 ms içinde
+    /// uygulamayı zorla kapatırsa o ayarın kaybolması demek.
+    const DEBOUNCED_KEYS: [&'static str; 1] = ["history"];
+
+    /// Değeri belleğe yazar. `history` için geciktirilmiş, diğerleri için ANINDA yazar.
     pub fn set<T: Serialize>(&self, key: &str, value: T) {
         let v = match serde_json::to_value(value) {
             Ok(v) => v,
@@ -133,8 +156,64 @@ impl Store {
             data.insert(key.to_string(), v);
         }
         self.dirty.store(true, Ordering::Release);
-        if let Some(tx) = self.ping.lock().unwrap().as_ref() {
-            let _ = tx.send(());
+
+        if Self::DEBOUNCED_KEYS.contains(&key) {
+            if let Some(tx) = self.ping.lock().unwrap().as_ref() {
+                let _ = tx.send(());
+            }
+        } else {
+            self.write_now();
+        }
+    }
+
+    /// Bir anahtarı ATOMİK olarak oku-değiştir-yaz.
+    ///
+    /// ## Neden gerekli
+    ///
+    /// `get()` ve `set()` kilidi AYRI AYRI alıyor. `let mut v = get(); v.push(x); set(v)`
+    /// kalıbında iki thread araya girebiliyor ve sonuncusu diğerinin eklemesini
+    /// düşürüyor. Somut senaryo: pano izleyici yeni bir kayıt eklerken kullanıcı aynı
+    /// anda arayüzden bir kaydı siliyor — silme kayboluyor ya da yeni kayıt kayboluyor.
+    ///
+    /// Kapanış `false` döndürürse hiçbir şey yazılmaz (değişiklik yok).
+    pub fn update<T, F>(&self, key: &str, default: T, mutate: F)
+    where
+        T: DeserializeOwned + Serialize,
+        F: FnOnce(&mut T) -> bool,
+    {
+        let debounced = Self::DEBOUNCED_KEYS.contains(&key);
+        {
+            let mut data = self.data.lock().unwrap();
+            let mut current: T = match data.get(key) {
+                Some(v) => serde_json::from_value(v.clone()).unwrap_or_else(|e| {
+                    log::warn!("config.json: '{key}' beklenen tipte değil ({e}) — varsayılan kullanılıyor");
+                    default
+                }),
+                None => default,
+            };
+            if !mutate(&mut current) {
+                return;
+            }
+            let v = match serde_json::to_value(&current) {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("config.json: '{key}' serialize edilemedi: {e}");
+                    return;
+                }
+            };
+            if data.get(key) == Some(&v) {
+                return;
+            }
+            data.insert(key.to_string(), v);
+        }
+        self.dirty.store(true, Ordering::Release);
+
+        if debounced {
+            if let Some(tx) = self.ping.lock().unwrap().as_ref() {
+                let _ = tx.send(());
+            }
+        } else {
+            self.write_now();
         }
     }
 
@@ -147,6 +226,10 @@ impl Store {
     }
 
     fn write_now(&self) {
+        // Yazmanın TAMAMI tek bir thread'e ait: anlık görüntü alma da, disk I/O da.
+        // Kilit yalnız serialize sırasında tutulsaydı iki yazma iç içe geçebilirdi.
+        let _writing = self.write_lock.lock().unwrap_or_else(|e| e.into_inner());
+
         let snapshot = {
             let data = self.data.lock().unwrap();
             // Kilit yalnız serialize süresince tutulur; disk I/O kilit DIŞINDA yapılır.
@@ -180,7 +263,14 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let tmp = path.with_extension("json.tmp");
+    // Geçici ad SÜREÇ + THREAD'e özgü. `write_lock` aynı süreçte çakışmayı zaten
+    // engelliyor; bu, iki CopyBoard örneğinin (tek örnek kilidi bir sebeple düşerse)
+    // ya da eski bir sürümün aynı geçici adı kullanmasına karşı ikinci hat.
+    let tmp = path.with_extension(format!(
+        "json.tmp.{}.{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
     {
         let mut f = std::fs::File::create(&tmp)?;
         f.write_all(bytes)?;
@@ -199,6 +289,67 @@ mod tests {
         p.push(format!("copyboard-store-test-{name}-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&p);
         p
+    }
+
+    /// `get` + `set` ayrı kilit aldığı için araya giren yazma KAYBOLUYORDU.
+    /// Aynı senaryo `update` ile hiçbir ekleme düşürmemeli.
+    #[test]
+    fn update_es_zamanli_eklemelerin_hicbirini_dusurmuyor() {
+        const THREADS: usize = 8;
+        const PER_THREAD: usize = 50;
+
+        // Önce hatayı GÖSTER: get+set kalıbı gerçekten kayıp veriyor mu?
+        let naive = Store::load(temp_path("yaris-naive"));
+        std::thread::scope(|scope| {
+            for t in 0..THREADS {
+                let store = naive.clone();
+                scope.spawn(move || {
+                    for i in 0..PER_THREAD {
+                        let mut v: Vec<u64> = store.get("liste", Vec::new());
+                        v.push((t * PER_THREAD + i) as u64);
+                        store.set("liste", &v);
+                    }
+                });
+            }
+        });
+        let naive_len = naive.get::<Vec<u64>>("liste", Vec::new()).len();
+        eprintln!("naive get+set: {naive_len}/{} kayıt hayatta kaldı", THREADS * PER_THREAD);
+
+        // Şimdi düzeltmeyi doğrula: atomik oku-değiştir-yaz hiçbir şey düşürmemeli.
+        let atomic = Store::load(temp_path("yaris-atomic"));
+        std::thread::scope(|scope| {
+            for t in 0..THREADS {
+                let store = atomic.clone();
+                scope.spawn(move || {
+                    for i in 0..PER_THREAD {
+                        store.update("liste", Vec::<u64>::new(), |v: &mut Vec<u64>| {
+                            v.push((t * PER_THREAD + i) as u64);
+                            true
+                        });
+                    }
+                });
+            }
+        });
+        let mut got: Vec<u64> = atomic.get("liste", Vec::new());
+        got.sort_unstable();
+
+        assert_eq!(
+            got.len(),
+            THREADS * PER_THREAD,
+            "atomik güncellemede kayıp var (naive kalıp {naive_len} kayıt bırakmıştı)"
+        );
+        assert_eq!(got, (0..(THREADS * PER_THREAD) as u64).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn update_false_donerse_hicbir_sey_yazmiyor() {
+        let s = Store::load(temp_path("update-noop"));
+        s.set("liste", vec![1u64, 2, 3]);
+        s.update("liste", Vec::<u64>::new(), |v: &mut Vec<u64>| {
+            v.push(4); // değiştirdik AMA kaydetme dedik
+            false
+        });
+        assert_eq!(s.get::<Vec<u64>>("liste", Vec::new()), vec![1, 2, 3]);
     }
 
     #[test]

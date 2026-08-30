@@ -19,7 +19,7 @@
 use tauri::{LogicalPosition, LogicalSize, Monitor, PhysicalPosition};
 
 /// Bir monitörün mantıksal koordinatlardaki hâli.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MonitorInfo {
     pub x: f64,
     pub y: f64,
@@ -31,6 +31,12 @@ pub struct MonitorInfo {
     pub work_width: f64,
     pub work_height: f64,
     pub scale: f64,
+    /// OS'un verdiği monitör adı ("Built-in Retina Display", "LG HDR 4K"…).
+    ///
+    /// Electron'un `display.id`sinin karşılığı: widget hangi FİZİKSEL ekrana
+    /// yerleştiyse orayı hatırlıyor. Tauri'de sayısal ekran kimliği yok, ad var.
+    /// Adsız monitör (bazı sanal ekranlar) `None` — o zaman eşleştirme atlanıyor.
+    pub name: Option<String>,
 }
 
 impl MonitorInfo {
@@ -51,6 +57,7 @@ impl MonitorInfo {
             work_width: wsize.width,
             work_height: wsize.height,
             scale: s,
+            name: m.name().cloned(),
         }
     }
 
@@ -95,25 +102,28 @@ pub fn primary_monitor(app: &tauri::AppHandle) -> Option<MonitorInfo> {
         .or_else(|| all_monitors(app).into_iter().next())
 }
 
-/// İmlecin MANTIKSAL konumu. Tauri fiziksel verir.
+/// İmlecin MANTIKSAL (nokta) konumu.
+///
+/// ## ⚠ Neden monitör TARAMASI yapılmıyor
+///
+/// İlk hâli, imlecin fiziksel konumunu monitörlerin fiziksel dikdörtgenleriyle
+/// karşılaştırıp bulunan monitörün ölçeğine bölüyordu. Bu KARIŞIK DPI'lı kurulumda
+/// yanlış: tao, imleç konumunu BİRİNCİL monitörün ölçeğiyle üretiyor, ama monitör
+/// dikdörtgenleri her monitörün KENDİ ölçeğiyle üretiliyor — iki taraf aynı uzayda
+/// değil. 2x bir dahili ekranın yanında 1x harici ekran varken döngü yanlış monitörle
+/// eşleşip yanlış bölene düşüyordu; sonuç iki kat sapmış bir imleç konumu, yani
+/// yanlış monitörde açılan toast ve yanlış yere konumlanan hızlı yapıştır.
+///
+/// Doğru dönüşüm koşulsuz: `fiziksel / birincil_ölçek`.
 pub fn cursor_position(app: &tauri::AppHandle) -> Option<(f64, f64)> {
     let p: PhysicalPosition<f64> = app.cursor_position().ok()?;
-    // Ölçek, imlecin ÜZERİNDE olduğu monitörünki olmalı; monitörleri fiziksel
-    // koordinatta tarayıp bulunanın ölçeğiyle çeviriyoruz.
-    for m in app.available_monitors().unwrap_or_default() {
-        let s = m.scale_factor();
-        let mp = m.position();
-        let ms = m.size();
-        if p.x >= mp.x as f64
-            && p.x < (mp.x + ms.width as i32) as f64
-            && p.y >= mp.y as f64
-            && p.y < (mp.y + ms.height as i32) as f64
-        {
-            return Some((p.x / s, p.y / s));
-        }
-    }
-    let s = primary_monitor(app).map(|m| m.scale).unwrap_or(1.0);
-    Some((p.x / s, p.y / s))
+    let scale = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+    Some((p.x / scale, p.y / scale))
 }
 
 /// Electron `screen.getDisplayNearestPoint()` — nokta mantıksal koordinatta.
@@ -123,7 +133,7 @@ pub fn monitor_nearest_point(app: &tauri::AppHandle, x: f64, y: f64) -> Option<M
         return None;
     }
     if let Some(m) = monitors.iter().find(|m| m.contains(x, y)) {
-        return Some(*m);
+        return Some(m.clone());
     }
     // Hiçbirinin içinde değil (monitörler arası boşluk / ekran dışı): en yakını.
     monitors
@@ -214,6 +224,7 @@ mod tests {
             x, y, width: w, height: h,
             work_x: x, work_y: y + 25.0, work_width: w, work_height: h - 25.0,
             scale,
+            name: None,
         }
     }
 

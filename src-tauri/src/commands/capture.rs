@@ -17,31 +17,7 @@ pub fn decode_data_url_pub(data_url: &str) -> Option<Vec<u8>> { decode_data_url(
 
 fn decode_data_url(data_url: &str) -> Option<Vec<u8>> {
     let b64 = data_url.split(',').nth(1)?;
-    base64_decode(b64)
-}
-
-fn base64_decode(s: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(s.len() * 3 / 4);
-    let mut acc: u32 = 0;
-    let mut bits = 0u32;
-    for c in s.bytes() {
-        let v = match c {
-            b'A'..=b'Z' => c - b'A',
-            b'a'..=b'z' => c - b'a' + 26,
-            b'0'..=b'9' => c - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' | b'\n' | b'\r' => continue,
-            _ => return None,
-        } as u32;
-        acc = (acc << 6) | v;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((acc >> bits) as u8);
-        }
-    }
-    Some(out)
+    crate::gallery::base64_decode(b64)
 }
 
 /// PNG'yi panoya resim olarak yazar.
@@ -123,7 +99,7 @@ pub fn snip_copy_color(app: tauri::AppHandle, hex: String) {
     crate::capture::close_all(&app, None);
 }
 
-fn save_png(app: &tauri::AppHandle, png: Vec<u8>, prefix: &str) {
+fn save_png(app: &tauri::AppHandle, window: Option<tauri::WebviewWindow>, png: Vec<u8>, prefix: &str) {
     if SAVE_DIALOG_OPEN.swap(true, Ordering::AcqRel) {
         return;
     }
@@ -142,17 +118,45 @@ fn save_png(app: &tauri::AppHandle, png: Vec<u8>, prefix: &str) {
     // isteği ile açılışı arasında ölçülebilir bir fark yok.
     crate::windows::emit_all(app, "save-dialog-open", ());
 
-    let mut builder = app.dialog().file().set_file_name(&default_name).add_filter("Images", &["png"]);
+    // ── Panelin görünmesi ────────────────────────────────────────────────────
+    // Electron'da bu, ölçümle bulunmuş bir hatanın düzeltmesiydi: panel yakalama
+    // overlay'ine PARENT'lanmazsa (macOS'ta sheet olmazsa) uygulamaya değil pencereye
+    // ait olmuyor, ve overlay bizi hiç ön uygulama yapmadığı için panel öndeki BAŞKA
+    // uygulamanın pencerelerinin ARKASINDA açılıyordu — bir titreme, sonra hiçbir şey.
+    // Ayrıca always-on-top overlay panelin üstünü kapatıyor; açılmadan önce indiriliyor.
+    let overlay = window.clone();
+    if let Some(w) = &overlay {
+        let _ = w.set_always_on_top(false);
+    }
+
+    let mut builder = app
+        .dialog()
+        .file()
+        .set_title("Kaydet")
+        .set_file_name(&default_name)
+        .add_filter("Images", &["png"]);
     if let Some(dir) = pictures {
         builder = builder.set_directory(dir);
     }
+    if let Some(w) = &window {
+        builder = builder.set_parent(w);
+    }
     builder.save_file(move |path| {
         SAVE_DIALOG_OPEN.store(false, Ordering::Release);
+        // İptal/hata yolunda overlay'i geri kaldır; kaydetme yolunda zaten kapanıyor.
+        let restore_overlay = || {
+            if let Some(w) = &overlay {
+                let _ = w.set_always_on_top(true);
+                let _ = crate::platform::set_window_level(w, crate::platform::WindowLevel::PopUpMenu);
+            }
+        };
         let Some(path) = path else {
+            restore_overlay();
             crate::windows::toast::show(&handle, "Kaydetme iptal edildi.", "info");
             return;
         };
         let Ok(p) = path.into_path() else {
+            restore_overlay();
             crate::windows::toast::show(&handle, "Kaydetme Hatası: geçersiz yol", "error");
             return;
         };
@@ -162,27 +166,34 @@ fn save_png(app: &tauri::AppHandle, png: Vec<u8>, prefix: &str) {
                 crate::windows::toast::show(&handle, "Resim Kaydedildi.", "success");
                 crate::capture::close_all(&handle, None);
             }
-            Err(e) => crate::windows::toast::show(&handle, &format!("Kaydetme Hatası: {e}"), "error"),
+            Err(e) => {
+                restore_overlay();
+                crate::windows::toast::show(&handle, &format!("Kaydetme Hatası: {e}"), "error");
+            }
         }
     });
 }
 
 #[tauri::command]
-pub fn snip_save_image(app: tauri::AppHandle, data_url: String) {
+pub fn snip_save_image(app: tauri::AppHandle, window: tauri::WebviewWindow, data_url: String) {
     let Some(png) = decode_data_url(&data_url) else {
         crate::windows::toast::show(&app, "Kaydetme Hatası: görüntü çözülemedi", "error");
         return;
     };
-    save_png(&app, png, "snip");
+    save_png(&app, Some(window), png, "snip");
 }
 
 #[tauri::command]
-pub fn snip_save_buffer(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) {
+pub fn snip_save_buffer(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    request: tauri::ipc::Request<'_>,
+) {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         crate::windows::toast::show(&app, "Kaydetme Hatası: ham veri bekleniyordu", "error");
         return;
     };
-    save_png(&app, bytes.clone(), "scroll");
+    save_png(&app, Some(window), bytes.clone(), "scroll");
 }
 
 /// Metin tanıma. Görüntü verisi elde olduğu için overlay'ler ÖNCE kapanıyor.
@@ -206,9 +217,15 @@ pub async fn ocr_process(app: tauri::AppHandle, data_url: String) {
                 let state = app.state::<AppState>();
                 state.runtime.lock().unwrap().last_text = text.clone();
             }
-            crate::platform::clipboard_write_text(&text);
-            crate::clipboard::history::add(&app, &text);
-            crate::windows::toast::show(&app, "Metin Kopyalandı.", "success");
+            // NSPasteboard ana thread kuralı (BULGU S1-a) burada da geçerli: bu kod
+            // `spawn_blocking`den dönen bir async komutun içinde, yani worker thread'de.
+            let h = app.clone();
+            let t = text.clone();
+            let _ = app.run_on_main_thread(move || {
+                crate::platform::clipboard_write_text(&t);
+                crate::clipboard::history::add(&h, &t);
+                crate::windows::toast::show(&h, "Metin Kopyalandı.", "success");
+            });
         }
         Ok(Ok(_)) => crate::windows::toast::show(&app, "Metin bulunamadı.", "info"),
         Ok(Err(e)) => {

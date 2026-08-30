@@ -73,23 +73,37 @@ impl Default for WindowSpec {
     }
 }
 
-/// Sayfa scriptlerinden ÖNCE enjekte edilen açılış verisi.
-pub fn boot_script(app: &tauri::AppHandle, os_is_dark: bool) -> String {
+/// Açılış verisinin kendisi (JSON). Dil değişiminde `sessionStorage`'a da bu yazılıyor.
+pub fn boot_payload(app: &tauri::AppHandle, os_is_dark: bool) -> serde_json::Value {
     let state = app.state::<AppState>();
     let store = &state.store;
     let lang = i18n::get_language(store);
 
-    let boot = serde_json::json!({
+    serde_json::json!({
         "platform": if cfg!(target_os = "macos") { "darwin" }
                     else if cfg!(target_os = "windows") { "win32" }
                     else { "linux" },
         "i18n": { "lang": lang, "dict": i18n::dict_for(&lang) },
         "theme": { "mode": theme::get_mode(store), "resolved": theme::resolved(store, os_is_dark) },
-    });
+    })
+}
 
-    // `Object.freeze` değil: `api-tauri.js` dil değişiminde bu nesneyi güncelliyor
-    // (pencereyi yeniden yaratmak yerine reload öncesi sözlüğü tazeliyoruz).
-    format!("window.__COPYBOARD_BOOT__ = {boot};")
+/// Sayfa scriptlerinden ÖNCE enjekte edilen açılış verisi.
+///
+/// `sessionStorage`'daki değer TERCİH EDİLİYOR. Sebebi: `initialization_script`
+/// pencere kurulurken sabitleniyor ve her `location.reload()`'da AYNI eski değerle
+/// yeniden çalışıyor. Dil değişimi reload gerektirdiği için, taze yükü reload'dan
+/// önce `sessionStorage`'a yazıp burada okumak, değişimin reload'dan sağ çıkmasının
+/// tek yolu (bkz. `commands::core::set_language`).
+pub fn boot_script(app: &tauri::AppHandle, os_is_dark: bool) -> String {
+    let boot = boot_payload(app, os_is_dark);
+    format!(
+        "(function () {{ \
+           var d = {boot}; \
+           try {{ var s = sessionStorage.getItem('__COPYBOARD_BOOT__'); if (s) d = JSON.parse(s); }} catch (e) {{}} \
+           window.__COPYBOARD_BOOT__ = d; \
+         }})();"
+    )
 }
 
 /// Tarifi gerçek bir pencereye çevirir. Bayrak sonrası ayarlar (seviye, vibrancy,
@@ -127,6 +141,18 @@ pub fn build(app: &tauri::AppHandle, spec: WindowSpec) -> Result<WebviewWindow, 
             log::warn!("{}: pencere seviyesi ayarlanamadı: {e}", spec.label);
         }
     }
+    // OS görünümü değiştiğinde 'sistem' modundaki pencereler takip etmeli.
+    // Electron'da `nativeTheme.on('updated')` bunu yapıyordu; Tauri'de karşılığı
+    // pencere başına `ThemeChanged` olayı.
+    {
+        let handle = app.clone();
+        window.on_window_event(move |event| {
+            if matches!(event, tauri::WindowEvent::ThemeChanged(_)) {
+                crate::commands::core::broadcast_theme(&handle);
+            }
+        });
+    }
+
     if spec.all_spaces {
         if let Err(e) = platform::join_all_spaces(&window) {
             log::warn!("{}: tüm masaüstlerinde görünürlük ayarlanamadı: {e}", spec.label);

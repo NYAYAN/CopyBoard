@@ -45,6 +45,7 @@ window-vibrancy = "0.8"
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
+block2 = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62", features = [
@@ -66,3 +67,8 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[dev-dependencies]
+# Menü accelerator dizgelerini tepsi menüsünün GERÇEK ayrıştırıcısına karşı doğrulamak
+# için — elle kopyalanmış bir tuş listesi muda sürüm atlayınca sessizce eskir.
+muda = "0.19"

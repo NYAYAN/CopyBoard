@@ -6,7 +6,7 @@
 //            where the region is — exactly like the snipper.
 //   capture  Backdrop and dim are hidden and the window stops taking mouse events, so what
 //            the user sees inside the outline is the REAL app and their scrolling reaches it.
-//            Frames come from a live desktop stream (the same getUserMedia path the recorder
+//            Frames come from the main process (ScreenCaptureKit), already cropped to the
 //            uses) and go to stitcher.js, which reports which rows are new.
 //   review   The stitched page, scaled to fit, with copy/save.
 //
@@ -90,6 +90,9 @@ let screenBitmap = null;
 let stream = null;
 let video = null;
 let stitcher = null;
+// Ana süreçten gelen en son kare (ImageData). Kare akışı bunu tazeliyor;
+// sampleFrame okuyor.
+let latestFrame = null;
 let crop = null;            // { x, y, w, h } in PHYSICAL pixels of the captured display
 let frameA = null, frameB = null;   // ping-pong crop canvases
 let curFrame = null, baseFrame = null, lastFrame = null;
@@ -313,7 +316,7 @@ window.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mousemove', (e) => {
-    if (state.phase === 'capture') { updateIgnoreMouse(e); return; }
+    if (state.phase === 'capture') return;
     if (state.phase !== 'select') return;
 
     if (state.isResizing) {
@@ -404,25 +407,15 @@ async function beginCapture() {
     if (!crop || !state.sourceId) return;
     if (crop.w < MIN_CROP_W || crop.h < MIN_CROP_H) { showRegionHint(); return; }
 
+    // Kareler artık ana süreçten geliyor. Electron'da bu bir getUserMedia masaüstü
+    // akışıydı; WKWebView'da o yol yok (ne chromeMediaSource ne getDisplayMedia).
+    // Rust ScreenCaptureKit'ten okuyup ZATEN KIRPILMIŞ ham RGBA gönderiyor —
+    // stitcher.js'e giden veri birebir aynı, yalnız kaynağı değişti.
     try {
-        stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-                mandatory: {
-                    chromeMediaSource: 'desktop',
-                    chromeMediaSourceId: state.sourceId,
-                    minWidth: state.captureWidth,
-                    maxWidth: state.captureWidth,
-                    minHeight: state.captureHeight,
-                    maxHeight: state.captureHeight
-                }
-            }
-        });
-
-        video = document.createElement('video');
-        video.muted = true;
-        video.srcObject = stream;
-        await video.play();
+        await window.api.scrollBegin(
+            { x: crop.x, y: crop.y, w: crop.w, h: crop.h },
+            (frame) => { latestFrame = frame; }
+        );
     } catch (err) {
         console.error('Scroll capture stream failed:', err);
         instruction.textContent = t('Ekran akışı başlatılamadı: ') + ((err && err.message) || err);
@@ -461,8 +454,7 @@ async function beginCapture() {
     // The main process closes the other monitors' overlays and arms a global Escape; from
     // here the window passes mouse events through so scrolling reaches the app underneath.
     window.api.scrollBegin();
-    state.lastIgnoreState = true;
-    window.api.setIgnoreMouseEvents(true, { forward: true });
+    reportToolbarHitArea();
 
     lastSampleAt = 0;
     lastProgressAt = lastMotionAt = performance.now();
@@ -484,25 +476,17 @@ function startFrameLoop() {
         }
     }, 250);
 
-    // requestVideoFrameCallback fires once per DECODED frame, so the loop follows the
-    // stream instead of guessing at it. setInterval is the fallback where it is missing.
-    if (typeof video.requestVideoFrameCallback === 'function') {
-        const tick = () => {
-            if (state.phase !== 'capture') return;
-            const now = performance.now();
-            if (now - lastSampleAt >= FRAME_MIN_INTERVAL) {
-                lastSampleAt = now;
-                sampleFrame(now);
-            }
-            if (state.phase === 'capture') video.requestVideoFrameCallback(tick);
-        };
-        video.requestVideoFrameCallback(tick);
-    } else {
-        frameTimer = setInterval(() => {
-            if (state.phase !== 'capture') return;
-            sampleFrame(performance.now());
-        }, FRAME_MIN_INTERVAL);
-    }
+    // Kareler ana süreçten geliyor; `latestFrame` her varışta tazeleniyor. Döngü
+    // FRAME_MIN_INTERVAL'da bir en tazesini örnekliyor — akış hızından bağımsız,
+    // ve kullanıcı kaydırmayı bıraktığında yeni kare gelmediği için örnekleme
+    // kendiliğinden aynı kareyi görüp 'seen' kararına düşüyor.
+    frameTimer = setInterval(() => {
+        if (state.phase !== 'capture') return;
+        const now = performance.now();
+        if (now - lastSampleAt < FRAME_MIN_INTERVAL) return;
+        lastSampleAt = now;
+        sampleFrame(now);
+    }, FRAME_MIN_INTERVAL);
 }
 
 function stopFrameLoop() {
@@ -512,11 +496,8 @@ function stopFrameLoop() {
 
 function stopStream() {
     stopFrameLoop();
-    if (stream) {
-        try { stream.getTracks().forEach(track => track.stop()); } catch (e) { /* already gone */ }
-        stream = null;
-    }
-    if (video) { try { video.pause(); } catch (e) { } video.srcObject = null; video = null; }
+    latestFrame = null;
+    try { window.api.scrollEnd(); } catch (e) { /* ana süreç zaten kapanmış olabilir */ }
 }
 
 // Copy `height` rows starting at `srcTop` from a crop canvas onto one end of the strip.
@@ -553,19 +534,12 @@ function addRows(srcCanvas, srcTop, height, side) {
 }
 
 function sampleFrame(now) {
-    const vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh) return;
-
-    // The stream should come back at the size we asked for, but a driver that rounds it
-    // would silently shift the crop; scaling by the ratio keeps the region where the user
-    // put it either way.
-    const kx = vw / state.captureWidth;
-    const ky = vh / state.captureHeight;
+    // Kare ana süreçte ZATEN kırpıldı (SCStream sourceRect), yani burada ölçek/kırpma
+    // hesabı yok — gelen veri doğrudan kare tuvaline basılıyor.
+    if (!latestFrame) return;
 
     const drawn = curFrame;
-    drawn.ctx.drawImage(video,
-        crop.x * kx, crop.y * ky, crop.w * kx, crop.h * ky,
-        0, 0, crop.w, crop.h);
+    drawn.ctx.putImageData(latestFrame, 0, 0);
 
     profileCtx.drawImage(drawn.canvas, 0, 0, crop.w, crop.h, 0, 0, PROFILE_W, crop.h);
     const decision = stitcher.push(profileCtx.getImageData(0, 0, PROFILE_W, crop.h));
@@ -705,8 +679,7 @@ function finishCapture(note) {
 
     stopStream();
     window.api.scrollEnd();
-    state.lastIgnoreState = false;
-    window.api.setIgnoreMouseEvents(false);
+    reportToolbarHitArea();
     hud.classList.add('hidden');
 
     if (!captured) {
@@ -814,30 +787,40 @@ function exportPng(btn, send, holdForDialog) {
 // the buttons here is what puts them back for a CANCELLED save, where this overlay stays.
 if (window.api.onSaveDialogOpen) window.api.onSaveDialogOpen(clearExporting);
 
-// ── Click-through while capturing ──────────────────────────────────────────────
-// The window ignores the mouse so scrolling reaches the app underneath, but the toolbar
-// still has to be clickable. mousemove keeps arriving because setIgnoreMouseEvents is used
-// with forward:true, so hovering the bar hands events back for as long as the pointer is
-// over it. Same approach as the recorder's toolbar.
-function updateIgnoreMouse(e) {
-    if (state.phase !== 'capture') return;
-    const tr = toolbar.getBoundingClientRect();
-    const pad = 10;
-    const overToolbar = e.clientX >= tr.left - pad && e.clientX <= tr.right + pad &&
-        e.clientY >= tr.top - pad && e.clientY <= tr.bottom + pad;
-    const shouldIgnore = !overToolbar;
-    if (shouldIgnore !== state.lastIgnoreState) {
-        window.api.setIgnoreMouseEvents(shouldIgnore, { forward: true });
-        state.lastIgnoreState = shouldIgnore;
+// ── Kaydırma sırasında tıklama geçirgenliği ────────────────────────────────────
+// Pencere fareyi yok sayıyor ki kaydırma alttaki uygulamaya ulaşsın; araç çubuğu ise
+// tıklanabilir kalmalı. Electron bunu `setIgnoreMouseEvents(true, { forward: true })`
+// ile yapıyordu — geçirgen ama mousemove alan pencere. Tauri'de `forward` yok ve
+// macOS'ta geçirgen pencere hiç mousemove almıyor, yani araç çubuğuna geri dönmek
+// imkânsız olurdu (BULGU F5-d). Artık yalnız araç çubuğunun dikdörtgeni bildiriliyor;
+// imleci ana süreç yokluyor.
+const TOOLBAR_HIT_PADDING = 10;
+
+function reportToolbarHitArea() {
+    if (state.phase !== 'capture') {
+        // Seçim ve inceleme evrelerinde overlay tamamen etkileşimli.
+        window.api.setHitAreas([{ kind: 'everything' }]);
+        return;
     }
+    const tr = toolbar.getBoundingClientRect();
+    window.api.setHitAreas([{
+        kind: 'rect',
+        x: tr.left - TOOLBAR_HIT_PADDING,
+        y: tr.top - TOOLBAR_HIT_PADDING,
+        w: tr.width + TOOLBAR_HIT_PADDING * 2,
+        h: tr.height + TOOLBAR_HIT_PADDING * 2,
+    }]);
 }
+
+// Araç çubuğu evre değişimlerinde yer değiştiriyor.
+window.addEventListener('resize', reportToolbarHitArea);
 
 // ── Buttons & keys ─────────────────────────────────────────────────────────────
 function cancelAll() {
     if (state.phase === 'capture') {
         stopStream();
         window.api.scrollEnd();
-        window.api.setIgnoreMouseEvents(false);
+        reportToolbarHitArea();
     }
     window.api.closeSnipper();
 }

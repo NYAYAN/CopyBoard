@@ -200,89 +200,35 @@ if (btnSystemAudio) {
     });
 }
 
-// Acquire a microphone audio track. On macOS this first ensures TCC permission so a denial
-// surfaces clearly instead of throwing a cryptic getUserMedia error.
-async function getMicTrack() {
-    if (window.api.platform === 'darwin' && window.api.ensureMicPermission) {
-        const granted = await window.api.ensureMicPermission();
-        if (!granted) {
-            throw new Error(t('Mikrofon izni verilmedi. Sistem Ayarları > Gizlilik ve Güvenlik > Mikrofon.'));
-        }
+// --- Tıklama geçirgenliği: karar ana süreçte, geometri burada ---------------
+//
+// Kayıt sırasında overlay tıklama-geçirgen oluyor ki kullanıcı altındaki uygulamayla
+// çalışabilsin; araç çubuğu ise tıklanabilir kalmalı. Electron bunu
+// `setIgnoreMouseEvents(true, { forward: true })` ile yapıyordu — geçirgen ama
+// mousemove alan pencere. Tauri'de `forward` yok ve macOS'ta geçirgen pencere hiç
+// mousemove almıyor, yani araç çubuğuna geri dönmek imkânsız olurdu (BULGU F5-d).
+//
+// Artık yalnız araç çubuğunun dikdörtgeni bildiriliyor; imleci ana süreç yokluyor.
+const TOOLBAR_HIT_PADDING = 20;
+
+function reportToolbarHitArea() {
+    if (!state.isRecording) {
+        // Kayıt yokken overlay tamamen etkileşimli (seçim yapılıyor).
+        window.api.setHitAreas([{ kind: 'everything' }]);
+        return;
     }
-    const s = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-    });
-    state.micStream = s;
-    return s.getAudioTracks()[0] || null;
-}
-
-// Acquire a system/computer audio (loopback) track.
-//  - Windows: Chromium's desktop-loopback trick. Requesting desktop audio REQUIRES a desktop
-//    video request in the same call; we keep the audio track and immediately drop the video.
-//  - macOS/Linux: getDisplayMedia, fulfilled by the main process with audio:'loopback'.
-async function getSystemAudioTrack() {
-    let s;
-    if (window.api.platform === 'win32') {
-        s = await navigator.mediaDevices.getUserMedia({
-            audio: { mandatory: { chromeMediaSource: 'desktop' } },
-            video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: state.sourceId } }
-        });
-    } else {
-        s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-    }
-    s.getVideoTracks().forEach(t => t.stop()); // discard the throwaway video track
-    state.sysStream = s;
-    return s.getAudioTracks()[0] || null;
-}
-
-function systemAudioUnavailableMsg(err) {
-    const detail = err && err.message ? ' (' + err.message + ')' : '';
-    if (window.api.platform === 'darwin') {
-        return t('Sistem sesi kaydedilemedi. macOS\'ta bilgisayar sesini kaydetmek için BlackHole gibi bir sanal ses aygıtı gerekebilir.') + detail;
-    }
-    return t('Sistem sesi alınamadı.') + detail;
-}
-
-// MediaRecorder encodes only ONE audio track, so when both mic and system audio are on we
-// mix them into a single track with Web Audio. With a single source we return it untouched
-// (no AudioContext needed). Returns null when there is no audio at all.
-function mixAudioTracks(tracks) {
-    if (!tracks || tracks.length === 0) return null;
-    if (tracks.length === 1) return tracks[0];
-    const AC = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AC();
-    state.audioContext = ctx;
-    if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) { } }
-    const dest = ctx.createMediaStreamDestination();
-    tracks.forEach((t) => {
-        try { ctx.createMediaStreamSource(new MediaStream([t])).connect(dest); }
-        catch (e) { console.error('Audio mix source failed:', e); }
-    });
-    return dest.stream.getAudioTracks()[0] || null;
-}
-
-function stopAudioCapture() {
-    try { if (state.micStream) state.micStream.getTracks().forEach(t => t.stop()); } catch (e) { }
-    try { if (state.sysStream) state.sysStream.getTracks().forEach(t => t.stop()); } catch (e) { }
-    try { if (state.audioContext) state.audioContext.close(); } catch (e) { }
-    state.micStream = state.sysStream = state.audioContext = null;
-}
-
-function updateIgnoreMouse(e) {
-    if (!state.isRecording) return;
     const tr = toolbar.getBoundingClientRect();
-    const padding = 20;
-    const isOverToolbar = e.clientX >= tr.left - padding && e.clientX <= tr.right + padding &&
-        e.clientY >= tr.top - padding && e.clientY <= tr.bottom + padding;
-
-    const shouldIgnore = !isOverToolbar;
-    if (shouldIgnore !== state.lastIgnoreState) {
-        window.api.setIgnoreMouseEvents(shouldIgnore, { forward: true });
-        state.lastIgnoreState = shouldIgnore;
-    }
+    window.api.setHitAreas([{
+        kind: 'rect',
+        x: tr.left - TOOLBAR_HIT_PADDING,
+        y: tr.top - TOOLBAR_HIT_PADDING,
+        w: tr.width + TOOLBAR_HIT_PADDING * 2,
+        h: tr.height + TOOLBAR_HIT_PADDING * 2,
+    }]);
 }
 
-window.addEventListener('mousemove', updateIgnoreMouse);
+// Araç çubuğu kayıt sırasında yer değiştirebiliyor; yerleşim değişimlerini yakala.
+window.addEventListener('resize', reportToolbarHitArea);
 
 window.addEventListener('mousedown', (e) => {
     if (state.isRecording) return;
@@ -372,155 +318,35 @@ btnClose.addEventListener('click', () => {
 });
 
 async function startRecording() {
-    if (!state.selectionRect || !state.sourceId) return;
+    if (!state.selectionRect) return;
     try {
+        // ── Kayıt motoru ana süreçte ─────────────────────────────────────────
+        // Electron'da burada getUserMedia + canvas kırpma + MediaRecorder + saniyede
+        // bir IPC chunk vardı. `chromeMediaSource` Electron'a özgü olduğu için
+        // (WKWebView'da getDisplayMedia bile yok) yakalama, kırpma, encode ve mux
+        // tamamen Rust'a taşındı. Kareler webview'a HİÇ uğramıyor.
+        //
+        // Ses de orada: ScreenCaptureKit sistem sesini doğrudan veriyor — macOS'ta
+        // BlackHole gibi bir sanal aygıt artık gerekmiyor.
         const sx = state.scaleX != null ? state.scaleX : state.dpr;
         const sy = state.scaleY != null ? state.scaleY : state.dpr;
-        const videoWidth = state.captureWidth != null ? state.captureWidth : Math.floor(window.innerWidth * state.dpr);
-        const videoHeight = state.captureHeight != null ? state.captureHeight : Math.floor(window.innerHeight * state.dpr);
+        const r = state.selectionRect;
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-                mandatory: {
-                    chromeMediaSource: 'desktop',
-                    chromeMediaSourceId: state.sourceId,
-                    minWidth: videoWidth,
-                    maxWidth: videoWidth,
-                    minHeight: videoHeight,
-                    maxHeight: videoHeight
-                }
-            }
-        });
-
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-
-        const cropWOriginal = Math.floor(state.selectionRect.w * sx);
-        const cropHOriginal = Math.floor(state.selectionRect.h * sy);
-        
-        // Limit to 4K max to ensure encoder compatibility and performance
-        let finalW = Math.min(cropWOriginal, 3840);
-        let finalH = Math.min(cropHOriginal, 2160);
-        
-        // Final dimensions MUST BE EVEN for most encoders (H.264/VP9)
-        finalW = (finalW % 2 === 0) ? finalW : Math.max(2, finalW - 1);
-        finalH = (finalH % 2 === 0) ? finalH : Math.max(2, finalH - 1);
-
-        const cropCanvas = document.createElement('canvas');
-        cropCanvas.width = finalW;
-        cropCanvas.height = finalH;
-        const cropCtx = cropCanvas.getContext('2d');
-
-        cropCtx.imageSmoothingEnabled = false;
-
-        const fps = state.videoQuality === 'ultra' ? 60 : (state.videoQuality === 'high' ? 60 : 30);
-        // Optimized bitrates: high enough for quality, low enough for steady encoding
-        const bitrate = state.videoQuality === 'ultra' ? 50000000 : (state.videoQuality === 'high' ? 25000000 : (state.videoQuality === 'medium' ? 10000000 : 5000000));
-
-        // Acquire audio BEFORE recording starts so a failure is non-fatal: we warn and keep
-        // recording video (+ whatever audio succeeded) instead of losing the whole capture.
-        const audioTracks = [];
-        const audioWarnings = [];
-        if (state.audioMicOn) {
-            try {
-                const micTrack = await getMicTrack();
-                if (micTrack) audioTracks.push(micTrack);
-                else audioWarnings.push(t('Mikrofon sesi alınamadı.'));
-            } catch (err) {
-                audioWarnings.push('Mikrofon sesi alınamadı: ' + (err && err.message ? err.message : err));
-            }
+        // Bölge FİZİKSEL piksele çevriliyor — ana süreç bu uzayda çalışıyor.
+        const rect = {
+            x: Math.max(0, Math.floor(r.x * sx)),
+            y: Math.max(0, Math.floor(r.y * sy)),
+            w: Math.max(2, Math.floor(r.w * sx)),
+            h: Math.max(2, Math.floor(r.h * sy)),
+        };
+        if (window.api.sendDebugLog) {
+            window.api.sendDebugLog(`Kayıt başlıyor: ${rect.w}x${rect.h} @ (${rect.x},${rect.y})`);
         }
-        if (state.audioSystemOn) {
-            try {
-                const sysTrack = await getSystemAudioTrack();
-                if (sysTrack) audioTracks.push(sysTrack);
-                else audioWarnings.push(systemAudioUnavailableMsg());
-            } catch (err) {
-                audioWarnings.push(systemAudioUnavailableMsg(err));
-            }
-        }
-        if (audioWarnings.length) alert(audioWarnings.join('\n'));
 
-        // Combine the cropped-canvas video track with the (optional) mixed audio track.
-        const mixedAudioTrack = mixAudioTracks(audioTracks);
-        const captureStream = cropCanvas.captureStream(fps);
-        const recordStream = new MediaStream(captureStream.getVideoTracks());
-        if (mixedAudioTrack) recordStream.addTrack(mixedAudioTrack);
-        const hasAudio = !!mixedAudioTrack;
-
-        const audioCodec = hasAudio ? ',opus' : '';
-        let options = { mimeType: 'video/webm', videoBitsPerSecond: bitrate };
-        try {
-            // Prefer standard VP9 for high quality / efficiency (add Opus when we have audio)
-            if (MediaRecorder.isTypeSupported(`video/webm; codecs=vp9${audioCodec}`)) {
-                options = { mimeType: `video/webm; codecs=vp9${audioCodec}`, videoBitsPerSecond: bitrate };
-            } else if (MediaRecorder.isTypeSupported(`video/webm; codecs=vp8${audioCodec}`)) {
-                options = { mimeType: `video/webm; codecs=vp8${audioCodec}`, videoBitsPerSecond: bitrate };
-            }
-        } catch (e) { console.error('Option selection failed', e); }
-        if (hasAudio) options.audioBitsPerSecond = 128000;
-
-        if (window.api.sendDebugLog) window.api.sendDebugLog(`Starting recording: ${finalW}x${finalH} @ ${fps}fps, ${bitrate/1000000}Mbps, audio: ${hasAudio ? audioTracks.length + ' src' : 'none'}, Mime: ${options.mimeType}`);
-
-        state.mediaRecorder = new MediaRecorder(recordStream, options);
-
-        // blob→ArrayBuffer is async, so a bare `await` in ondataavailable could let the
-        // FINAL chunk's IPC slip out after record-stop. Queue every read and have onstop
-        // await the queue — IPC from one renderer is FIFO, so once all recordChunk sends
-        // are issued, recordStop is guaranteed to arrive after them.
-        const pendingChunks = [];
-        state.mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-                pendingChunks.push(
-                    e.data.arrayBuffer()
-                        .then(buf => window.api.recordChunk(buf))
-                        .catch(err => console.error('Chunk read failed:', err))
-                );
-            }
-        };
-        state.mediaRecorder.onstop = async () => {
-            stopAudioCapture();
-            try { await Promise.all(pendingChunks); } catch (err) { }
-            window.api.recordStop();
-        };
-
-        const drawLoop = () => {
-            if (state.isRecording) {
-                const r = state.selectionRect;
-                // Ensure drawImage source coordinates are within video metadata limits
-                const sw = Math.min(Math.floor(r.w * sx), Math.floor(video.videoWidth));
-                const sh = Math.min(Math.floor(r.h * sy), Math.floor(video.videoHeight));
-                
-                if (sw > 0 && sh > 0) {
-                    cropCtx.drawImage(video,
-                        Math.floor(r.x * sx), Math.floor(r.y * sy), sw, sh,
-                        0, 0, cropCanvas.width, cropCanvas.height);
-                }
-                requestAnimationFrame(drawLoop);
-            } else { stream.getTracks().forEach(t => t.stop()); }
-        };
+        await window.api.recordStart(rect);
 
         state.isRecording = true;
-        window.api.recordStart();
-        state.mediaRecorder.start(1000);
-        drawLoop();
-
         document.body.classList.add('is-recording');
-        btnRecord.classList.add('hidden');
-        btnFullscreen.classList.add('hidden');
-        if (btnResetSize) btnResetSize.classList.add('hidden');
-        if (qualitySelect) qualitySelect.classList.add('hidden');
-        if (qualityLabel) qualityLabel.classList.add('hidden');
-        if (btnMic) btnMic.classList.add('hidden');
-        if (btnSystemAudio) btnSystemAudio.classList.add('hidden');
-        btnStop.classList.remove('hidden');
-        timerElement.classList.remove('hidden');
-        selectionBox.classList.add('recording-border');
-
-        canvas.style.pointerEvents = 'none';
-        overlay.style.display = 'none';
         selectionBox.style.pointerEvents = 'none';
         document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
         canvas.style.display = 'none';
@@ -532,25 +358,24 @@ async function startRecording() {
             timerElement.textContent = `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
         }, 1000);
 
-        state.lastIgnoreState = true;
-        window.api.setIgnoreMouseEvents(true, { forward: true });
+        reportToolbarHitArea();
 
     } catch (e) {
         console.error(t('Kayıt hatası:'), e);
-        // Surface the failure and reset to a retryable state. The UI changes above only
-        // run after a successful setup, so the Record button is still visible here.
+        // Hatayı göster ve yeniden denenebilir duruma dön. Yukarıdaki UI değişiklikleri
+        // yalnız başarılı kurulumdan sonra çalışıyor, yani Kaydet düğmesi hâlâ görünür.
         state.isRecording = false;
-        state.mediaRecorder = null;
-        stopAudioCapture();
         alert('Kayıt başlatılamadı: ' + (e && e.message ? e.message : e));
     }
 }
 
 function stopRecording() {
     state.isRecording = false;
-    state.mediaRecorder.stop();
+    // Ana süreç akışı durduruyor, mux'un kapanmasını bekliyor ve kaydetme panelini
+    // açıyor. Renderer'ın elinde tutulan kare/parça YOK.
+    window.api.recordStop();
     clearInterval(state.timerInterval);
-    window.api.setIgnoreMouseEvents(false);
+    reportToolbarHitArea();
     document.body.classList.remove('is-recording');
     selectionBox.style.display = 'none';
     canvas.style.display = 'block';

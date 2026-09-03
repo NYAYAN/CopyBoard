@@ -67,9 +67,11 @@ pub fn create(
         },
     )?;
 
-    // Monitörün TAM alanına yerleştir (çalışma alanı değil).
-    if let Err(e) = crate::geom::place(&window, monitor.x, monitor.y, monitor.width, monitor.height) {
+    // Monitörün TAM alanına yerleştir (çalışma alanı değil) — hedef monitörün KENDİ
+    // ölçeğiyle, fiziksel piksel cinsinden (karışık DPI, bkz. geom::physical_rect).
+    if let Err(e) = crate::geom::place_on_monitor(&window, monitor) {
         log::warn!("{leaked}: overlay konumlandırılamadı: {e}");
     }
+    crate::capture::remember_overlay(app, &label, monitor);
     Ok(window)
 }

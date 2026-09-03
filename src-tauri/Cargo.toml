@@ -51,9 +51,32 @@ block2 = "0.6"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_System_DataExchange",
+    # Uyku/ekran kapanması bildirimleri (platform/windows/power.rs)
+    "Win32_System_Power",
+    "Win32_System_SystemServices",
+    # OS açık/koyu tema tercihi (platform/windows/theme.rs)
+    "Win32_System_Registry",
+    # Monitör → HMONITOR (capture/recorder_win.rs, scroll_stream_win.rs)
+    "Win32_Graphics_Gdi",
+    # Video+ses mp4 yazımı: Media Foundation Sink Writer (capture/mf_writer.rs)
+    "Win32_Media_MediaFoundation",
+    # Mikrofon ve sistem sesi (loopback): WASAPI (capture/wasapi.rs)
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
+    "Win32_System_Com",
+    "Win32_System_Performance",
+    # IMMDevice::Activate, PROPVARIANT parametresi yüzünden şu iki özelliğe kapılı;
+    # kapalıyken metot hiç derlenmiyor ("no method named Activate")
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
+# Video kaydı ve kaydırmalı yakalama kare akışı: Windows.Graphics.Capture (kare) +
+# Media Foundation (H.264/MP4 kodlama). macOS'taki ScreenCaptureKit'in karşılığı.
+# Windows 10 1903+ ister; crate kendi `windows` 0.61'ini getiriyor (bizimki 0.62,
+# iki sürüm yan yana derleniyor).
+windows-capture = "1.5"
 
 # Debug'da bağımlılıkları optimize et: Spike-3'te `image` crate'inin debug build'i
 # release'ten 85 KAT yavaş çıktı (PNG encode 2890ms → 34ms). Kendi kodumuz

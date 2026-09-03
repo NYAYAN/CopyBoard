@@ -2,8 +2,13 @@
 
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::Manager;
+// Kaydetme paneli ve Escape işleyicisi yalnız kayıt/kaydırma olan platformlarda
+// (macOS: ScreenCaptureKit, Windows: Windows.Graphics.Capture) kullanılıyor.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use tauri_plugin_global_shortcut::ShortcutState;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut};
 
 use crate::state::AppState;
 
@@ -51,7 +56,7 @@ pub fn ensure_mic_permission() -> bool {
 
 /// Seçilen bölgenin kaydını başlatır. `rect` FİZİKSEL piksel.
 #[tauri::command]
-pub fn record_start(
+pub async fn record_start(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     x: f64,
@@ -59,14 +64,14 @@ pub fn record_start(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (x, y, width, height, &window);
         crate::windows::toast::show(&app, "Video kaydı bu platformda henüz taşınmadı.", "error");
         return Err("desteklenmiyor".into());
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let label = window.label().to_string();
         let index = label.rsplit('-').next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
@@ -107,14 +112,19 @@ pub fn record_start(
 }
 
 /// Kaydı durdurur, kullanıcıya nereye kaydedeceğini sorar.
+///
+/// `async`: `Recording::stop()` mux'un dosyayı kapatmasını 5 sn'ye kadar yoklayarak
+/// bekliyor. Senkron komut ana thread'de koştuğu için bu süre boyunca tüm pencereler,
+/// toast ve tepsi donuyordu. Electron'da aynı iş asenkrondu (`endVideoStream` geri
+/// çağrısı + `await showSaveDialog`).
 #[tauri::command]
-pub fn record_stop(app: tauri::AppHandle) {
-    #[cfg(not(target_os = "macos"))]
+pub async fn record_stop(app: tauri::AppHandle) {
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = &app;
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let taken = app
             .state::<crate::capture::recorder::RecorderState>()
@@ -128,8 +138,14 @@ pub fn record_stop(app: tauri::AppHandle) {
         // Kaydedici penceresini HEMEN gizle ki kaydetme panelinin önünü kapatmasın.
         crate::windows::hide_if_open(&app, &label);
 
-        let temp = match recording.stop() {
-            Ok(p) => p,
+        let stopped = tauri::async_runtime::spawn_blocking(move || recording.stop()).await;
+        let temp = match stopped {
+            Ok(Ok(p)) => p,
+            Ok(Err(e)) => {
+                crate::windows::toast::show(&app, &format!("Hata: Video verisi alınamadı ({e})"), "error");
+                crate::capture::close_all(&app, None);
+                return;
+            }
             Err(e) => {
                 crate::windows::toast::show(&app, &format!("Hata: Video verisi alınamadı ({e})"), "error");
                 crate::capture::close_all(&app, None);
@@ -195,7 +211,7 @@ fn escape_shortcut() -> Shortcut {
 /// Escape TAM OLARAK kaydırma evresi boyunca global olarak kaydediliyor. İnvaziv
 /// (Escape öndeki uygulamaya ait), o yüzden evreden çıkan her yol onu bırakıyor.
 #[tauri::command]
-pub fn scroll_begin(
+pub async fn scroll_begin(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     x: f64,
@@ -204,14 +220,14 @@ pub fn scroll_begin(
     height: f64,
     channel: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (x, y, width, height, channel, &window);
         crate::windows::toast::show(&app, "Kaydırmalı yakalama bu platformda henüz taşınmadı.", "error");
         return Err("desteklenmiyor".into());
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let label = window.label().to_string();
         let index = label.rsplit('-').next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
@@ -240,7 +256,9 @@ pub fn scroll_begin(
         SCROLL_OWNS_ESCAPE.store(true, Ordering::Release);
         let _ = app.global_shortcut().on_shortcut(escape_shortcut(), move |_a, _s, e| {
             if e.state == ShortcutState::Pressed {
-                crate::capture::close_all(&handle, None);
+                // `close_all` → `teardown_streams` Escape'i kaldırıyor; işleyici içinde
+                // yapılırsa eklentinin kilidi ikinci kez alınır (bkz. `shortcuts::defer_to_main`).
+                crate::shortcuts::defer_to_main(&handle, |h| crate::capture::close_all(h, None));
             }
         });
         Ok(())
@@ -248,7 +266,7 @@ pub fn scroll_begin(
 }
 
 #[tauri::command]
-pub fn scroll_end(app: tauri::AppHandle) {
+pub async fn scroll_end(app: tauri::AppHandle) {
     teardown_streams(&app);
 }
 
@@ -268,7 +286,7 @@ pub fn teardown_streams(app: &tauri::AppHandle) {
         // Seçici hâlâ açıksa Escape'i ona geri ver.
         crate::windows::quickpaste::rearm_escape_if_visible(app);
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         if let Some(mut s) = app
             .state::<crate::capture::scroll_stream::ScrollState>()

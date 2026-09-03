@@ -21,7 +21,9 @@ jobs:
         include:
           - platform: macos-latest      # Apple Silicon
             args: '--target aarch64-apple-darwin'
-          - platform: macos-13          # Intel
+          # `macos-13` 2025-12'de emekli edildi (actions/runner-images#13046);
+          # Intel yapısı için GitHub'ın kalan Intel imajı bu.
+          - platform: macos-15-intel    # Intel
             args: '--target x86_64-apple-darwin'
           - platform: windows-latest
             args: ''
@@ -33,7 +35,7 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-15-intel' && 'x86_64-apple-darwin' || '' }}
 
       # tesseract-rs, Tesseract + Leptonica'yı KAYNAKTAN derliyor. Önbelleksiz ilk
       # derleme uzun sürüyor; bu önbellek onu ~3 dakikaya indiriyor.
@@ -59,7 +61,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # `tauri signer generate` ile üretilir; özel anahtar ASLA depoya girmez.
-          # Ayarlanmadıklarında imzasız yapı üretilir ve güncelleyici çalışmaz.
+          # `bundle.createUpdaterArtifacts` açık olduğu için bu ikisi ZORUNLU:
+          # ayarlanmadıklarında `tauri build` imza adımında hata verir. Karşılığında
+          # tauri-action `.sig` dosyalarını ve `latest.json`ı release'e ekler —
+          # güncelleyicinin çalışması için ikisi de gerekli (bkz. SIGNING.md).
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:

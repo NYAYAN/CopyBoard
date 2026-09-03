@@ -38,14 +38,29 @@ npx tauri build --bundles app
    ```
 
 4. CI (`.github/workflows/release.yml`) üç yapı üretir — macOS arm64, macOS x64,
-   Windows — ve bir **taslak** release'e ekler. `latest.json` da oraya konur
-   (güncelleyici bunu okuyor).
+   Windows — ve bir **taslak** release'e ekler. `latest.json` ve `.sig` dosyaları da
+   oraya konur (güncelleyici bunları okuyor) — **yalnız** imza secret'ları tanımlıysa;
+   değilse Windows/macOS yapıları imza adımında düşer (bkz. [SIGNING.md](SIGNING.md)).
 5. Taslağı gözden geçirip yayınla.
 
 ## Güncelleyici
 
-`plugins.updater.pubkey` boşsa güncelleme kontrolü temiz bir hata verir; uygulama
-normal çalışır. Anahtar kurulumu için [SIGNING.md](SIGNING.md).
+`plugins.updater.pubkey` boşsa güncelleyici "yapılandırılmamış" sayılır: açılış
+kontrolü atlanır, elle kontrol bir uyarı toast'ı gösterir; uygulama normal çalışır.
+Anahtar kurulumu için [SIGNING.md](SIGNING.md).
+
+Windows'ta akış Electron'daki gibi: indir → "İndirme Tamamlandı" → 3-2-1 geri sayım
+(Daha Sonra ile iptal edilebilir) → NSIS sessiz kurulum ve yeniden başlatma.
+
+## Günlük dosyası
+
+Kullanıcıdan sorun kaydı isterken:
+
+* macOS: `~/Library/Logs/com.nurullahyayan.copyboard/copyboard.log`
+* Windows: `%LOCALAPPDATA%\com.nurullahyayan.copyboard\logs\copyboard.log`
+
+Dosya 4 MB'a kadar büyür, dolunca sıfırlanır; renderer'ın `console.warn/error`
+çıktıları da buraya düşer.
 
 ## v2 (Electron) → v3 (Tauri) geçişi
 

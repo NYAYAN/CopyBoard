@@ -59,7 +59,7 @@ Düzeltme: `set_focusable(false)` → `show()` → `set_focusable(true)` (tao yo
 | # | Akış | Yöntem | Sonuç |
 |---|------|--------|-------|
 | 1 | Derleme (`cargo check --all-targets`) | win-env | ✓ temiz |
-| 2 | Rust testleri (`cargo test`) | win-env | ✓ 69/69 |
+| 2 | Rust testleri (`cargo test`) | win-env | ✓ 72/72 |
 | 3 | JS testleri (`npm test`) | node | ✓ 52/52 |
 | 4 | Electron verisi göçü | log | ✓ 400 geçmiş, 8 favori, 30 görüntü; kaynak dizine dokunulmadı |
 | 5 | Global kısayollar (7) | log | ✓ Electron kapalıyken 7/7 kayıtlı; Electron açıkken 0/7 ("başka uygulama almış" uyarısı doğru) |
@@ -80,10 +80,12 @@ Düzeltme: `set_focusable(false)` → `show()` → `set_focusable(true)` (tao yo
 | 17c | Kaydırma akışı (WGC → kırpılmış RGBA → Channel) kare sayısı | --qa | ✓ 26–27 kare / 2 sn |
 | 17d | Uzun kayıt bellek: `--record-test=ultra,20` sesli, WorkingSet 4 sn'de bir | ölçüm | ✓ 155–158 MB sabit (önce: DISABLE_THROTTLING ile 2,3 GB/30 sn; sessiz loopback'te karıştırıcı ilk paketi bekleyip yazıcıyı tıkıyordu) |
 | 18 | OS tema tercihi (kayıt defteri) | --qa | ✓ |
-| 19 | Olay hedefleme: başka pencereye `emit_to` → bu pencereye sızmamalı; kendi etiketi ve `emit` yayını ulaşmalı (A11 kök nedeni) | --qa 9b-2 | ✓ 3/3 |
 | 19 | Uyku / ekran kapanma bildirimleri | gerçek uyku | ✓ "ekran kapandı → yoklama durdu → uyanıldı → sürdü" |
 | 20 | Pencere konumları Electron ile | Win32 | ✓ widget 1509,287 401×65 ve ana 1540,592 birebir |
 | 21 | Tema "light" göçü → görüntüleyici açık tema | ekran | ✓ |
+| 22 | Olay hedefleme: başka pencereye `emit_to` → bu pencereye sızmamalı; kendi etiketi ve `emit` yayını ulaşmalı (A11 kök nedeni) | --qa 9b-2 | ✓ 3/3 |
+| 23 | Kaydırmalı yakalama arayüz akışı: sentetik seçim → Enter (Başlat) → hemen Enter (Bitir) → tekrar Başlat → Bitir (A12) | --qa 9d | ✓ 10/10 — seçim evresine dönüş, akış bırakıldı, yeniden kuruldu, inceleme evresi |
+| 24 | Video arayüz akışı: Kayıt düğmesi → RecorderState → dosya (A13/B6) | --qa 9e | ✓ 4/4 |
 
 ## Manuel test bekleyenler (renderer tıklaması gerektirir)
 
@@ -101,9 +103,8 @@ Düzeltme: `set_focusable(false)` → `show()` → `set_focusable(true)` (tao yo
 
 - Ana pencerenin dış dikdörtgeni 366×559 (Electron 350×550): çerçevesiz pencereye
   Windows'un eklediği görünmez yeniden boyutlandırma kenarı. İçerik 350×550.
-- Video kaydı Windows'ta sessiz: mikrofon/sistem sesi henüz yok (WASAPI işi bekliyor);
-  ayarda ses açıksa kayıt başında uyarı toast'ı çıkıyor. Çıktı mp4/H.264, kalite
-  kademesi bit hızına eşleniyor (ultra 16, high 10, medium 5, low 2,5 Mbps).
+- Video kaydı Windows'ta mp4/H.264 + AAC (mikrofon + sistem sesi WASAPI ile); kalite kademesi
+  bit hızına eşleniyor (ultra 16, high 10, medium 5, low 2,5 Mbps).
 - Aynı makinede Electron sürümü çalışıyorsa kısayollar ona kalır; tepsi menüsü ve widget
   her zaman çalışır.
 

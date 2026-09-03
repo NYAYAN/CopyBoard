@@ -255,6 +255,40 @@ pub fn place(window: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> R
     }
 }
 
+/// Bir monitörün TAMAMINI kaplayacak pencere (yakalama overlay'i) için FİZİKSEL dikdörtgen.
+///
+/// Windows'ta monitör başına mantıksal uzay tutarlı bir dünya uzayı DEĞİL (bkz.
+/// [`cursor_position`] notu). [`place`] hedef ölçeği "bu noktayı içeren monitör"den
+/// buluyor; karışık DPI'da ikinci monitörün mantıksal köşesi birincinin mantıksal
+/// dikdörtgenine düşebilir (ör. %100 birincil 0..1920 + %150 ekran fiziksel x=1920 →
+/// mantıksal x=1280) ve yanlış ölçekle çarpılan overlay BİRİNCİ monitörün üstüne
+/// yerleşir: ikinci ekranda overlay yok, birincide iki overlay üst üste — seçim
+/// yapılamaz. Hedef monitör bilindiğinde ölçek de bilinir; aramaya gerek yok.
+pub fn physical_rect(m: &MonitorInfo) -> (i32, i32, u32, u32) {
+    let (w, h) = m.physical_size();
+    ((m.x * m.scale).round() as i32, (m.y * m.scale).round() as i32, w, h)
+}
+
+/// Pencereyi verilen monitörün tamamına yerleştirir. Windows'ta konum VE boyut fiziksel
+/// verilir — `set_size(LogicalSize)` pencerenin o anki ölçeğine bağlı, ve gizli bir
+/// pencere monitör değiştirirken bu ölçek geç güncellenebilir.
+pub fn place_on_monitor(window: &tauri::WebviewWindow, m: &MonitorInfo) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let (x, y, w, h) = physical_rect(m);
+        let pos = PhysicalPosition::new(x, y);
+        let size = tauri::PhysicalSize::new(w, h);
+        window
+            .set_position(pos)
+            .map_err(|e| format!("set_position({pos:?}): {e}"))?;
+        return window
+            .set_size(size)
+            .map_err(|e| format!("set_size({size:?}): {e}"));
+    }
+    #[cfg(not(target_os = "windows"))]
+    place(window, m.x, m.y, m.width, m.height)
+}
+
 /// Bir dikdörtgeni monitörün kullanılabilir alanına sıkıştırır (Electron'daki
 /// `ensureWidgetInBounds` ve quick-paste konumlandırmasının ortak parçası).
 pub fn clamp_to_work_area(m: &MonitorInfo, x: f64, y: f64, w: f64, h: f64, margin: f64) -> (f64, f64) {
@@ -277,6 +311,19 @@ mod tests {
             scale,
             name: None,
         }
+    }
+
+    #[test]
+    fn overlay_dikdortgeni_monitorun_kendi_olcegiyle_hesaplanir() {
+        // %100 birincil (0,0) 1920x1200 + %150 dizüstü ekranı fiziksel x=1920'de
+        // (tao mantıksal x'i kendi ölçeğiyle verir: 1920/1.5 = 1280).
+        let a = mon(0.0, 0.0, 1920.0, 1200.0, 1.0);
+        let b = mon(1280.0, 0.0, 1280.0, 720.0, 1.5);
+        assert_eq!(physical_rect(&a), (0, 0, 1920, 1200));
+        assert_eq!(physical_rect(&b), (1920, 0, 1920, 1080));
+        // Hatanın kaynağı: b'nin mantıksal köşesi a'nın mantıksal dikdörtgeninin İÇİNDE —
+        // nokta araması a'yı (×1) seçer ve overlay fiziksel 1280'e, yani a'nın üstüne düşer.
+        assert!(a.contains(b.x, b.y));
     }
 
     #[test]

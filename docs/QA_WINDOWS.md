@@ -80,6 +80,7 @@ Düzeltme: `set_focusable(false)` → `show()` → `set_focusable(true)` (tao yo
 | 17c | Kaydırma akışı (WGC → kırpılmış RGBA → Channel) kare sayısı | --qa | ✓ 26–27 kare / 2 sn |
 | 17d | Uzun kayıt bellek: `--record-test=ultra,20` sesli, WorkingSet 4 sn'de bir | ölçüm | ✓ 155–158 MB sabit (önce: DISABLE_THROTTLING ile 2,3 GB/30 sn; sessiz loopback'te karıştırıcı ilk paketi bekleyip yazıcıyı tıkıyordu) |
 | 18 | OS tema tercihi (kayıt defteri) | --qa | ✓ |
+| 19 | Olay hedefleme: başka pencereye `emit_to` → bu pencereye sızmamalı; kendi etiketi ve `emit` yayını ulaşmalı (A11 kök nedeni) | --qa 9b-2 | ✓ 3/3 |
 | 19 | Uyku / ekran kapanma bildirimleri | gerçek uyku | ✓ "ekran kapandı → yoklama durdu → uyanıldı → sürdü" |
 | 20 | Pencere konumları Electron ile | Win32 | ✓ widget 1509,287 401×65 ve ana 1540,592 birebir |
 | 21 | Tema "light" göçü → görüntüleyici açık tema | ekran | ✓ |

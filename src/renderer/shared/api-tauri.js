@@ -31,7 +31,28 @@
         return;
     }
     const { invoke, Channel } = tauri.core;
-    const { listen } = tauri.event;
+    const { listen: rawListen } = tauri.event;
+
+    // ── Olay hedefi: yalnız BU pencere ─────────────────────────────────────
+    // `listen()` varsayılan hedefi `{ kind: 'Any' }` ve Tauri'de Any dinleyici HER
+    // olayı alıyor — başka bir pencereye `emit_to` ile gönderilenleri de
+    // (tauri/src/event/listener.rs: `target == Any || filter(target)`). Bunun bedeli
+    // çok monitörde çıktı (A11): bir overlay'de seçim başlayınca DİĞER overlay'lere
+    // yollanan `capture-reset` seçimi başlatan pencereye de geliyor ve seçimi anında
+    // sıfırlıyordu; her overlay üç `capture-screen` alıp yanlış boyutla yeniden
+    // kuruluyordu. Tek monitörde başka overlay olmadığı için hiç görülmedi.
+    // Hedef bu pencerenin etiketi (`AnyLabel`): `emit_to(label)` yalnız ona ulaşır,
+    // `emit()` yayını herkese ulaşmaya devam eder.
+    const LISTEN_TARGET = (() => {
+        try {
+            const label = tauri.webviewWindow?.getCurrentWebviewWindow?.().label
+                ?? tauri.window?.getCurrentWindow?.().label;
+            return label ? { target: { kind: 'AnyLabel', label } } : undefined;
+        } catch (e) {
+            return undefined;
+        }
+    })();
+    const listen = (event, handler) => rawListen(event, handler, LISTEN_TARGET);
 
     // ── Renderer hatalarını ana sürecin günlüğüne yönlendir ──────────────────
     // Webview konsolu paketlenmiş uygulamada hiçbir yere bakmıyor: bir renderer

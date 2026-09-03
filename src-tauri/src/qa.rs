@@ -268,6 +268,52 @@ pub fn run(app: tauri::AppHandle) {
                 for id in ids { on_main(&app, move |h| crate::clipboard::history::delete(h, &id)); }
             }
 
+            // ── 9b-2. Olay hedefleme: başka pencereye giden olay bu pencereye SIZMAMALI ──
+            // Tauri'de `listen()` varsayılanı Any ve Any dinleyici her `emit_to`yu alıyor;
+            // `api-tauri.js` bu yüzden kendi etiketini hedef veriyor. Çok monitörde
+            // `capture-reset` seçimi başlatan overlay'e de gidip seçimi sıfırlıyordu (A11).
+            {
+                let evt_probe = format!("QA-EVT-{}", std::process::id());
+                let script = format!(
+                    "window.__qaEvt = 0; window.api.onCaptureReset(() => {{ window.__qaEvt++; window.api.copyText({} + '-' + window.__qaEvt); }});",
+                    serde_json::json!(evt_probe)
+                );
+                on_main(&app, move |h| {
+                    if let Some(w) = h.get_webview_window("main") {
+                        let _ = w.eval(&script);
+                    }
+                });
+                sleep(400);
+                // Başka pencereye (widget) hedeflenen olay ana pencereye ulaşmamalı.
+                let widget_up = on_main(&app, |h| h.get_webview_window("widget").is_some()).unwrap_or(false);
+                on_main(&app, |h| crate::windows::emit_to(h, "widget", "capture-reset", ()));
+                sleep(600);
+                let leaked = crate::platform::clipboard_read_text()
+                    .map(|t| t.starts_with(&evt_probe))
+                    .unwrap_or(false);
+                check(widget_up && !leaked, &format!("başka pencereye giden olay bu pencereye sızmadı (widget var: {widget_up})"));
+                // Kendi etiketine hedeflenen olay ulaşmalı.
+                on_main(&app, |h| crate::windows::emit_to(h, "main", "capture-reset", ()));
+                sleep(600);
+                let got = crate::platform::clipboard_read_text();
+                check(got.as_deref() == Some(format!("{evt_probe}-1").as_str()), &format!("kendi etiketine giden olay ulaştı (okunan: {got:?})"));
+                // Yayın (emit) herkese ulaşmalı — tema değişikliği ve kaydetme paneli bu yolu kullanıyor.
+                on_main(&app, |h| crate::windows::emit_all(h, "capture-reset", ()));
+                sleep(600);
+                let got = crate::platform::clipboard_read_text();
+                check(got.as_deref() == Some(format!("{evt_probe}-2").as_str()), &format!("yayın (emit) olayı ulaştı (okunan: {got:?})"));
+                // Deneme kayıtlarını temizle.
+                {
+                    let ids: Vec<String> = {
+                        let st = app.state::<AppState>();
+                        crate::clipboard::history::history(&st.store).iter()
+                            .filter(|i| i.get("content").and_then(|c| c.as_str()).map(|c| c.starts_with(&evt_probe)).unwrap_or(false))
+                            .filter_map(|i| i.get("id").and_then(|v| v.as_str()).map(str::to_string)).collect()
+                    };
+                    for id in ids { on_main(&app, move |h| crate::clipboard::history::delete(h, &id)); }
+                }
+            }
+
             // ── 9c. Güncelleyici: pubkey boşken elle kontrol uyarı toast'ı vermeli ──
             {
                 let configured = crate::updater::is_configured(&app);

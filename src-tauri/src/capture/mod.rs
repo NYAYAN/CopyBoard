@@ -58,6 +58,9 @@ pub fn elapsed_since_begin_ms() -> Option<u128> {
 
 #[derive(Default)]
 pub struct CaptureState {
+    /// Overlay etiketi → kapladığı monitör. `snip_ready` gösterimden sonra dikdörtgeni
+    /// yeniden uygular ve gerçekleşen konumu günlükler (çok monitör tanısı).
+    overlays: Mutex<HashMap<String, geom::MonitorInfo>>,
     /// Pencere etiketi → o pencereye ait kare.
     frames: Mutex<HashMap<String, screenshot::Frame>>,
     /// Pencere etiketi → kaç kez yeniden yakalama istendi.
@@ -140,6 +143,17 @@ pub fn start(app: &tauri::AppHandle, mode: &str) {
         return;
     }
     let multi = monitors.len() > 1;
+    if multi {
+        let desc: Vec<String> = monitors
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let (x, y, w, h) = geom::physical_rect(m);
+                format!("{i}: ({x},{y}) {w}x{h} ×{:.2} {}", m.scale, m.name.as_deref().unwrap_or("?"))
+            })
+            .collect();
+        log::info!("çok monitör yakalama: {}", desc.join(" | "));
+    }
 
     // Yakalama sırasında widget yakalanan görüntüye girmemeli.
     crate::windows::hide_if_open(app, "widget");
@@ -389,6 +403,23 @@ pub async fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) 
 pub async fn snip_ready(window: tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
+    // Karışık DPI güvencesi + tanı: gösterim sırasında gelen DPI değişimi pencereyi
+    // yeniden boyutlandırmış olabilir; hedef dikdörtgeni yeniden uygula ve gerçekleşen
+    // konum/boyutu günlüğe yaz (çok monitörde "seçim yapılamıyor" raporları için).
+    let app = window.app_handle().clone();
+    let target = app.state::<CaptureState>().overlays.lock().unwrap().get(window.label()).cloned();
+    if let Some(m) = target {
+        if let Err(e) = geom::place_on_monitor(&window, &m) {
+            log::warn!("{}: yeniden yerleştirme başarısız: {e}", window.label());
+        }
+        let (x, y, w, h) = geom::physical_rect(&m);
+        let got_pos = window.outer_position().map(|p| (p.x, p.y)).unwrap_or((i32::MIN, i32::MIN));
+        let got_size = window.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0));
+        log::info!(
+            "overlay {}: hedef fiziksel ({x},{y}) {w}x{h} ×{:.2} → gerçek konum {:?} boyut {:?}",
+            window.label(), m.scale, got_pos, got_size
+        );
+    }
 }
 
 /// Bir monitörde yeni seçim başladı → DİĞER monitörlere seçimlerini temizlemelerini
@@ -447,6 +478,11 @@ pub fn close_all_except(app: &tauri::AppHandle, keep: &str) {
 /// bağlıydı — dosyanın kendi yorumu şart koşuyordu: "evreden çıkan HER yol — bitiş,
 /// iptal, pencere kapandı, çıkış — onu bırakır". Akış artık Rust tarafında yaşadığı
 /// için pencerenin kapanması onu KENDİLİĞİNDEN durdurmuyor; teardown buraya taşındı.
+/// Overlay hangi monitörü kaplıyor — `snip_ready` yeniden yerleştirme ve tanı için.
+pub fn remember_overlay(app: &tauri::AppHandle, label: &str, m: &geom::MonitorInfo) {
+    app.state::<CaptureState>().overlays.lock().unwrap().insert(label.to_string(), m.clone());
+}
+
 pub fn finish(app: &tauri::AppHandle) {
     // Kaydırma akışı + onun global Escape'i
     crate::commands::record::teardown_streams(app);
@@ -457,6 +493,7 @@ pub fn finish(app: &tauri::AppHandle) {
     let cs = app.state::<CaptureState>();
     cs.frames.lock().unwrap().clear();
     cs.retries.lock().unwrap().clear();
+    cs.overlays.lock().unwrap().clear();
     // Kaydetme paneli overlay'le birlikte gittiyse kilidi de bırak.
     crate::commands::capture::reset_save_guard();
 

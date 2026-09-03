@@ -114,8 +114,17 @@ pub fn build(app: &tauri::AppHandle, spec: WindowSpec) -> Result<WebviewWindow, 
         return Ok(existing);
     }
 
-    let os_is_dark = true; // ilk pencere için varsayım; aşağıda gerçek değerle düzeltilir
+    // `theme: 'system'` için OS görünümü. Var olan bir pencereden (`Window::theme()`)
+    // ya da pencere yoksa doğrudan OS'tan (`platform::os_prefers_dark_hint`). İlk hâli
+    // burada `true` sabitliyordu ve "aşağıda düzeltilir" diyordu — düzelten kod yoktu;
+    // açık temalı bir OS'ta Sistem modu her pencereyi koyu açıyordu.
+    let os_is_dark = crate::commands::core::os_prefers_dark(app);
     let mut b = WebviewWindowBuilder::new(app, spec.label, WebviewUrl::App(spec.url.into()))
+        // Başlık çerçevesiz pencerede görünmüyor ama BOŞ DEĞİL: kaydedici ve kaydırma
+        // akışı, kendi overlay'lerini kayıttan dışlamak için ScreenCaptureKit'e
+        // "başlığı CopyBoard içeren pencereler" filtresi veriyor. Başlık verilmezse
+        // wry "Tauri App" yazıyor ve o filtre hiçbir pencereyi yakalamıyordu.
+        .title("CopyBoard")
         .initialization_script(boot_script(app, os_is_dark))
         .inner_size(spec.width, spec.height)
         .decorations(spec.decorations)

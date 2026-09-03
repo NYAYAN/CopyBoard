@@ -113,7 +113,10 @@ pub fn add(app: &tauri::AppHandle, content: &str) {
 pub fn delete(app: &tauri::AppHandle, id: &str) {
     let state = app.state::<AppState>();
     let mut removed = false;
-    state.store.update("history", Vec::<Value>::new(), |items: &mut Vec<Value>| {
+    // Kullanıcı eylemi: ANINDA yaz (Electron `store.set('history', …)`); yalnız
+    // izleyicinin eklemesi geciktiriliyor. Geciktirilirse 500 ms içinde bir zorla
+    // kapanış silinen kaydı geri getiriyordu.
+    state.store.update_now("history", Vec::<Value>::new(), |items: &mut Vec<Value>| {
         let before = items.len();
         items.retain(|i| i.get("id").and_then(|v| v.as_str()) != Some(id));
         removed = items.len() != before;
@@ -126,7 +129,7 @@ pub fn delete(app: &tauri::AppHandle, id: &str) {
 
 pub fn clear(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
-    state.store.set("history", Vec::<Value>::new());
+    state.store.set_now("history", Vec::<Value>::new());
     broadcast(app);
     let msg = crate::i18n::t(&state.store, "Geçmiş Temizlendi.");
     crate::windows::toast::show(app, &msg, "success");
@@ -137,7 +140,7 @@ pub fn trim_to_max(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
     let max = state.settings().max_items().max(1) as usize;
     let mut trimmed = false;
-    state.store.update("history", Vec::<Value>::new(), |items: &mut Vec<Value>| {
+    state.store.update_now("history", Vec::<Value>::new(), |items: &mut Vec<Value>| {
         trimmed = items.len() > max;
         if trimmed {
             items.truncate(max);
@@ -204,7 +207,7 @@ pub fn set_note(app: &tauri::AppHandle, id: &str, note: &str) {
     let mut touched = false;
 
     for key in ["favorites", "history"] {
-        state.store.update(key, Vec::<Value>::new(), |items: &mut Vec<Value>| {
+        state.store.update_now(key, Vec::<Value>::new(), |items: &mut Vec<Value>| {
             let mut changed = false;
             for item in items.iter_mut() {
                 if item.get("id").and_then(|v| v.as_str()) == Some(id) {
@@ -244,7 +247,7 @@ fn reorder_in_store(store: &Store, key: &str, incoming: Vec<Value>) -> bool {
         );
         return false;
     }
-    store.set(key, &incoming);
+    store.set_now(key, &incoming);
     true
 }
 

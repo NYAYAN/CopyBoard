@@ -72,10 +72,55 @@ pub fn order_front(window: &tauri::WebviewWindow) -> Result<(), String> {
     {
         macos::order_front(window)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
-        // Windows'ta always_on_top'u yeniden dayatmak HWND_TOPMOST'a taşıyor.
+        // `set_always_on_top(true)` tao'da bayrak FARKI olarak uygulanıyor: pencere
+        // zaten topmost ise hiçbir şey gönderilmiyor, yani `moveTop()` karşılığı
+        // değildi. `SetWindowPos(HWND_TOPMOST, SWP_NOACTIVATE)` topmost bandın
+        // EN ÖNÜNE taşıyor — odağa dokunmadan.
+        windows::order_front(window)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
         window.set_always_on_top(true).map_err(|e| e.to_string())
+    }
+}
+
+/// Pencereyi ODAK ÇALMADAN gösterir — Electron `showInactive()`.
+///
+/// Tauri'nin `show()`u macOS'ta `makeKeyAndOrderFront`, Windows'ta aktive eden bir
+/// `ShowWindow` yapıyor. Widget gibi yüzen bir araç kullanıcının yazdığı alandan odağı
+/// almamalı: açılışta, ayardan açılınca ve her yakalama bitiminde odak kayboluyordu.
+pub fn show_inactive(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::show_inactive(window)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows::show_inactive(window)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        window.show().map_err(|e| e.to_string())
+    }
+}
+
+/// OS görünümü koyu mu — PENCERE OLMADAN. İlk pencere kurulurken `Window::theme()`
+/// soracak bir pencere yok; `theme: 'system'` ilk karede doğru renkle açılabilsin diye
+/// OS'a doğrudan soruluyor. Bilinemiyorsa `None`.
+pub fn os_prefers_dark_hint() -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::os_prefers_dark_hint()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows::theme::os_prefers_dark()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        None
     }
 }
 
@@ -174,10 +219,11 @@ pub fn can_paste(prompt: bool) -> bool {
 }
 
 /// Uyku/ekran-kilidi bildirimlerini bağlar (Electron `powerMonitor`).
-/// macOS dışında sessizce hiçbir şey yapmaz — orada karşılığı henüz yazılmadı.
 pub fn install_power_observers(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     macos::power::install(app);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    windows::power::install(app);
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = app;
 }

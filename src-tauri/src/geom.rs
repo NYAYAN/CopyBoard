@@ -16,7 +16,7 @@
 //! açan sınıf hatalar üretir. **Kural: monitör verisi okunur okunmaz mantıksala çevrilir;
 //! fiziksele yalnız ekran YAKALAMA çağrılarında dönülür** (orada gerçekten piksel lazım).
 
-use tauri::{LogicalPosition, LogicalSize, Monitor, PhysicalPosition};
+use tauri::{LogicalSize, Monitor, PhysicalPosition};
 
 /// Bir monitörün mantıksal koordinatlardaki hâli.
 #[derive(Clone, Debug, PartialEq)]
@@ -114,9 +114,35 @@ pub fn primary_monitor(app: &tauri::AppHandle) -> Option<MonitorInfo> {
 /// eşleşip yanlış bölene düşüyordu; sonuç iki kat sapmış bir imleç konumu, yani
 /// yanlış monitörde açılan toast ve yanlış yere konumlanan hızlı yapıştır.
 ///
-/// Doğru dönüşüm koşulsuz: `fiziksel / birincil_ölçek`.
+/// macOS'ta doğru dönüşüm koşulsuz: `fiziksel / birincil_ölçek`.
+///
+/// ## Windows: monitör başına mantıksal uzay
+///
+/// Windows'ta global uzay FİZİKSEL pikseldir ve tao imleci de fiziksel verir; tek biçimli
+/// bir "nokta" ızgarası yoktur. [`MonitorInfo::from`] her monitörü KENDİ ölçeğiyle
+/// mantıksala indiriyor; imleç de içinde bulunduğu monitörün ölçeğiyle indirilirse iki
+/// taraf aynı uzayda olur ve `monitor_nearest_point` doğru monitörü bulur. Birincil
+/// ölçekle bölmek, %150 dizüstü + %100 harici kurulumda toast'ı ve hızlı yapıştırı
+/// yanlış monitöre atıyordu. Aynı kural [`place`]te tersine uygulanıyor.
 pub fn cursor_position(app: &tauri::AppHandle) -> Option<(f64, f64)> {
     let p: PhysicalPosition<f64> = app.cursor_position().ok()?;
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(monitors) = app.available_monitors() {
+            let hit = monitors.iter().find(|m| {
+                let pos = m.position();
+                let size = m.size();
+                p.x >= pos.x as f64
+                    && p.x < (pos.x + size.width as i32) as f64
+                    && p.y >= pos.y as f64
+                    && p.y < (pos.y + size.height as i32) as f64
+            });
+            if let Some(m) = hit {
+                let s = m.scale_factor();
+                return Some((p.x / s, p.y / s));
+            }
+        }
+    }
     let scale = app
         .primary_monitor()
         .ok()
@@ -191,17 +217,42 @@ fn dist_to_rect(x: f64, y: f64, m: &MonitorInfo) -> f64 {
 /// [`MonitorInfo`] zaten her şeyi noktaya çevirdiği için buraya gelen değerler
 /// doğrudan kullanılabilir.
 ///
-/// > Windows notu: orada global uzay fiziksel pikseldir ve tao dönüşümü pencerenin
-/// > DPI'ıyla yapar. Karışık DPI'lı Windows kurulumları Faz 6'da ayrıca ölçülecek.
+/// > **Windows notu.** Orada global uzay fiziksel pikseldir ve tao `LogicalPosition`ı
+/// > pencerenin O ANKİ DPI'ıyla çevirir — pencere başka ölçekli bir monitöre taşınırken
+/// > yanlış çarpan. Bu yüzden Windows'ta konum, hedef noktanın monitörünün ölçeğiyle
+/// > FİZİKSELE çevrilip `PhysicalPosition` olarak veriliyor ([`cursor_position`]teki
+/// > "monitör başına mantıksal uzay"ın tersi). Sıra da ters: ÖNCE konum (Windows
+/// > `WM_DPICHANGED` gönderir, tao pencereyi yeni DPI'a oturtur), SONRA mantıksal
+/// > boyut — o anda `scale_factor()` artık yeni monitörünkidir.
 pub fn place(window: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> Result<(), String> {
     let size = LogicalSize::new(w, h);
-    let pos = LogicalPosition::new(x, y);
-    window
-        .set_size(size)
-        .map_err(|e| format!("set_size({size:?}): {e}"))?;
-    window
-        .set_position(pos)
-        .map_err(|e| format!("set_position({pos:?}): {e}"))
+
+    #[cfg(target_os = "windows")]
+    {
+        use tauri::Manager;
+        let scale = monitor_nearest_point(window.app_handle(), x, y)
+            .map(|m| m.scale)
+            .unwrap_or_else(|| window.scale_factor().unwrap_or(1.0));
+        let pos = PhysicalPosition::new((x * scale).round() as i32, (y * scale).round() as i32);
+        log::debug!("place({}): mantıksal ({x:.0},{y:.0}) ×{scale} → fiziksel {pos:?}", window.label());
+        window
+            .set_position(pos)
+            .map_err(|e| format!("set_position({pos:?}): {e}"))?;
+        return window
+            .set_size(size)
+            .map_err(|e| format!("set_size({size:?}): {e}"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let pos = tauri::LogicalPosition::new(x, y);
+        window
+            .set_size(size)
+            .map_err(|e| format!("set_size({size:?}): {e}"))?;
+        window
+            .set_position(pos)
+            .map_err(|e| format!("set_position({pos:?}): {e}"))
+    }
 }
 
 /// Bir dikdörtgeni monitörün kullanılabilir alanına sıkıştırır (Electron'daki

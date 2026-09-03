@@ -74,7 +74,20 @@ pub fn ensure(app: &tauri::AppHandle, image_w: f64, image_h: f64) -> Result<taur
         },
     )?;
     let _ = window.set_min_size(Some(tauri::LogicalSize::new(MIN_W, MIN_H)));
-    let _ = geom::place(&window, x, y, w, h);
+    // Önce göster, SONRA yerleştir: gizli pencereye verilen konum macOS'ta kayboluyor
+    // (bkz. `geom::place`). Toast, ana pencere ve hızlı yapıştır bu sıraya çoktan
+    // geçmişti; görüntüleyici ilk açılışta cascade konumunda açılıyordu.
+    if let Err(e) = window.show() {
+        log::warn!("görüntüleyici gösterilemedi: {e}");
+    }
+    if let Err(e) = geom::place(&window, x, y, w, h) {
+        log::warn!("görüntüleyici konumlandırılamadı: {e}");
+    }
+    log::debug!(
+        "görüntüleyici kuruldu: istenen ({x:.0},{y:.0}) {w:.0}x{h:.0}, görünür={:?}, konum={:?}",
+        window.is_visible(),
+        window.outer_position()
+    );
     Ok(window)
 }
 

@@ -31,36 +31,36 @@ pub fn set_hit_areas(
 }
 
 #[tauri::command]
-pub fn widget_action(app: tauri::AppHandle, action: String, data: Option<serde_json::Value>) {
+pub async fn widget_action(app: tauri::AppHandle, action: String, data: Option<serde_json::Value>) {
     crate::windows::widget::handle_action(&app, &action, data);
 }
 
 #[tauri::command]
-pub fn set_show_widget(app: tauri::AppHandle, value: bool) {
+pub async fn set_show_widget(app: tauri::AppHandle, value: bool) {
     app.state::<AppState>().settings().set_show_widget(value);
     crate::windows::widget::toggle(&app, value);
 }
 
 #[tauri::command]
-pub fn set_widget_transparent(app: tauri::AppHandle, value: bool) {
+pub async fn set_widget_transparent(app: tauri::AppHandle, value: bool) {
     app.state::<AppState>().settings().set_widget_transparent(value);
     crate::windows::widget::push_config(&app);
 }
 
 #[tauri::command]
-pub fn set_widget_color(app: tauri::AppHandle, value: String) {
+pub async fn set_widget_color(app: tauri::AppHandle, value: String) {
     app.state::<AppState>().settings().set_widget_color(value);
     crate::windows::widget::push_config(&app);
 }
 
 #[tauri::command]
-pub fn set_widget_opacity(app: tauri::AppHandle, value: i64) {
+pub async fn set_widget_opacity(app: tauri::AppHandle, value: i64) {
     app.state::<AppState>().settings().set_widget_opacity(value.clamp(10, 100));
     crate::windows::widget::push_config(&app);
 }
 
 #[tauri::command]
-pub fn set_widget_scale(app: tauri::AppHandle, value: i64) {
+pub async fn set_widget_scale(app: tauri::AppHandle, value: i64) {
     app.state::<AppState>().settings().set_widget_scale(value.clamp(50, 200));
     crate::windows::widget::update_scale(&app);
 }
@@ -68,7 +68,7 @@ pub fn set_widget_scale(app: tauri::AppHandle, value: i64) {
 /// Seçilen öğeyi panoya koy, (odak almayan) seçiciyi gizle, sonra kullanıcının
 /// içinde olduğu alana doğrudan yapıştır.
 #[tauri::command]
-pub fn quickpaste_pick(app: tauri::AppHandle, text: String) {
+pub async fn quickpaste_pick(app: tauri::AppHandle, text: String) {
     if text.is_empty() {
         return;
     }
@@ -101,6 +101,6 @@ pub fn quickpaste_pick(app: tauri::AppHandle, text: String) {
 }
 
 #[tauri::command]
-pub fn quickpaste_dismiss(app: tauri::AppHandle) {
+pub async fn quickpaste_dismiss(app: tauri::AppHandle) {
     crate::windows::quickpaste::hide(&app);
 }

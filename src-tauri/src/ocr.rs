@@ -37,27 +37,31 @@ fn tessdata_dir(app: &tauri::AppHandle) -> PathBuf {
 }
 
 /// Gömülü blob'ları diske serer (yalnız eksik ya da boyutu tutmayanları).
+///
+/// Yalnız BAŞARI önbelleğe alınıyor. İlk hâli sonucu `OnceLock`'a koyuyordu; tek bir
+/// geçici hata (disk dolu, izin) OCR'ı uygulama yeniden başlatılana dek öldürüyordu.
+/// Electron sürümü de başarısız worker promise'ini sıfırlayıp yeniden deniyordu.
 fn ensure_tessdata(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    static READY: OnceLock<Result<PathBuf, String>> = OnceLock::new();
-    READY
-        .get_or_init(|| {
-            let dir = tessdata_dir(app);
-            std::fs::create_dir_all(&dir).map_err(|e| format!("tessdata dizini: {e}"))?;
-            for lang in ["eng", "tur"] {
-                let blob = tesseract_rs::get_embedded_tessdata(lang)
-                    .ok_or_else(|| format!("'{lang}' verisi binary'de gömülü değil"))?;
-                let file = dir.join(format!("{lang}.traineddata"));
-                let needs_write = std::fs::metadata(&file)
-                    .map(|m| m.len() as usize != blob.len())
-                    .unwrap_or(true);
-                if needs_write {
-                    std::fs::write(&file, blob).map_err(|e| format!("{lang}.traineddata: {e}"))?;
-                    log::info!("{lang}.traineddata yazıldı ({:.1} MB)", blob.len() as f64 / 1_048_576.0);
-                }
-            }
-            Ok(dir)
-        })
-        .clone()
+    static READY: OnceLock<PathBuf> = OnceLock::new();
+    if let Some(dir) = READY.get() {
+        return Ok(dir.clone());
+    }
+    let dir = tessdata_dir(app);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("tessdata dizini: {e}"))?;
+    for lang in ["eng", "tur"] {
+        let blob = tesseract_rs::get_embedded_tessdata(lang)
+            .ok_or_else(|| format!("'{lang}' verisi binary'de gömülü değil"))?;
+        let file = dir.join(format!("{lang}.traineddata"));
+        let needs_write = std::fs::metadata(&file)
+            .map(|m| m.len() as usize != blob.len())
+            .unwrap_or(true);
+        if needs_write {
+            std::fs::write(&file, blob).map_err(|e| format!("{lang}.traineddata: {e}"))?;
+            log::info!("{lang}.traineddata yazıldı ({:.1} MB)", blob.len() as f64 / 1_048_576.0);
+        }
+    }
+    let _ = READY.set(dir.clone());
+    Ok(dir)
 }
 
 /// PNG baytlarından metin çıkarır. Bloklayıcı — çağıran `spawn_blocking` kullanmalı.
@@ -78,7 +82,9 @@ pub fn recognize_with_dir(dir: &std::path::Path, png: &[u8]) -> Result<String, S
     }
 
     let api = tesseract_rs::TesseractAPI::new();
-    api.init(dir, "tur+eng")
+    // Sıra Electron ile aynı (`createWorker('eng+tur')`): Tesseract ilk dili birincil
+    // sayıyor; farklı sıra karışık metinlerde farklı sonuç veriyor.
+    api.init(dir, "eng+tur")
         .map_err(|e| format!("tesseract başlatılamadı: {e:?}"))?;
     api.set_image(img.as_raw(), w, h, 1, w)
         .map_err(|e| format!("görüntü verilemedi: {e:?}"))?;

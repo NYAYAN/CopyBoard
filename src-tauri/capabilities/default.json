@@ -11,6 +11,7 @@
     "dialog:allow-message",
     "dialog:allow-ask",
     "opener:allow-open-url",
+    "opener:allow-default-urls",
     "opener:allow-open-path",
     "opener:allow-reveal-item-in-dir"
   ]

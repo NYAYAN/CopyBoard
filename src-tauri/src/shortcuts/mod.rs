@@ -52,6 +52,30 @@ fn live() -> std::sync::MutexGuard<'static, Option<HashMap<String, ShortcutKey>>
     g
 }
 
+/// Kısayol işleyicisinden çıkıp işi ana thread'e ERTELENMİŞ olarak devreder.
+///
+/// ## ⚠ Neden zorunlu — ölçüldü (2026-09-02, Windows `AppHangB1`)
+///
+/// `tauri-plugin-global-shortcut`, işleyicimizi kendi `shortcuts` Mutex'ini TUTARKEN
+/// çağırıyor (`GlobalHotKeyEvent::set_event_handler` içindeki `shortcuts_.lock()`).
+/// İşleyici içinde başka bir kısayol kaydetmek ya da kaldırmak (`on_shortcut`,
+/// `unregister`) aynı kilidi ikinci kez almaya çalışıyor; `std::sync::Mutex` yeniden
+/// girilemez, ana thread orada ölüyor. Somut yol: Ctrl+Shift+V → `quickpaste::show`
+/// → Escape'i kaydet → kilit. Kullanıcıda: seçici açılıyor, sonra hiçbir şey tıklanmıyor.
+///
+/// Eylem bir thread üzerinden `run_on_main_thread` ile geri postalanıyor: olay
+/// döngüsü proxy'sinden geldiği için ancak işleyici DÖNDÜKTEN (kilit bırakıldıktan)
+/// sonra koşuyor; yine ana thread'de olduğu için macOS AppKit kuralı da korunuyor.
+/// Doğrudan `run_on_main_thread` yetmez: çağıran zaten ana thread'deyse kapanış
+/// hemen, kilit hâlâ tutulurken çalışır (bkz. `tray.rs`'teki aynı tuzak).
+pub fn defer_to_main(app: &tauri::AppHandle, f: impl FnOnce(&tauri::AppHandle) + Send + 'static) {
+    let h = app.clone();
+    std::thread::spawn(move || {
+        let inner = h.clone();
+        let _ = h.run_on_main_thread(move || f(&inner));
+    });
+}
+
 /// Bir kısayol tetiklendiğinde çalışacak eylem.
 fn dispatch(app: &tauri::AppHandle, key: ShortcutKey) {
     match key {
@@ -85,7 +109,8 @@ fn claim(app: &tauri::AppHandle, accel: &str, key: ShortcutKey) -> bool {
         if event.state != ShortcutState::Pressed {
             return;
         }
-        dispatch(&handle, key);
+        // Eklentinin kilidi altındayız — eylemi ertele (bkz. `defer_to_main`).
+        defer_to_main(&handle, move |h| dispatch(h, key));
     });
     match result {
         Ok(_) => true,
@@ -235,10 +260,38 @@ fn sanitize_persisted(state: &AppState) -> Option<String> {
     first_reset
 }
 
+/// Electron'un kaydettiği ama bu sürümün ÇÖZEMEDİĞİ bir bağlama (ör. `AltGr+X`, ya da
+/// tamamen bozuk bir dize) kalıcı olabilir. Böyle bir accelerator hiç kaydolamaz;
+/// sessizce loglayıp ayarlarda ölü bir bağlama göstermek yerine varsayılana döndürülüyor
+/// ve kullanıcıya söyleniyor — rezerve tuş yoluyla aynı muamele.
+///
+/// Dönen değer: sıfırlanan ilk accelerator.
+fn reset_unparseable(state: &AppState) -> Option<String> {
+    let settings = state.settings();
+    let mut first_reset = None;
+    for key in ShortcutKey::ALL {
+        let current = settings.shortcut(key);
+        if current.is_empty() || accelerator::is_parseable(&current) {
+            continue;
+        }
+        log::warn!(
+            "kalıcı '{current}' ({}) bu sürümde çözümlenemiyor — varsayılana ('{}') döndürülüyor",
+            key.as_str(),
+            key.default()
+        );
+        if first_reset.is_none() {
+            first_reset = Some(current);
+        }
+        settings.set_shortcut(key, key.default());
+    }
+    first_reset
+}
+
 /// Açılışta tüm kısayolları kaydeder. Kapatılmış olanlar YALNIZ saklanır, kaydedilmez.
 pub fn register_all(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
     let reset_from = sanitize_persisted(&state);
+    let unparseable_from = reset_unparseable(&state);
     let settings = state.settings();
 
     let mut paste_ok = true;
@@ -287,22 +340,38 @@ pub fn register_all(app: &tauri::AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(3));
         let h = handle.clone();
+        let store = &handle.state::<AppState>().store;
         let msg = if paste_enabled && !paste_ok {
+            let shown = accelerator::to_display(&paste_accel);
             Some((
-                format!(
-                    "Hızlı Yapıştır kısayolu ({}) kaydedilemedi — başka bir uygulama kullanıyor olabilir. \
+                crate::i18n::t_vars(
+                    store,
+                    "Hızlı Yapıştır kısayolu ({shortcut}) kaydedilemedi — başka bir uygulama kullanıyor olabilir. \
                      Tepsi menüsünden açabilir veya Ayarlar'dan değiştirebilirsiniz.",
-                    accelerator::to_display(&paste_accel)
+                    &[("shortcut", shown.as_str())],
+                ),
+                "warning",
+            ))
+        } else if let Some(from) = reset_from {
+            let shown = accelerator::to_display(&from);
+            Some((
+                crate::i18n::t_vars(
+                    store,
+                    "\"{shortcut}\" kısayolu sistemin Kopyala/Yapıştır tuşlarıyla çakıştığı için varsayılana \
+                     döndürüldü. Ayarlar'dan Alt veya Shift içeren bir kısayol seçebilirsiniz.",
+                    &[("shortcut", shown.as_str())],
                 ),
                 "warning",
             ))
         } else {
-            reset_from.map(|from| {
+            unparseable_from.map(|from| {
+                let shown = accelerator::to_display(&from);
                 (
-                    format!(
-                        "\"{}\" kısayolu sistemin Kopyala/Yapıştır tuşlarıyla çakıştığı için varsayılana \
-                         döndürüldü. Ayarlar'dan Alt veya Shift içeren bir kısayol seçebilirsiniz.",
-                        accelerator::to_display(&from)
+                    crate::i18n::t_vars(
+                        store,
+                        "\"{shortcut}\" kısayolu bu sürümde tanınmadığı için varsayılana döndürüldü. \
+                         Ayarlar'dan yeniden seçebilirsiniz.",
+                        &[("shortcut", shown.as_str())],
                     ),
                     "warning",
                 )
@@ -321,22 +390,23 @@ pub fn update(app: &tauri::AppHandle, key: ShortcutKey, accel: &str) {
     let state = app.state::<AppState>();
     let settings = state.settings();
 
+    let store = &state.store;
     if !is_ascii(accel) {
-        crate::windows::toast::show(app, "Geçersiz Kısayol - Sadece ASCII karakterler kullanın", "error");
+        let msg = crate::i18n::t(store, "Geçersiz Kısayol - Sadece ASCII karakterler kullanın");
+        crate::windows::toast::show(app, &msg, "error");
         return;
     }
     if is_reserved(accel) {
         let p = accelerator::parse(accel);
         let hint = p.map(|p| accelerator::to_display(&format!("Alt+{}", p.key))).unwrap_or_default();
-        crate::windows::toast::show(
-            app,
-            &format!(
-                "\"{}\" sistemin Kopyala/Kes/Yapıştır tuşlarıyla çakışıyor ve genel kısayol olarak \
-                 çalışmaz. Alt veya Shift ekleyin (ör. {hint}).",
-                accelerator::to_display(accel)
-            ),
-            "error",
+        let shown = accelerator::to_display(accel);
+        let msg = crate::i18n::t_vars(
+            store,
+            "\"{shortcut}\" sistemin Kopyala/Kes/Yapıştır tuşlarıyla çakışıyor ve genel kısayol olarak \
+             çalışmaz. Alt veya Shift ekleyin (ör. {hint}).",
+            &[("shortcut", shown.as_str()), ("hint", hint.as_str())],
         );
+        crate::windows::toast::show(app, &msg, "error");
         return;
     }
 
@@ -357,9 +427,9 @@ pub fn update(app: &tauri::AppHandle, key: ShortcutKey, accel: &str) {
         crate::tray::rebuild(app);
     } else {
         let message = if accelerator::is_native_only(accel) && !cfg!(target_os = "macos") {
-            "Bu tuş bu sürümde kısayol olarak kullanılamıyor.".to_string()
+            crate::i18n::t(store, "Bu tuş bu sürümde kısayol olarak kullanılamıyor.")
         } else {
-            "Kısayol kaydedilemedi - başka bir uygulama kullanıyor olabilir".to_string()
+            crate::i18n::t(store, "Kısayol kaydedilemedi - başka bir uygulama kullanıyor olabilir")
         };
         crate::windows::toast::show(app, &message, "error");
         // Çalışan eski bağlamayı geri al.
@@ -385,14 +455,13 @@ pub fn set_enabled(app: &tauri::AppHandle, key: ShortcutKey, enabled: bool) {
             live().as_mut().unwrap().insert(accel, key);
         } else {
             settings.set_shortcut_enabled(key, false);
-            crate::windows::toast::show(
-                app,
-                &format!(
-                    "\"{}\" kaydedilemedi — başka bir uygulama kullanıyor olabilir.",
-                    accelerator::to_display(&accel)
-                ),
-                "error",
+            let shown = accelerator::to_display(&accel);
+            let msg = crate::i18n::t_vars(
+                &state.store,
+                "\"{shortcut}\" kaydedilemedi — başka bir uygulama kullanıyor olabilir.",
+                &[("shortcut", shown.as_str())],
             );
+            crate::windows::toast::show(app, &msg, "error");
         }
     } else {
         release(app, &accel);

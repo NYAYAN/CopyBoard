@@ -51,6 +51,11 @@ pub fn open(app: &tauri::AppHandle, id: &str) {
             }
             let _ = window.show();
             let _ = window.set_focus();
+            log::debug!(
+                "görüntüleyici açıldı ({id}): mevcut={existed}, görünür={:?}, odak={:?}",
+                window.is_visible(),
+                window.is_focused()
+            );
             send_state(app);
         }
         Err(e) => log::error!("görüntüleyici açılamadı: {e}"),
@@ -91,13 +96,12 @@ fn show_id(app: &tauri::AppHandle, id: &str) {
 }
 
 #[tauri::command]
-pub fn open_screenshot_viewer(app: tauri::AppHandle, id: String) {
+pub async fn open_screenshot_viewer(app: tauri::AppHandle, id: String) {
     open(&app, &id);
 }
 
 /// ←/→: galeride adımla (yeniden-eskiye sıra, sarma yok).
-#[tauri::command]
-pub fn viewer_nav(app: tauri::AppHandle, dir: String) {
+pub fn nav(app: &tauri::AppHandle, dir: &str) {
     let Some(current) = CURRENT.lock().unwrap().clone() else { return };
     let list = crate::gallery::public_list(&app.state::<AppState>().store);
     let Some(idx) = list
@@ -109,32 +113,52 @@ pub fn viewer_nav(app: tauri::AppHandle, dir: String) {
     let target = if dir == "next" { idx.checked_add(1) } else { idx.checked_sub(1) };
     let Some(t) = target.and_then(|t| list.get(t)) else { return };
     if let Some(id) = t.get("id").and_then(|i| i.as_str()) {
-        show_id(&app, id);
+        show_id(app, id);
     }
 }
 
-#[tauri::command]
-pub fn viewer_select(app: tauri::AppHandle, id: String) {
-    show_id(&app, &id);
-}
-
-#[tauri::command]
-pub fn viewer_close(app: tauri::AppHandle) {
+pub fn close(app: &tauri::AppHandle) {
     *CURRENT.lock().unwrap() = None;
-    crate::windows::close_if_open(&app, LABEL);
+    crate::windows::close_if_open(app, LABEL);
 }
 
-#[tauri::command]
-pub fn viewer_minimize(app: tauri::AppHandle) {
+pub fn minimize(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window(LABEL) {
         let _ = w.minimize();
     }
 }
 
-#[tauri::command]
-pub fn viewer_toggle_maximize(app: tauri::AppHandle) {
+pub fn toggle_maximize(app: &tauri::AppHandle) {
     let Some(w) = app.get_webview_window(LABEL) else { return };
     let _ = if w.is_maximized().unwrap_or(false) { w.unmaximize() } else { w.maximize() };
+}
+
+// Komutlar `async`: pencereye dokunan iş IPC geri çağrısının içinde, ana thread'de
+// senkron yapılırsa Windows'ta kilitleniyor (bkz. `commands/mod.rs`). Gövdeler yukarıdaki
+// senkron yardımcılarda; `qa.rs` ve bağlam menüsü de onları çağırıyor.
+#[tauri::command]
+pub async fn viewer_nav(app: tauri::AppHandle, dir: String) {
+    nav(&app, &dir);
+}
+
+#[tauri::command]
+pub async fn viewer_select(app: tauri::AppHandle, id: String) {
+    show_id(&app, &id);
+}
+
+#[tauri::command]
+pub async fn viewer_close(app: tauri::AppHandle) {
+    close(&app);
+}
+
+#[tauri::command]
+pub async fn viewer_minimize(app: tauri::AppHandle) {
+    minimize(&app);
+}
+
+#[tauri::command]
+pub async fn viewer_toggle_maximize(app: tauri::AppHandle) {
+    toggle_maximize(&app);
 }
 
 /// Karşılaştırma ızgarası TAM görüntüleri istiyor: görüntüleyicinin elinde bunlardan
@@ -142,7 +166,7 @@ pub fn viewer_toggle_maximize(app: tauri::AppHandle) {
 /// resim çözünürlüğünde yapılan bir karşılaştırma karşılaştırma değildir.
 /// Çözümlenemeyen kimlikler uydurulmuyor, düşürülüyor.
 #[tauri::command]
-pub fn viewer_compare_images(app: tauri::AppHandle, ids: Vec<String>) -> Vec<Value> {
+pub async fn viewer_compare_images(app: tauri::AppHandle, ids: Vec<String>) -> Vec<Value> {
     ids.iter()
         .filter_map(|id| {
             let p = super::gallery::payload_for(&app, id)?;
@@ -159,7 +183,7 @@ pub fn viewer_compare_images(app: tauri::AppHandle, ids: Vec<String>) -> Vec<Val
 /// da giriyor — taze bir alıntıyla aynı mantık: düzenlenmiş sürüm bir sonraki pano
 /// yazımından sonra da yaşasın.
 #[tauri::command]
-pub fn viewer_copy_annotated(app: tauri::AppHandle, data_url: String) {
+pub async fn viewer_copy_annotated(app: tauri::AppHandle, data_url: String) {
     let Some(png) = super::capture::decode_data_url_pub(&data_url) else {
         crate::windows::toast::show(&app, "Kopyalama Hatası: görüntü oluşturulamadı", "error");
         return;
@@ -205,7 +229,7 @@ pub fn remove_shot(app: &tauri::AppHandle, id: &str) {
     if current == id {
         match neighbour {
             Some(n) => show_id(app, &n),
-            None => viewer_close(app.clone()),
+            None => close(app),
         }
     } else {
         // Başka bir görüntü gitti: mevcut olanı yeniden gönder ki şerit ve sayaç

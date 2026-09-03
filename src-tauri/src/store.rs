@@ -132,15 +132,28 @@ impl Store {
 
     /// Yalnız bu anahtarların yazması geciktirilir.
     ///
-    /// Electron `history` dışındaki HER anahtarı ANINDA yazıyordu; geciktirme yalnız
-    /// pano izleyicisinin saniyede bir tetikleyebildiği geçmiş içindi
-    /// (`history-manager.js` `saveHistorySoon`). Ayarları, favorileri ve galeri
-    /// indeksini de geciktirmek, kullanıcı bir ayarı değiştirip 500 ms içinde
-    /// uygulamayı zorla kapatırsa o ayarın kaybolması demek.
+    /// Electron yalnız pano izleyicisinin EKLEMESİNİ geciktiriyordu (`history-manager.js`
+    /// `saveHistorySoon`, saniyede bir tetiklenebildiği için); geçmişteki silme,
+    /// temizleme, not ve sıralama dahil diğer HER yazma anındaydı. Ayarları, favorileri
+    /// ve galeri indeksini geciktirmek, kullanıcı bir ayarı değiştirip 500 ms içinde
+    /// uygulamayı zorla kapatırsa o ayarın kaybolması demek — ve `panic = "abort"`
+    /// ile çıkış flush'ı hiç koşmayabiliyor. Bu yüzden `history` anahtarında da yalnız
+    /// ekleme geciktiriliyor; kullanıcı eylemleri [`Store::set_now`] / [`Store::update_now`]
+    /// ile anında iniyor.
     const DEBOUNCED_KEYS: [&'static str; 1] = ["history"];
 
     /// Değeri belleğe yazar. `history` için geciktirilmiş, diğerleri için ANINDA yazar.
     pub fn set<T: Serialize>(&self, key: &str, value: T) {
+        self.set_impl(key, value, None);
+    }
+
+    /// [`Store::set`] gibi, ama anahtar ne olursa olsun ANINDA diske yazar. Kullanıcının
+    /// tıklayıp yaptığı işler için (silme, temizleme, sıralama).
+    pub fn set_now<T: Serialize>(&self, key: &str, value: T) {
+        self.set_impl(key, value, Some(false));
+    }
+
+    fn set_impl<T: Serialize>(&self, key: &str, value: T, debounce_override: Option<bool>) {
         let v = match serde_json::to_value(value) {
             Ok(v) => v,
             Err(e) => {
@@ -157,13 +170,23 @@ impl Store {
         }
         self.dirty.store(true, Ordering::Release);
 
-        if Self::DEBOUNCED_KEYS.contains(&key) {
+        let debounced = debounce_override.unwrap_or_else(|| Self::DEBOUNCED_KEYS.contains(&key));
+        if debounced {
             if let Some(tx) = self.ping.lock().unwrap().as_ref() {
                 let _ = tx.send(());
             }
         } else {
             self.write_now();
         }
+    }
+
+    /// [`Store::update`] gibi, ama anahtar ne olursa olsun ANINDA diske yazar.
+    pub fn update_now<T, F>(&self, key: &str, default: T, mutate: F)
+    where
+        T: DeserializeOwned + Serialize,
+        F: FnOnce(&mut T) -> bool,
+    {
+        self.update_impl(key, default, mutate, Some(false));
     }
 
     /// Bir anahtarı ATOMİK olarak oku-değiştir-yaz.
@@ -181,7 +204,15 @@ impl Store {
         T: DeserializeOwned + Serialize,
         F: FnOnce(&mut T) -> bool,
     {
-        let debounced = Self::DEBOUNCED_KEYS.contains(&key);
+        self.update_impl(key, default, mutate, None);
+    }
+
+    fn update_impl<T, F>(&self, key: &str, default: T, mutate: F, debounce_override: Option<bool>)
+    where
+        T: DeserializeOwned + Serialize,
+        F: FnOnce(&mut T) -> bool,
+    {
+        let debounced = debounce_override.unwrap_or_else(|| Self::DEBOUNCED_KEYS.contains(&key));
         {
             let mut data = self.data.lock().unwrap();
             let mut current: T = match data.get(key) {

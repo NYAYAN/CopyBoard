@@ -25,9 +25,11 @@
       "app",
       "nsis"
     ],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/icon.png",
-      "icons/icon.icns"
+      "icons/icon.icns",
+      "icons/icon.ico"
     ],
     "category": "Utility",
     "copyright": "Nurullah YAYAN",
@@ -45,7 +47,7 @@
       }
     },
     "publisher": "Nurullah YAYAN",
-    "licenseFile": "../LICENSE"
+    "licenseFile": "../installer_info.txt"
   },
   "plugins": {
     "updater": {

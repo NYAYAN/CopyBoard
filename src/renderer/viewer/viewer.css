@@ -974,3 +974,62 @@ body:not(.cmp-showing) .cmp-seg {
     cursor: zoom-in;
 }
 
+
+/* ── Narrow window: fold the tools into a "…" menu ──────────────────────────────
+   A tall scroll capture makes the viewer narrow (it is sized to the image), and the
+   toolbar then ran past the right edge — the minimize / maximize / close buttons were
+   the first to disappear. viewer.js measures the row; when the labelled tools do not
+   fit, body.tb-collapsed moves them into a popover under the "…" button and the window
+   controls stay in the visible row. Button ids do not change, so the existing wiring
+   and the compare/draw state classes keep working inside the menu. */
+.toolbar-actions {
+    position: relative;
+}
+
+.tb-tools {
+    display: flex;
+    gap: 6px;
+}
+
+#more-btn {
+    display: none;
+    padding: 6px 8px;
+}
+
+body.tb-collapsed #more-btn {
+    display: flex;
+}
+
+body.tb-collapsed .tb-tools {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+    padding: 6px;
+    background: var(--bg-raised);
+    border: 1px solid rgba(var(--fg-rgb), 0.12);
+    border-radius: var(--r-sm);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    z-index: 50;
+}
+
+body.tb-collapsed.tb-menu-open .tb-tools {
+    display: flex;
+}
+
+body.tb-collapsed .tb-tools .tb-btn {
+    width: 100%;
+    justify-content: flex-start;
+    background: transparent;
+}
+
+body.tb-collapsed .tb-tools .tb-btn:hover {
+    background: rgba(var(--fg-rgb), 0.08);
+}
+
+body.tb-collapsed.tb-menu-open #more-btn {
+    background: rgba(var(--fg-rgb), 0.16);
+}

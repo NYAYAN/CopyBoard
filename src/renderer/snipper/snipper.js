@@ -250,6 +250,8 @@ window.api.onCaptureScreen((imageData, mode, sourceId, quality, captureWidth, ca
             screenBitmap = bmp;
             paintScreen();
             finish();
+            // Ölçüm: ilk boyanmış kare ekranda (docs/PERF_WINDOWS.md).
+            requestAnimationFrame(() => { if (window.api.sendDebugLog) window.api.sendDebugLog('snip-painted'); });
         }).catch((err) => fail('çözümlenemedi: ' + ((err && err.message) || 'bilinmeyen hata')));
     } else if (typeof imageData === 'string' && imageData.length > 100) {
         // Legacy data-URL path, kept as a fallback.

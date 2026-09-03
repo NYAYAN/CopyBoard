@@ -44,6 +44,10 @@
                     </svg>
                 </button>
             </div>
+            <!-- The five tools live in one container so that a narrow window (a tall scroll
+                 capture makes the viewer narrow) can fold them into the "…" menu below;
+                 the window controls after them must never leave the visible row. -->
+            <div class="tb-tools" id="tb-tools">
             <!-- Opens the picker; the button stays out of .tb-single because it is the way
                  back out of compare mode too. -->
             <button id="compare-btn" class="tb-btn" title="Resimleri Karşılaştır">
@@ -81,6 +85,16 @@
                     <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
                 </svg>
                 Sil
+            </button>
+            </div>
+            <!-- Shown only when the tools above are folded away (body.tb-collapsed). -->
+            <button id="more-btn" class="tb-btn more" title="Daha fazla" aria-label="Daha fazla"
+                aria-haspopup="true" aria-expanded="false">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="5" cy="12" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="19" cy="12" r="2" />
+                </svg>
             </button>
             <!-- Window controls. The window is frameless, so these are ours to draw. They are
                  NOT .tb-single: the frame is not the picture, and stays operable while

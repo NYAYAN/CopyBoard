@@ -99,7 +99,13 @@ function formatReleaseNotes(notes) {
     };
 
     try {
-        const parsed = new DOMParser().parseFromString(String(notes), 'text/html');
+        // Tauri's updater hands over the GitHub release BODY, which is Markdown (tauri-action
+        // writes it into latest.json as-is); electron-updater gave HTML. If the text carries
+        // no tags at all, render the common Markdown shapes first — the sanitizer below still
+        // rebuilds everything from the whitelist, so nothing here is trusted either.
+        const looksLikeHtml = /<\s*[a-z][\s\S]*>/i.test(String(notes));
+        const html = looksLikeHtml ? String(notes) : markdownToHtml(String(notes));
+        const parsed = new DOMParser().parseFromString(html, 'text/html');
         const container = document.createElement('div');
         container.className = 'release-html-content';
         sanitize(parsed.body, container);
@@ -110,6 +116,50 @@ function formatReleaseNotes(notes) {
         div.textContent = String(notes); // inert plain-text fallback
         return div.outerHTML;
     }
+}
+
+// Minimal Markdown → HTML for release bodies: headings, bullet lists, paragraphs, bold,
+// inline code and links. Text is escaped first; the result only ever reaches the DOM
+// through the whitelist sanitizer in formatReleaseNotes.
+function markdownToHtml(md) {
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const inline = (s) => esc(s)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+
+    const out = [];
+    let list = null;      // 'ul' | 'ol' while inside a list
+    let para = [];
+    const flushPara = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
+    const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+
+    for (const raw of md.replace(/\r\n?/g, '\n').split('\n')) {
+        const line = raw.trimEnd();
+        let m;
+        if (!line.trim()) { flushPara(); closeList(); continue; }
+        if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) {
+            flushPara(); closeList();
+            const lvl = Math.min(m[1].length + 2, 6); // #→h3: the dialog is small
+            out.push('<h' + lvl + '>' + inline(m[2]) + '</h' + lvl + '>');
+        } else if ((m = /^\s*[-*+]\s+(.*)$/.exec(line))) {
+            flushPara();
+            if (list !== 'ul') { closeList(); list = 'ul'; out.push('<ul>'); }
+            out.push('<li>' + inline(m[1]) + '</li>');
+        } else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(line))) {
+            flushPara();
+            if (list !== 'ol') { closeList(); list = 'ol'; out.push('<ol>'); }
+            out.push('<li>' + inline(m[1]) + '</li>');
+        } else if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) {
+            flushPara(); closeList(); out.push('<hr>');
+        } else {
+            closeList();
+            para.push(inline(line.trim()));
+        }
+    }
+    flushPara(); closeList();
+    return out.join('');
 }
 
 // Update download progress

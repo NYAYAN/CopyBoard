@@ -33,9 +33,10 @@ Bu iki şey üretir:
    "plugins": { "updater": { "pubkey": "<genel anahtar>" } }
    ```
 
-   > Alan şu an **boş**. Boşken uygulama açılıyor ve güncelleme kontrolü temiz bir
-   > hata veriyor. Yapılandırma bölümünün tamamı silinirse uygulama açılışta
-   > panikler (BULGU F5-a), o yüzden bölümü silme — yalnız `pubkey`'i doldur.
+   > Alan şu an **boş**. Boşken uygulama "güncelleyici yapılandırılmamış" sayıyor:
+   > açılış kontrolü atlanır, elle kontrol anlaşılır bir uyarı toast'ı verir (ham
+   > minisign hatası değil). Yapılandırma bölümünün tamamı silinirse uygulama
+   > açılışta panikler (BULGU F5-a), o yüzden bölümü silme — yalnız `pubkey`'i doldur.
 
 2. Özel anahtarı ve parolasını GitHub deposunda **Secrets** olarak ekle:
 
@@ -44,7 +45,12 @@ Bu iki şey üretir:
    | `TAURI_SIGNING_PRIVATE_KEY` | özel anahtar dosyasının İÇERİĞİ |
    | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | üretirken verdiğin parola |
 
-Secret'lar yoksa CI yine yapı üretir — yalnız imzasız olur ve güncelleyici çalışmaz.
+`tauri.conf.json` içinde `bundle.createUpdaterArtifacts: true` açık. Bu bayrak
+olmadan `tauri build` hiç `.sig` üretmiyor ve tauri-action `latest.json`ı release'e
+**yazmıyordu** — güncelleyici hiçbir sürümde çalışamazdı. Bayrağın bedeli: imza
+anahtarı **zorunlu**. Secret'lar yoksa CI'daki `tauri build` imza adımında hata verir;
+yerelde `tauri build` almak için de aynı iki değişkeni ortama ver (ya da yalnız
+`tauri dev` kullan).
 
 ---
 

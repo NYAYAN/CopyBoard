@@ -1295,3 +1295,57 @@ document.addEventListener('keydown', (e) => {
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
     else if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); copyCurrent(); }
 });
+
+// ── Narrow toolbar: "…" overflow menu ──────────────────────────────────────────
+// Measured, not media-queried: what fits depends on the translated labels. The row is
+// measured in its expanded state each time, so there is no oscillation between states.
+(function () {
+    const toolbar = document.querySelector('.toolbar');
+    const actions = document.querySelector('.toolbar-actions');
+    const moreBtn = document.getElementById('more-btn');
+    const tools = document.getElementById('tb-tools');
+    if (!toolbar || !actions || !moreBtn || !tools) return;
+
+    const TITLE_MIN = 90;   // the title keeps at least a dimension chip
+    const PADDING = 24;     // .toolbar horizontal padding
+
+    function closeMenu() {
+        document.body.classList.remove('tb-menu-open');
+        moreBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function layoutToolbar() {
+        const wasOpen = document.body.classList.contains('tb-menu-open');
+        document.body.classList.remove('tb-collapsed', 'tb-menu-open');
+        const need = actions.scrollWidth + TITLE_MIN + PADDING;
+        if (need > toolbar.clientWidth) {
+            document.body.classList.add('tb-collapsed');
+            if (wasOpen) document.body.classList.add('tb-menu-open');
+        } else {
+            moreBtn.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = document.body.classList.toggle('tb-menu-open');
+        moreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    // Picking a tool closes the menu; the tool's own handler already ran (bubbling).
+    tools.addEventListener('click', () => {
+        if (document.body.classList.contains('tb-collapsed')) closeMenu();
+    });
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#tb-tools, #more-btn')) closeMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('tb-menu-open')) {
+            e.stopPropagation();
+            closeMenu();
+        }
+    }, true);
+
+    window.addEventListener('resize', layoutToolbar);
+    // After the first paint (fonts and translated labels in place).
+    requestAnimationFrame(() => requestAnimationFrame(layoutToolbar));
+})();

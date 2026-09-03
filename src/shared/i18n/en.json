@@ -324,5 +324,20 @@
   "Ekran akışı başlatılamadı: ": "Could not start the screen stream: ",
   "Görüntü oluşturulamadı.": "Could not build the image.",
   "Görüntü aktarılamadı: ": "Could not transfer the image: ",
-  "Kaydırmayı bırakınca biter": "Stops when you stop scrolling"
+  "Kaydırmayı bırakınca biter": "Stops when you stop scrolling",
+  "Video kaydı bu sürümde yalnız macOS'ta kullanılabilir.": "Video recording is available only on macOS in this version.",
+  "Kaydırmalı yakalama bu sürümde yalnız macOS'ta kullanılabilir.": "Scrolling capture is available only on macOS in this version.",
+  "Video kaydı macOS 15 veya üzeri gerektirir.": "Video recording requires macOS 15 or later.",
+  "Güncelleyici bu yapıda yapılandırılmamış. Yeni sürümler için GitHub sayfasına bakın.": "The updater is not configured in this build. Check the GitHub page for new versions.",
+  "Güncelleme bulunamadı.": "No update found.",
+  "İndirilmiş güncelleme bulunamadı.": "No downloaded update was found.",
+  "Otomatik başlatma ayarlanamadı. İşletim sistemi isteği reddetti.": "Could not change launch at login. The operating system rejected the request.",
+  "Verileriniz aktarıldı: {history} geçmiş, {favorites} favori, {shots} ekran görüntüsü. Eski sürümün verileri olduğu yerde duruyor.": "Your data was migrated: {history} history items, {favorites} favorites, {shots} screenshots. The previous version's data stays where it was.",
+  "\"{shortcut}\" sistemin Kopyala/Kes/Yapıştır tuşlarıyla çakışıyor ve genel kısayol olarak çalışmaz. Alt veya Shift ekleyin (ör. {hint}).": "\"{shortcut}\" clashes with the system's Copy/Cut/Paste keys and cannot work as a global shortcut. Add Alt or Shift (e.g. {hint}).",
+  "Bu tuş bu sürümde kısayol olarak kullanılamıyor.": "This key cannot be used as a shortcut in this version.",
+  "\"{shortcut}\" kaydedilemedi — başka bir uygulama kullanıyor olabilir.": "Could not register \"{shortcut}\" — another app may be using it.",
+  "Hızlı Yapıştır kısayolu ({shortcut}) kaydedilemedi — başka bir uygulama kullanıyor olabilir. Tepsi menüsünden açabilir veya Ayarlar'dan değiştirebilirsiniz.": "The Quick Paste shortcut ({shortcut}) could not be registered — another app may be using it. You can open it from the tray menu or change it in Settings.",
+  "\"{shortcut}\" kısayolu sistemin Kopyala/Yapıştır tuşlarıyla çakıştığı için varsayılana döndürüldü. Ayarlar'dan Alt veya Shift içeren bir kısayol seçebilirsiniz.": "The \"{shortcut}\" shortcut was reset to its default because it clashed with the system's Copy/Paste keys. Pick one that includes Alt or Shift in Settings.",
+  "\"{shortcut}\" kısayolu bu sürümde tanınmadığı için varsayılana döndürüldü. Ayarlar'dan yeniden seçebilirsiniz.": "The \"{shortcut}\" shortcut was reset to its default because this version does not recognise it. You can pick it again in Settings.",
+  "Daha fazla": "More"
 }

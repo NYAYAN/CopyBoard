@@ -391,6 +391,11 @@ function setPhase(next) {
     state.phase = next;
     document.body.classList.remove('phase-select', 'phase-capture', 'phase-review');
     document.body.classList.add('phase-' + next);
+    // Click-through is decided in the main process from the areas we report. The report
+    // must follow the phase change: finishCapture used to report while still in 'capture',
+    // so the review phase kept only the old toolbar rectangle clickable and the Copy/Save
+    // buttons under the preview could not be hit (Electron re-enabled the whole window here).
+    reportToolbarHitArea();
 }
 
 function makeFrameCanvas(w, h) {
@@ -451,9 +456,9 @@ async function beginCapture() {
     placeHud();
     placeToolbar();
 
-    // The main process closes the other monitors' overlays and arms a global Escape; from
-    // here the window passes mouse events through so scrolling reaches the app underneath.
-    window.api.scrollBegin();
+    // The main process already closed the other monitors' overlays and armed a global
+    // Escape inside `scrollBegin` above (Rust `scroll_begin`). From here the window passes
+    // mouse events through so scrolling reaches the app underneath.
     reportToolbarHitArea();
 
     lastSampleAt = 0;

@@ -59,6 +59,16 @@
         invoke('debug_log', { message: `[unhandled] ${e.reason}` }).catch(() => {});
     });
 
+    // ── window.close() ──────────────────────────────────────────────────────
+    // Electron'da bir BrowserWindow sayfası `window.close()` deyince pencere
+    // kapanıyordu; güncelleme diyaloğu ("Daha Sonra") buna dayanıyor. WKWebView
+    // bunu yalnız script'in kendi açtığı pencerelerde onurlandırıyor, wry de
+    // köprülemiyor — çağrı sessizce yutuluyor ve her zaman üstte duran diyalog
+    // yalnız uygulama kapanınca gidiyordu. Çağıran pencereyi Rust tarafı kapatıyor.
+    window.close = () => invoke('close_current_window').catch((e) =>
+        console.error('[api] close_current_window başarısız:', e)
+    );
+
     const boot = window.__COPYBOARD_BOOT__ || {
         platform: 'darwin',
         i18n: { lang: 'tr', dict: {} },

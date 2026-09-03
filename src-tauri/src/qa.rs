@@ -244,6 +244,119 @@ pub fn run(app: tauri::AppHandle) {
                 }
             }
 
+            // ── 9d. Kaydırmalı yakalama ARAYÜZ akışı: seç → Başlat → HEMEN Bitir → tekrar Başlat (A12, C3) ──
+            // Overlay'in kendi sayfasında sentetik fare olaylarıyla seçim yapılıyor, Enter ile
+            // Başlat/Bitir tetikleniyor (araç çubuğu düğmeleriyle aynı yol). Sayfa durumunu
+            // (body sınıfları) panoya yazıyor; JS hataları `[renderer] [error]` olarak günlükte.
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            {
+                use crate::capture::scroll_stream::ScrollState;
+                let streaming = |app: &tauri::AppHandle| app.state::<ScrollState>().0.lock().unwrap().is_some();
+                on_main(&app, |h| crate::capture::start(h, "scroll"));
+                let mut up = false;
+                for _ in 0..30 { sleep(100); if visible(&app, "capture-0") == Some(true) { up = true; break; } }
+                check(up, "kaydırma overlay'i açıldı ve görünür");
+                if up {
+                    sleep(300);
+                    let select = r#"(function () {
+                        const ev = (t, x, y) => document.body.dispatchEvent(new MouseEvent(t, { bubbles: true, clientX: x, clientY: y, button: 0 }));
+                        ev('mousedown', 300, 300); ev('mousemove', 600, 500); ev('mousemove', 900, 800); ev('mouseup', 900, 800);
+                        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                    })();"#;
+                    on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(select); } });
+                    let mut started = false;
+                    for _ in 0..30 { sleep(100); if streaming(&app) { started = true; break; } }
+                    check(started, "Başlat: kaydırma akışı kuruldu (ScrollState dolu)");
+
+                    // HEMEN Bitir — hiç kare/kaydırma yokken.
+                    let finish = r#"document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                        setTimeout(() => window.api.copyText('QA-SCROLL ' + document.body.className), 500);"#;
+                    on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(finish); } });
+                    sleep(1500);
+                    check(!streaming(&app), "hemen Bitir: akış bırakıldı (ScrollState boş)");
+                    let got = crate::platform::clipboard_read_text().unwrap_or_default();
+                    check(got.starts_with("QA-SCROLL") && got.contains("phase-select"),
+                        &format!("hemen Bitir (0 kare): seçim evresine dönüldü (okunan: {got:?})"));
+                    check(visible(&app, "capture-0") == Some(true), "hemen Bitir sonrası overlay hâlâ açık ve görünür");
+                    check(app.state::<AppState>().runtime.lock().unwrap().is_capturing, "hemen Bitir sonrası oturum sürüyor (is_capturing)");
+
+                    // Tekrar Başlat: aynı seçimle akış yeniden kurulabiliyor mu? Ekranı değiştir ki kare gelsin.
+                    let again = "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));";
+                    on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(again); } });
+                    let mut restarted = false;
+                    for _ in 0..30 { sleep(100); if streaming(&app) { restarted = true; break; } }
+                    check(restarted, "tekrar Başlat: akış yeniden kuruldu");
+                    for _ in 0..3 {
+                        on_main(&app, |h| crate::windows::main_window::show(h));
+                        sleep(300);
+                        on_main(&app, |h| crate::windows::main_window::hide(h));
+                        sleep(300);
+                    }
+                    let finish2 = r#"document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                        setTimeout(() => window.api.copyText('QA-SCROLL2 ' + document.body.className), 500);"#;
+                    on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(finish2); } });
+                    sleep(1500);
+                    check(!streaming(&app), "ikinci Bitir: akış bırakıldı");
+                    let got2 = crate::platform::clipboard_read_text().unwrap_or_default();
+                    check(got2.starts_with("QA-SCROLL2") && (got2.contains("phase-select") || got2.contains("phase-review")),
+                        &format!("ikinci Bitir: evre tutarlı (okunan: {got2:?})"));
+
+                    on_main(&app, |h| crate::capture::close_all(h, None));
+                    sleep(800);
+                    check(app.webview_windows().keys().filter(|l| l.starts_with("capture-")).count() == 0, "kaydırma overlay'i kapandı");
+                    check(!app.state::<AppState>().runtime.lock().unwrap().is_capturing, "kaydırma sonrası is_capturing düştü");
+                    // Deneme pano kayıtlarını temizle.
+                    let ids: Vec<String> = {
+                        let st = app.state::<AppState>();
+                        crate::clipboard::history::history(&st.store).iter()
+                            .filter(|i| i.get("content").and_then(|c| c.as_str()).map(|c| c.starts_with("QA-SCROLL")).unwrap_or(false))
+                            .filter_map(|i| i.get("id").and_then(|v| v.as_str()).map(str::to_string)).collect()
+                    };
+                    for id in ids { on_main(&app, move |h| crate::clipboard::history::delete(h, &id)); }
+                }
+            }
+
+            // ── 9e. Video ARAYÜZ akışı: Kayıt düğmesi → kayıt gerçekten başlıyor mu (A13, B6) ──
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            {
+                use crate::capture::recorder::RecorderState;
+                on_main(&app, |h| crate::capture::start(h, "video"));
+                let mut up = false;
+                for _ in 0..30 { sleep(100); if visible(&app, "capture-0") == Some(true) { up = true; break; } }
+                check(up, "kaydedici overlay'i açıldı ve görünür");
+                if up {
+                    sleep(400); // varsayılan 500×500 seçim uygulanıyor
+                    let click = "document.getElementById('btn-record').click();";
+                    on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(click); } });
+                    let mut rec = false;
+                    for _ in 0..40 { sleep(100); if app.state::<RecorderState>().0.lock().unwrap().is_some() { rec = true; break; } }
+                    check(rec, "Kayıt düğmesi: kayıt başladı (RecorderState dolu)");
+                    if rec {
+                        for _ in 0..3 {
+                            on_main(&app, |h| crate::windows::main_window::show(h));
+                            sleep(300);
+                            on_main(&app, |h| crate::windows::main_window::hide(h));
+                            sleep(300);
+                        }
+                        // Kaydetme panelini açmadan durdur: kaydı al, kapat, dosyayı ölç.
+                        let taken = app.state::<RecorderState>().0.lock().unwrap().take();
+                        if let Some(mut r) = taken {
+                            match r.stop() {
+                                Ok(p) => {
+                                    let size = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+                                    check(size > 10_000, &format!("arayüzden başlatılan kayıt dosya yazdı ({:.1} KB)", size as f64 / 1024.0));
+                                    let _ = std::fs::remove_file(&p);
+                                }
+                                Err(e) => check(false, &format!("arayüzden başlatılan kayıt durdurulamadı: {e}")),
+                            }
+                        }
+                    }
+                    on_main(&app, |h| crate::capture::close_all(h, None));
+                    sleep(800);
+                    check(app.webview_windows().keys().filter(|l| l.starts_with("capture-")).count() == 0, "kaydedici overlay'i kapandı");
+                }
+            }
+
             // ── 9b. Renderer → IPC → komut (gerçek yol) ───────────────────────
             // Ana pencerenin sayfasında `window.api.copyText` çalıştırılıyor: invoke
             // gerçekten Rust'a ulaşıyor ve pano değişiyor mu? Tıklama olmadan, sayfa

@@ -17,6 +17,8 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 - [x] A8. Windows'ta video kaydı ve kaydırmalı yakalama yok — WGC + Media Foundation ile eklendi (`--qa`: 75 kare/2,9 MB mp4, 26 kare akış)
 - [x] A9. Her talep kontrol listesine, kontrollü ilerleme — bu dosya (süreç kuralı, E bölümü güncel)
 - [~] A11. Birden fazla monitörde ekran görüntüsü / OCR / kaydırmalı / video: alan seçilemiyor (2026-09-03). Bu makinede tek monitör var, üretilemedi. Kodda bulunan hata (Windows, karışık DPI): overlay `geom::place` ile nokta→monitör aramasından ölçek alıyordu; ikinci monitörün mantıksal köşesi birincinin dikdörtgenine düşünce yanlış ölçekle birinci ekranın üstüne yerleşiyordu → `place_on_monitor` (hedef monitörün kendi ölçeği, fiziksel konum+boyut), `snip_ready` sonrası yeniden uygulama, günlüğe monitör listesi ve gerçekleşen overlay dikdörtgeni (birim test: `overlay_dikdortgeni_monitorun_kendi_olcegiyle_hesaplanir`). Kullanıcı düzeni: Windows, 3 monitör, hepsi %100 (sol 1080×1920, orta 2560×1440, sağ 1080×1920), üçü de kararıyor ama seçim yok → karışık DPI değil. ASIL KÖK NEDEN: Tauri `listen()` varsayılan hedefi `Any` ve Any dinleyici başka pencereye `emit_to` ile giden olayları da alıyor (tauri `listener.rs`: `target == Any || filter`); seçim başlayınca diğer overlay'lere giden `capture-reset` seçimi başlatan overlay'e de ulaşıp seçimi anında sıfırlıyordu, her overlay ayrıca üç `capture-screen` alıp yanlış boyutla kuruluyordu. Düzeltme: `api-tauri.js` dinleyicileri kendi etiketini (`AnyLabel`) hedefliyor. Doğrulama: `--qa` 9b-2 üç kontrol (sızıntı yok / kendi etiketi ulaşıyor / `emit` yayını ulaşıyor). 3 monitörde gözle doğrulama bekliyor
+- [~] A12. Kaydırmalı yakalama: Başlat'a basıp hemen Bitir deyince tuhaf davranış (2026-09-03, diğer makine, 3 monitör). Tek monitörde arayüz akışı `--qa` 9d ile üretildi: seç → Başlat → hemen Bitir → "Hiçbir şey yakalanamadı" ile seçim evresine dönüş, akış bırakıldı, overlay açık; tekrar Başlat → akış yeniden kuruldu → Bitir → inceleme evresi; JS hatası yok. Eski derlemede çok monitörde `capture-screen` sızıntısı (A11) kırpma ölçeğini bozuyordu → 5a1e1a9 ile yeniden deneme + "tuhaf"ın tarifi bekleniyor
+- [~] A13. Video: "Kaydı başlat" deyince kayıt başlamıyor görünüyor (2026-09-03, diğer makine, 3 monitör). Tek monitörde arayüz akışı `--qa` 9e ile doğrulandı: Kayıt düğmesi → RecorderState dolu → dosya yazıldı. Eski derlemede çok monitörde `capture-screen` sızıntısı (A11) bölgeyi yanlış ölçekle fiziksele çeviriyordu (kayıt başlatılamıyor / boş kayıt) → 5a1e1a9 ile yeniden deneme bekleniyor; hâlâ olursa günlükte "Kayıt başlıyor: WxH @ (x,y)" ve "Kayıt başlatılamadı" satırları
 - [~] A10. Görüntüleyici dar pencerede (uzun kaydırma görüntüsü) araç çubuğu taşıyor, küçült/büyüt/kapat görünmüyor → Çiz/Karşılaştır/Kopyala/Klasör/Sil "…" menüsüne toplanacak, pencere düğmeleri her zaman görünür (gözle)
 
 ## B. Video kaydı — kalan işler (Windows)
@@ -27,7 +29,7 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 - [x] B4. Sistem sesi — WASAPI loopback + mikrofonla karıştırma (`--qa`: "ses [sistem] … 3,1 sn ses", 201 kbps AAC izi)
 - [~] B5. Ses/video eşzamanlama — ortak QPC `t0`; gözle (dudak senk./tık sesi) bekliyor
 - [x] B5b. Kodlayıcı değişti: kendi Media Foundation Sink Writer. İlk ölçümde yön ters çıktı (satır çevirme bu yolda fazlaydı), çevirme kaldırıldı (cv2: normal 0.995 / ters 0.011, 150 kare = 30 fps, `avc1` + `mp4a` izleri)
-- [ ] B6. Kayıt akışının arayüzü: bölge seç → Kayıt → Durdur → kaydetme paneli (gözle)
+- [~] B6. Kayıt akışının arayüzü: bölge seç → Kayıt → Durdur → kaydetme paneli — Kayıt düğmesinden başlatma ve dosya yazımı `--qa` 9e ile doğrulandı; kaydetme paneli gözle
 - [ ] B7. Kaydetme iptalinde geçici dosya yolu panoya (Electron davranışı) — kod var, gözle
 - [ ] B8. Çok monitör: doğru monitörden kayıt (`MonitorFromPoint`) — ikinci monitörde gözle
 - [ ] B9. Karışık DPI'da kırpma ölçeği (renderer fiziksel piksel veriyor) — %125/%150 ekranda gözle
@@ -39,7 +41,7 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 
 - [x] C1. Motor: WGC → 15 fps kırpılmış RGBA → Channel (`--qa`)
 - [~] C2. Bitir sonrası Kopyala/Kaydet (A7)
-- [ ] C3. Uçtan uca: Başlat → kaydır → Bitir → birleştirme → Kopyala/Kaydet → galeri (gözle)
+- [~] C3. Uçtan uca: Başlat → kaydır → Bitir → birleştirme → Kopyala/Kaydet → galeri — Başlat/Bitir/tekrar Başlat/inceleme evresi `--qa` 9d ile doğrulandı; gerçek kaydırma + Kopyala/Kaydet gözle
 - [ ] C4. Overlay'in kendisinin karelere girmemesi (`WDA_EXCLUDEFROMCAPTURE`) — birleştirilmiş görüntüde çerçeve izi var mı (gözle)
 - [ ] C5. 15 fps yeterli mi (hızlı kaydırmada dikiş kaçırma) — gözle
 
@@ -73,3 +75,5 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 11. Eski (Electron) ile yeni (Tauri) arasında ekran görüntüsü/video performans kazanımı var mı → D12 (ölçüm: `docs/PERF_WINDOWS.md`)
 12. Yaptıklarımızı aynı dalda commit'leyip gönder → D10
 13. Çok monitörde ekran görüntüsünde bölge seçilemiyor → A11
+14. Kaydırmalı yakalamada Başlat → hemen Bitir tuhaf davranıyor → A12
+15. Video kaydı başlat deyince başlamıyor → A13

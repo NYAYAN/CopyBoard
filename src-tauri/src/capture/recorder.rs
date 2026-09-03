@@ -61,10 +61,12 @@ fn quality_scale(quality: &str) -> f64 {
 }
 
 /// Kayıt için gereken macOS sürümü var mı? `SCRecordingOutput` 15.0+ ister.
+///
+/// `capture::start` bunu overlay açılmadan ÖNCE soruyor: paket 12.3'e kadar iniyor ve
+/// 12–14'te kullanıcıya bölge seçtirip sonra "oluşturulamadı" demek kötü bir deneyim.
 pub fn is_supported() -> bool {
-    // Crate, özelliği `macos_15_0` feature'ı ardında sunuyor ve çalışma anında
-    // nesne oluşturma başarısız olursa `None` dönüyor — asıl kontrol o.
-    true
+    let v = objc2_foundation::NSProcessInfo::processInfo().operatingSystemVersion();
+    v.majorVersion >= 15
 }
 
 /// Kaydı başlatır. `crop_*` FİZİKSEL piksel.

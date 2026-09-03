@@ -16,10 +16,23 @@
 //! ([`take_capture_frame`]); `tauri::ipc::Response` ham bayt döndürüyor.
 //! `api-tauri.js` bu iki adımı birleştirip `onCaptureScreen`'in eski imzasını koruyor.
 
+// Video kaydı ve kaydırma akışı platform başına ayrı dosyada, AYNI modül adı ve aynı
+// imzalarla: `commands/record.rs` hangi platformda olduğunu bilmiyor.
 #[cfg(target_os = "macos")]
 pub mod recorder;
+#[cfg(target_os = "windows")]
+#[path = "recorder_win.rs"]
+pub mod recorder;
+/// Windows kaydının parçaları: MP4 yazıcı (Media Foundation) ve ses (WASAPI).
+#[cfg(target_os = "windows")]
+pub mod mf_writer;
+#[cfg(target_os = "windows")]
+pub mod wasapi;
 pub mod screenshot;
 #[cfg(target_os = "macos")]
+pub mod scroll_stream;
+#[cfg(target_os = "windows")]
+#[path = "scroll_stream_win.rs"]
 pub mod scroll_stream;
 
 use std::collections::{HashMap, HashSet};
@@ -34,6 +47,14 @@ use crate::state::AppState;
 /// Aynı anda kaç monitör yakalanacak. Yeterince paralel ki karartma hızlı belirsin,
 /// ama sınırlı ki tepe bellek monitör sayısıyla karesel büyümesin.
 const CONCURRENCY: usize = 2;
+
+/// Ölçüm: son `begin` anı. `deliver` ve renderer'ın `snip-painted` bildirimi buna göre
+/// "+ms" yazar (docs/PERF_WINDOWS.md). Yalnız günlük; davranışı etkilemez.
+static CAPTURE_T0: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+pub fn elapsed_since_begin_ms() -> Option<u128> {
+    CAPTURE_T0.lock().unwrap().map(|t| t.elapsed().as_millis())
+}
 
 #[derive(Default)]
 pub struct CaptureState {
@@ -74,6 +95,31 @@ pub fn start(app: &tauri::AppHandle, mode: &str) {
         return;
     }
 
+    // ── Platform kapısı: overlay'e GİRMEDEN söyle ───────────────────────────
+    // Video kaydı ve kaydırmalı yakalama macOS'ta ScreenCaptureKit, Windows'ta
+    // Windows.Graphics.Capture ile var; başka platformda yok. Kapı olmadan kullanıcı
+    // tüm ekranları karartıp bölge seçiyor, Kaydet'e basınca "desteklenmiyor" görürdü.
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    if matches!(mode, "video" | "scroll") {
+        let store = &app.state::<AppState>().store;
+        let msg = crate::i18n::t(store, if mode == "video" {
+            "Video kaydı bu sürümde yalnız macOS'ta kullanılabilir."
+        } else {
+            "Kaydırmalı yakalama bu sürümde yalnız macOS'ta kullanılabilir."
+        });
+        crate::windows::toast::show(app, &msg, "warning");
+        return;
+    }
+    // macOS: `SCRecordingOutput` 15 ister; 12.3–14.x'te bölge seçtirip sonra hata
+    // vermek yerine baştan söyle. Windows: WGC yoksa (10 1903 öncesi) aynı kapı.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    if mode == "video" && !recorder::is_supported() {
+        let store = &app.state::<AppState>().store;
+        let msg = crate::i18n::t(store, "Video kaydı macOS 15 veya üzeri gerektirir.");
+        crate::windows::toast::show(app, &msg, "warning");
+        return;
+    }
+
     {
         let state = app.state::<AppState>();
         let mut rt = state.runtime.lock().unwrap();
@@ -85,6 +131,7 @@ pub fn start(app: &tauri::AppHandle, mode: &str) {
         rt.is_capturing = true;
         rt.last_mode = mode.to_string();
     }
+    *CAPTURE_T0.lock().unwrap() = Some(std::time::Instant::now());
 
     let monitors = geom::all_monitors(app);
     if monitors.is_empty() {
@@ -215,6 +262,9 @@ fn deliver(
         multi_monitor: multi,
     };
     log::debug!("kare teslim: {label} {}x{} ({} bayt PNG)", frame.width, frame.height, frame.png.len());
+    if let Some(ms) = elapsed_since_begin_ms() {
+        log::info!("PERF kare teslim {label} +{ms} ms");
+    }
     let state = app.state::<CaptureState>();
     state.frames.lock().unwrap().insert(label.to_string(), frame);
 
@@ -295,7 +345,7 @@ pub fn take_capture_frame(
 /// Overlay yalnız kullanılabilir bir görüntü geldikten sonra görünür olduğu için
 /// yeniden denemeler kullanıcıya görünmüyor.
 #[tauri::command]
-pub fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) {
+pub async fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     let label = window.label().to_string();
     let count = {
         let state = app.state::<CaptureState>();
@@ -336,7 +386,7 @@ pub fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) {
 
 /// Overlay kullanılabilir bir görüntü aldı → göster.
 #[tauri::command]
-pub fn snip_ready(window: tauri::WebviewWindow) {
+pub async fn snip_ready(window: tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -345,7 +395,7 @@ pub fn snip_ready(window: tauri::WebviewWindow) {
 /// söyle. Overlay'ler açık, karanlık VE etkileşimli kalıyor, böylece yalnız en son
 /// seçim var oluyor ve kullanıcı serbestçe başka monitörde yeniden seçebiliyor.
 #[tauri::command]
-pub fn capture_claim_monitor(app: tauri::AppHandle, window: tauri::WebviewWindow) {
+pub async fn capture_claim_monitor(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     for (label, w) in app.webview_windows() {
         if label.starts_with(crate::windows::capture::PREFIX) && label != window.label() {
             let _ = w.emit_to(&label, "capture-reset", ());
@@ -354,7 +404,7 @@ pub fn capture_claim_monitor(app: tauri::AppHandle, window: tauri::WebviewWindow
 }
 
 #[tauri::command]
-pub fn snip_close(app: tauri::AppHandle) {
+pub async fn snip_close(app: tauri::AppHandle) {
     close_all(&app, None);
 }
 
@@ -407,9 +457,12 @@ pub fn finish(app: &tauri::AppHandle) {
     let cs = app.state::<CaptureState>();
     cs.frames.lock().unwrap().clear();
     cs.retries.lock().unwrap().clear();
+    // Kaydetme paneli overlay'le birlikte gittiyse kilidi de bırak.
+    crate::commands::capture::reset_save_guard();
 
     if app.state::<AppState>().settings().show_widget() {
-        crate::windows::show_if_open(app, "widget");
+        // Odak ÇALMADAN geri getir: kullanıcı yakalamadan sonra yazdığı yere dönüyor.
+        crate::windows::widget::show_inactive(app);
     }
 }
 

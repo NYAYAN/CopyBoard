@@ -67,7 +67,17 @@ fn try_capture(target: &MonitorInfo, index: usize) -> Option<Frame> {
     // overlay'ler aynı (yanlış) görüntüyü alıyordu — hiçbir hata vermeden.
     //
     // İki taraf da NOKTA: `MonitorInfo.x/y` zaten mantıksal.
+    //
+    // Windows'ta ise xcap `MONITORINFO.rcMonitor`u, yani FİZİKSEL sanal-ekran
+    // pikselini veriyor; orada sol taraf fiziksele çevriliyor (`MonitorInfo` her
+    // monitörü kendi ölçeğiyle mantıksala indirmişti, geri çarpmak birebir).
+    #[cfg(target_os = "macos")]
     let (tx, ty) = (target.x.round() as i32, target.y.round() as i32);
+    #[cfg(not(target_os = "macos"))]
+    let (tx, ty) = (
+        (target.x * target.scale).round() as i32,
+        (target.y * target.scale).round() as i32,
+    );
 
     let monitor = monitors
         .iter()

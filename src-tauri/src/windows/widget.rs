@@ -38,8 +38,16 @@ pub fn scale(app: &tauri::AppHandle) -> f64 {
     (app.state::<AppState>().settings().widget_scale() as f64 / 100.0).clamp(0.5, 3.0)
 }
 
-/// Kayıtlı düğme konumu.
+/// Sürükleme SIRASINDAKİ düğme konumu — yalnız bellekte. Electron `'drag'`de
+/// `state.widgetPos`u güncelleyip diski yalnız `'drag-end'`de yazıyordu; portta her
+/// kare `config.json`a iniyordu (saniyede onlarca senkron disk yazması).
+static LIVE_POS: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
+
+/// Kayıtlı düğme konumu (sürükleme sürüyorsa bellekteki canlı konum).
 fn saved_pos(app: &tauri::AppHandle) -> (f64, f64) {
+    if let Some(live) = *LIVE_POS.lock().unwrap() {
+        return live;
+    }
     let store = &app.state::<AppState>().store;
     let v = store.get_value("widgetPos");
     let x = v.as_ref().and_then(|v| v.get("x")).and_then(|x| x.as_f64());
@@ -94,11 +102,15 @@ pub fn create(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     let _ = window.set_zoom(s);
 
     // Electron widget'ı `showInactive()` ile gösteriyordu: yüzen bir araç, kullanıcının
-    // yazdığı yerden odağı ÇALMAMALI. Tauri'de karşılığı, pencereyi odak istemeden
-    // göstermek — `set_focus()` çağırmamak yetmiyor, macOS'ta `show()` zaten
-    // `makeKeyAndOrderFront` yapıyor. `focusable(false)` ile kuruluyor olsaydı
-    // sürükleme çalışmazdı, o yüzden odak gösterimden SONRA geri veriliyor.
-    let _ = window.show();
+    // yazdığı yerden odağı ÇALMAMALI. `set_focus()` çağırmamak yetmiyor: macOS'ta
+    // `show()` zaten `makeKeyAndOrderFront`, Windows'ta aktive eden bir `ShowWindow`
+    // yapıyor. `focusable(false)` ile kurulsaydı sürükleme çalışmazdı; o yüzden
+    // pencere `platform::show_inactive` ile (orderFrontRegardless / SW_SHOWNOACTIVATE)
+    // odak istemeden gösteriliyor.
+    if let Err(e) = crate::platform::show_inactive(&window) {
+        log::warn!("widget odak almadan gösterilemedi ({e}) — show() ile devam");
+        let _ = window.show();
+    }
     let _ = geom::place(&window, window_x(bx, &side, s), by, FULL_W * s, COLLAPSED_H * s);
     let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
     let _ = crate::platform::order_front(&window);
@@ -109,10 +121,22 @@ pub fn create(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     Ok(window)
 }
 
+/// Var olan widget'ı ODAK ÇALMADAN geri getirir ve üstte olmasını yeniden dayatır
+/// (Electron `showInactive()` + `moveTop()`; yakalama bitişi ve ayar geçişi kullanıyor).
+pub fn show_inactive(app: &tauri::AppHandle) {
+    let Some(w) = app.get_webview_window(LABEL) else { return };
+    if let Err(e) = crate::platform::show_inactive(&w) {
+        log::warn!("widget odak almadan gösterilemedi ({e}) — show() ile devam");
+        let _ = w.show();
+    }
+    let _ = crate::platform::set_window_level(&w, WindowLevel::ScreenSaver);
+    let _ = crate::platform::order_front(&w);
+}
+
 pub fn toggle(app: &tauri::AppHandle, show: bool) {
     if show {
         if app.get_webview_window(LABEL).is_some() {
-            super::show_if_open(app, LABEL);
+            show_inactive(app);
         } else if let Err(e) = create(app) {
             log::error!("widget kurulamadı: {e}");
         }
@@ -220,8 +244,8 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
             let dx = data.as_ref().and_then(|d| d.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0);
             let dy = data.as_ref().and_then(|d| d.get("y")).and_then(|v| v.as_f64()).unwrap_or(0.0);
             let (nx, ny) = (bx + dx, by + dy);
-            let store = &app.state::<AppState>().store;
-            store.set("widgetPos", serde_json::json!({ "x": nx.round(), "y": ny.round() }));
+            // Diske DEĞİL belleğe: kalıcı yazma `drag-end`de (`finish_drag`).
+            *LIVE_POS.lock().unwrap() = Some((nx.round(), ny.round()));
             let h = window.inner_size().ok().and_then(|z| window.scale_factor().ok().map(|f| z.height as f64 / f))
                 .unwrap_or(COLLAPSED_H * s);
             let _ = geom::place(&window, window_x(nx, &side, s), ny, FULL_W * s, h);
@@ -243,10 +267,17 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
 /// Sürükleme bitti: kenarlara yapıştır, ekranda tut, göreli konumu kaydet.
 fn finish_drag(app: &tauri::AppHandle, window: &tauri::WebviewWindow, s: f64) {
     let (bx, by) = saved_pos(app);
+    // Canlı konum bundan sonra store'a yazılıyor; bellekteki kopya artık gereksiz.
+    *LIVE_POS.lock().unwrap() = None;
     let btn = BTN_W * s;
     let col_h = COLLAPSED_H * s;
 
-    let Some(m) = geom::monitor_nearest_point(app, bx + btn / 2.0, by + col_h / 2.0) else { return };
+    let Some(m) = geom::monitor_nearest_point(app, bx + btn / 2.0, by + col_h / 2.0) else {
+        // Monitör bulunamadı: en azından sürüklenen konum kaybolmasın.
+        let store = &app.state::<AppState>().store;
+        store.set("widgetPos", serde_json::json!({ "x": bx.round(), "y": by.round() }));
+        return;
+    };
 
     let mut fx = bx;
     let mut fy = by;

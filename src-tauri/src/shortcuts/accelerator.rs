@@ -92,46 +92,59 @@ pub fn parse(accelerator: &str) -> Option<Parsed<'_>> {
 
 /// Electron tuş adı → Tauri `Code`.
 ///
-/// Kaynak: `accelerator.js`'in ürettiği tüm biçimler. Tanınmayan bir ad `None` döner —
-/// **yanlış bir tuşa düşmektense hiç bağlanmamak** doğrudur.
+/// Kaynak: `accelerator.js`'in ürettiği tüm biçimler ARTI Electron'un `globalShortcut`
+/// sözlüğünün geri kalanı. Sebebi göç: eski CopyBoard kaydedicileri `e.key` tabanlıydı
+/// ve `config.json`da `CommandOrControl+Shift+!` ya da `Alt+Plus` gibi dizeler duruyor
+/// olabilir; Electron bunları kaydediyordu. Tanınmayan bir ad `None` döner —
+/// **yanlış bir tuşa düşmektense hiç bağlanmamak** doğrudur; çağıran o durumda
+/// varsayılana döndürüp kullanıcıya söylüyor.
+///
+/// Electron adları büyük/küçük harfe duyarsızdı (`space`, `f5`, `pageup`); burada da öyle.
 pub fn key_to_code(key: &str) -> Option<Code> {
-    // Harfler: "A".."Z"
+    key_to_code_shifted(key).map(|(code, _)| code)
+}
+
+/// [`key_to_code`] artı "bu ad Shift gerektiriyor mu" bilgisi. Electron `"!"`ı
+/// `Shift+1` olarak kaydediyordu: shift'li noktalama ana tuşa iner, Shift eklenir.
+pub fn key_to_code_shifted(key: &str) -> Option<(Code, bool)> {
+    // Harfler: "A".."Z"; rakamlar
     if key.len() == 1 {
         let c = key.as_bytes()[0];
         if c.is_ascii_alphabetic() {
-            return letter_code(c.to_ascii_uppercase());
+            return letter_code(c.to_ascii_uppercase()).map(|k| (k, false));
         }
         if c.is_ascii_digit() {
-            return digit_code(c);
+            return digit_code(c).map(|k| (k, false));
         }
     }
+    let lower = key.to_ascii_lowercase();
     // Numpad rakamları: "num0".."num9"
-    if let Some(d) = key.strip_prefix("num") {
+    if let Some(d) = lower.strip_prefix("num") {
         if d.len() == 1 && d.as_bytes()[0].is_ascii_digit() {
-            return numpad_code(d.as_bytes()[0]);
+            return numpad_code(d.as_bytes()[0]).map(|k| (k, false));
         }
     }
     // Fonksiyon tuşları: "F1".."F24"
-    if let Some(n) = key.strip_prefix('F').and_then(|n| n.parse::<u8>().ok()) {
-        return function_code(n);
+    if let Some(n) = lower.strip_prefix('f').and_then(|n| n.parse::<u8>().ok()) {
+        return function_code(n).map(|k| (k, false));
     }
 
-    Some(match key {
-        "Space" => Code::Space,
-        "Tab" => Code::Tab,
-        "Enter" | "Return" => Code::Enter,
-        "Backspace" => Code::Backspace,
-        "Delete" => Code::Delete,
-        "Insert" => Code::Insert,
-        "Home" => Code::Home,
-        "End" => Code::End,
-        "PageUp" => Code::PageUp,
-        "PageDown" => Code::PageDown,
-        "Up" => Code::ArrowUp,
-        "Down" => Code::ArrowDown,
-        "Left" => Code::ArrowLeft,
-        "Right" => Code::ArrowRight,
-        "Escape" | "Esc" => Code::Escape,
+    let plain = match lower.as_str() {
+        "space" => Code::Space,
+        "tab" => Code::Tab,
+        "enter" | "return" => Code::Enter,
+        "backspace" => Code::Backspace,
+        "delete" => Code::Delete,
+        "insert" => Code::Insert,
+        "home" => Code::Home,
+        "end" => Code::End,
+        "pageup" => Code::PageUp,
+        "pagedown" => Code::PageDown,
+        "up" => Code::ArrowUp,
+        "down" => Code::ArrowDown,
+        "left" => Code::ArrowLeft,
+        "right" => Code::ArrowRight,
+        "escape" | "esc" => Code::Escape,
         "," => Code::Comma,
         "." => Code::Period,
         "/" => Code::Slash,
@@ -143,13 +156,66 @@ pub fn key_to_code(key: &str) -> Option<Code> {
         "`" => Code::Backquote,
         "-" => Code::Minus,
         "=" => Code::Equal,
+        // Electron `Plus` = `=`/`+` tuşu (VKEY_OEM_PLUS)
+        "plus" => Code::Equal,
         "numadd" => Code::NumpadAdd,
         "numsub" => Code::NumpadSubtract,
         "nummult" => Code::NumpadMultiply,
         "numdiv" => Code::NumpadDivide,
         "numdec" => Code::NumpadDecimal,
-        _ => return None,
-    })
+        // Electron'un geri kalan sözlüğü. Bazı platformlarda OS kaydı reddedebilir;
+        // o zaman "kaydedilemedi" yolu devreye girer — sessiz yanlış tuş değil.
+        "printscreen" => Code::PrintScreen,
+        "capslock" => Code::CapsLock,
+        "numlock" => Code::NumLock,
+        "scrolllock" => Code::ScrollLock,
+        "volumeup" => Code::AudioVolumeUp,
+        "volumedown" => Code::AudioVolumeDown,
+        "volumemute" => Code::AudioVolumeMute,
+        "medianexttrack" => Code::MediaTrackNext,
+        "mediaprevioustrack" => Code::MediaTrackPrevious,
+        "mediastop" => Code::MediaStop,
+        "mediaplaypause" => Code::MediaPlayPause,
+        _ => {
+            // Shift'li noktalama: Electron `KeyboardCodeFromCharCode` ile ana tuşa
+            // indirip Shift ekliyordu (US düzeni varsayımıyla — Electron da öyle).
+            let shifted = match key {
+                "!" => Code::Digit1,
+                "@" => Code::Digit2,
+                "#" => Code::Digit3,
+                "$" => Code::Digit4,
+                "%" => Code::Digit5,
+                "^" => Code::Digit6,
+                "&" => Code::Digit7,
+                "*" => Code::Digit8,
+                "(" => Code::Digit9,
+                ")" => Code::Digit0,
+                ":" => Code::Semicolon,
+                "\"" => Code::Quote,
+                "<" => Code::Comma,
+                ">" => Code::Period,
+                "?" => Code::Slash,
+                "_" => Code::Minus,
+                "+" => Code::Equal,
+                "{" => Code::BracketLeft,
+                "}" => Code::BracketRight,
+                "|" => Code::Backslash,
+                "~" => Code::Backquote,
+                _ => return None,
+            };
+            return Some((shifted, true));
+        }
+    };
+    Some((plain, false))
+}
+
+/// Dize hiç çözümlenebiliyor mu? (`to_shortcut`'tan farkı: native-only tuşlar da
+/// "çözümlenebilir" sayılır — onlar Carbon'a gidiyor, çözümsüz değil.)
+pub fn is_parseable(accelerator: &str) -> bool {
+    if is_native_only(accelerator) {
+        return parse(accelerator).is_some();
+    }
+    parse(accelerator).is_some_and(|p| key_to_code(p.key).is_some())
 }
 
 fn letter_code(c: u8) -> Option<Code> {
@@ -197,9 +263,12 @@ pub fn to_shortcut(accelerator: &str) -> Option<Shortcut> {
         return None;
     }
     let p = parse(accelerator)?;
-    let code = key_to_code(p.key)?;
+    let (code, needs_shift) = key_to_code_shifted(p.key)?;
 
     let mut mods = Modifiers::empty();
+    if needs_shift {
+        mods |= Modifiers::SHIFT;
+    }
     // `CommandOrControl`: macOS'ta Cmd, diğer her yerde Ctrl — Electron'un tanımı.
     if p.cmd_or_ctrl {
         if cfg!(target_os = "macos") {
@@ -346,6 +415,28 @@ mod tests {
         assert_eq!(key_to_code("Ş"), None);
         assert_eq!(key_to_code(""), None);
         assert!(to_shortcut("Alt+Ş").is_none());
+    }
+
+    #[test]
+    fn electron_miras_adlari_cozuluyor() {
+        // Eski (`e.key` tabanlı) kaydedicilerin config.json'a yazdığı ve Electron'un
+        // kabul ettiği biçimler. Çözülemezse göç sonrası kısayol sessizce ölür.
+        assert_eq!(key_to_code("space"), Some(Code::Space));
+        assert_eq!(key_to_code("f5"), Some(Code::F5));
+        assert_eq!(key_to_code("Plus"), Some(Code::Equal));
+        assert_eq!(key_to_code("PrintScreen"), Some(Code::PrintScreen));
+        assert_eq!(key_to_code("VolumeMute"), Some(Code::AudioVolumeMute));
+        // Shift'li noktalama ana tuşa iner ve Shift eklenir
+        assert_eq!(key_to_code_shifted("!"), Some((Code::Digit1, true)));
+        assert_eq!(key_to_code_shifted("\""), Some((Code::Quote, true)));
+        let s = to_shortcut("CommandOrControl+!").unwrap();
+        assert!(s.mods.contains(Modifiers::SHIFT), "Shift eklenmedi");
+        assert_eq!(s.key, Code::Digit1);
+        // Ayrıştırılabilirlik: native-only tuş da "çözümlenebilir"
+        assert!(is_parseable("CommandOrControl+IntlBackslash"));
+        assert!(is_parseable("Alt+9"));
+        assert!(!is_parseable("Alt+Ş"));
+        assert!(!is_parseable("AltGr+X"));
     }
 
     #[test]

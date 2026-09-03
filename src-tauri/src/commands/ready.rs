@@ -22,7 +22,7 @@
 
 /// Renderer dinleyicilerini kurdu ve ilk durumu almaya hazır.
 #[tauri::command]
-pub fn window_ready(app: tauri::AppHandle, window: tauri::WebviewWindow) {
+pub async fn window_ready(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     match window.label() {
         crate::windows::toast::LABEL => crate::windows::toast::ready(&app),
         crate::windows::viewer::LABEL => super::viewer::send_initial_state(&app),

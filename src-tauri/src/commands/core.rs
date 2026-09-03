@@ -46,16 +46,27 @@ pub fn get_settings(app: tauri::AppHandle, state: tauri::State<'_, AppState>) ->
 }
 
 #[tauri::command]
-pub fn set_autostart(app: tauri::AppHandle, state: tauri::State<'_, AppState>, value: bool) {
+pub async fn set_autostart(app: tauri::AppHandle, value: bool) {
     use tauri_plugin_autostart::ManagerExt;
 
+    // `async` komut `State<'_>` alamıyor; içeriden çekiliyor.
+    let state = app.state::<AppState>();
     state.settings().set_auto_start(value);
+    // Geliştirme sürümü OS'a hiç kayıt yazmaz (Electron `app.isPackaged`): tercih
+    // saklanır, paketli sürüm açılışta `sync_autostart` ile uygular.
+    if tauri::is_dev() {
+        return;
+    }
     let mgr = app.autolaunch();
     let result = if value { mgr.enable() } else { mgr.disable() };
     if let Err(e) = result {
         log::warn!("otomatik başlatma ayarlanamadı: {e}");
-        // Ayar ile gerçek durum ayrışmasın: OS reddettiyse tercihi geri al.
+        // Ayar ile gerçek durum ayrışmasın: OS reddettiyse tercihi geri al ve
+        // ayarlar ekranına söyle — yoksa onay kutusu yeni konumunda yalan söylüyor.
         state.settings().set_auto_start(!value);
+        let store = &state.store;
+        let msg = crate::i18n::t(store, "Otomatik başlatma ayarlanamadı. İşletim sistemi isteği reddetti.");
+        toast::show(&app, &msg, "error");
     }
 }
 
@@ -66,29 +77,50 @@ pub fn set_clipboard_paused(state: tauri::State<'_, AppState>, value: bool) {
 
 /// Ana pencereyi gizler (kapatmaz) — tepsi uygulaması, X düğmesi çıkış değil.
 #[tauri::command]
-pub fn close_window(app: tauri::AppHandle) {
+pub async fn close_window(app: tauri::AppHandle) {
     main_window::hide(&app);
 }
 
 /// Çağıran pencereyi küçültür.
 #[tauri::command]
-pub fn minimize_window(window: tauri::WebviewWindow) {
+pub async fn minimize_window(window: tauri::WebviewWindow) {
     let _ = window.minimize();
 }
 
+/// Sayfanın `window.close()` çağrısının karşılığı (bkz. `api-tauri.js`).
+///
+/// Electron'da `window.close()` BrowserWindow'u kapatıyordu; WKWebView bunu
+/// script'in açmadığı pencerelerde yok sayıyor. Ana pencere için "kapat" gizlemek
+/// demek (tepsi uygulaması); geri kalan her pencere gerçekten kapanıyor.
 #[tauri::command]
-pub fn toast_finished(app: tauri::AppHandle) {
+pub async fn close_current_window(app: tauri::AppHandle, window: tauri::WebviewWindow) {
+    if window.label() == main_window::LABEL {
+        main_window::hide(&app);
+        return;
+    }
+    if let Err(e) = window.close() {
+        log::warn!("{} penceresi kapatılamadı: {e}", window.label());
+    }
+}
+
+#[tauri::command]
+pub async fn toast_finished(app: tauri::AppHandle) {
     toast::finished(&app);
 }
 
 #[tauri::command]
-pub fn toast_resize(app: tauri::AppHandle, height: f64) {
+pub async fn toast_resize(app: tauri::AppHandle, height: f64) {
     toast::resize(&app, height);
 }
 
 /// Renderer'dan hata ayıklama günlüğü. Electron'daki `debug-log` kanalı.
 #[tauri::command]
 pub fn debug_log(message: String) {
+    if message == "snip-painted" {
+        if let Some(ms) = crate::capture::elapsed_since_begin_ms() {
+            log::info!("PERF snip-painted +{ms} ms");
+        }
+    }
     log::info!("[renderer] {message}");
 }
 
@@ -113,27 +145,39 @@ pub fn debug_log(message: String) {
 /// onu tercih ediyor. `sessionStorage` webview oturumuna bağlı, yani pencere
 /// kapanınca temizleniyor ve bayat veri bırakmıyor.
 #[tauri::command]
-pub fn set_language(app: tauri::AppHandle, state: tauri::State<'_, AppState>, lang: String) {
-    if !crate::i18n::set_language(&state.store, &lang) {
+pub async fn set_language(app: tauri::AppHandle, lang: String) {
+    apply_language(&app, &lang);
+}
+
+/// Senkron gövde — komut ve `--set-lang` hata ayıklama bayrağı ikisi de bunu çağırıyor.
+pub fn apply_language(app: &tauri::AppHandle, lang: &str) {
+    let state = app.state::<AppState>();
+    if !crate::i18n::set_language(&state.store, lang) {
         return;
     }
-    let os_dark = os_prefers_dark(&app);
-    let boot = crate::windows::boot_payload(&app, os_dark);
+    let os_dark = os_prefers_dark(app);
+    let boot = crate::windows::boot_payload(app, os_dark);
     let script = format!(
         "try {{ sessionStorage.setItem('__COPYBOARD_BOOT__', JSON.stringify({boot})); }} catch (e) {{}} location.reload();"
     );
+    // Yeniden yükleme dinleyicileri düşürüyor; "hazır" bayrakları da düşmeli, yoksa
+    // arada gösterilen bir toast / seçici, dinleyicisi olmayan sayfaya yayınlanıp
+    // kaybolur. `window_ready` yeniden gelince bekleyenler teslim ediliyor.
+    state.runtime.lock().unwrap().toast_ready = false;
+    crate::windows::quickpaste::reset_ready();
     for (_, window) in app.webview_windows() {
         let _ = window.eval(&script);
     }
     // Menü etiketleri de t() ile üretiliyor; yeniden inşa edilmezse eski dilde kalır.
-    crate::tray::rebuild(&app);
+    crate::tray::rebuild(app);
 }
 
 /// Tema değişimi. Dilin aksine hiçbir şey yeniden YÜKLENMEZ: her pencere olayı alıp
 /// `<html data-theme>` bayrağını çevirir. Geçiş anında olur ve iş ortasında zararsızdır —
 /// alıntı overlay'i ve kaydedici, altınızdan yeniden yüklenmesini istemeyeceğiniz pencerelerdir.
 #[tauri::command]
-pub fn set_theme(app: tauri::AppHandle, state: tauri::State<'_, AppState>, value: String) {
+pub async fn set_theme(app: tauri::AppHandle, value: String) {
+    let state = app.state::<AppState>();
     if !crate::theme::set_mode(&state.store, &value) {
         return;
     }
@@ -148,15 +192,18 @@ pub fn broadcast_theme(app: &tauri::AppHandle) {
     let _ = app.emit("theme-changed", resolved);
 }
 
+/// OS koyu temada mı? Sıra: ana pencerenin `theme()`u (varsa) → OS'a doğrudan soru
+/// (pencere yokken, ilk pencere kurulurken) → koyu varsayımı.
 pub fn os_prefers_dark(app: &tauri::AppHandle) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(w) = app.get_webview_window(main_window::LABEL) {
+    if let Some(w) = app.get_webview_window(main_window::LABEL) {
+        #[cfg(target_os = "macos")]
+        {
             return crate::platform::macos::os_prefers_dark(&w);
         }
+        #[cfg(not(target_os = "macos"))]
+        if let Ok(t) = w.theme() {
+            return matches!(t, tauri::Theme::Dark);
+        }
     }
-    app.get_webview_window(main_window::LABEL)
-        .and_then(|w| w.theme().ok())
-        .map(|t| matches!(t, tauri::Theme::Dark))
-        .unwrap_or(true)
+    crate::platform::os_prefers_dark_hint().unwrap_or(true)
 }

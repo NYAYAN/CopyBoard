@@ -84,6 +84,24 @@ pub fn order_front(window: &tauri::WebviewWindow) -> Result<(), String> {
     with_ns_window(window, |ns| ns.orderFrontRegardless())
 }
 
+/// Pencereyi ODAK ALMADAN gösterir (Electron `showInactive()`).
+///
+/// tao'nun `set_visible(true)`i `makeKeyAndOrderFront` çağırıyor — pencere key olur,
+/// CopyBoard aktif uygulama olur, kullanıcının yazdığı alan odağı kaybeder.
+/// `orderFrontRegardless` pencereyi görünür kılıp öne getirir ama key YAPMAZ.
+pub fn show_inactive(window: &tauri::WebviewWindow) -> Result<(), String> {
+    with_ns_window(window, |ns| ns.orderFrontRegardless())
+}
+
+/// OS görünümü koyu mu — pencere olmadan, `NSApp.effectiveAppearance` üzerinden.
+/// Ana thread dışından çağrılırsa `None` (AppKit kuralı).
+pub fn os_prefers_dark_hint() -> Option<bool> {
+    let mtm = MainThreadMarker::new()?;
+    let app = NSApplication::sharedApplication(mtm);
+    let name = app.effectiveAppearance().name();
+    Some(name.to_string().contains("Dark"))
+}
+
 /// `vibrancy: 'under-window'` + `visualEffectState: 'active'` karşılığı.
 pub fn apply_vibrancy(window: &tauri::WebviewWindow) -> Result<(), String> {
     let w = window.clone();

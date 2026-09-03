@@ -20,7 +20,7 @@ fn key_from(name: &str) -> Option<ShortcutKey> {
 }
 
 #[tauri::command]
-pub fn set_shortcut(app: tauri::AppHandle, key: String, accelerator: String) {
+pub async fn set_shortcut(app: tauri::AppHandle, key: String, accelerator: String) {
     let Some(k) = key_from(&key) else {
         log::warn!("bilinmeyen kısayol anahtarı: {key}");
         return;
@@ -29,7 +29,7 @@ pub fn set_shortcut(app: tauri::AppHandle, key: String, accelerator: String) {
 }
 
 #[tauri::command]
-pub fn set_shortcut_enabled(app: tauri::AppHandle, key: String, enabled: bool) {
+pub async fn set_shortcut_enabled(app: tauri::AppHandle, key: String, enabled: bool) {
     let Some(k) = key_from(&key) else {
         log::warn!("bilinmeyen kısayol anahtarı: {key}");
         return;

@@ -107,18 +107,32 @@ pub fn show(app: &tauri::AppHandle) {
         PENDING_SHOW.store(true, std::sync::atomic::Ordering::Release);
     }
 
-    // Esc yalnız açıkken bizim olsun.
+    // Esc yalnız açıkken bizim olsun. İşleyici eklentinin kilidi altında koşuyor;
+    // `hide` Escape'i KALDIRDIĞI için doğrudan çağrılamaz — ertelenir
+    // (bkz. `shortcuts::defer_to_main`, ölçülen kilitlenme).
     let handle = app.clone();
     let _ = app.global_shortcut().on_shortcut(escape_shortcut(), move |_a, _s, e| {
         if e.state == ShortcutState::Pressed {
-            hide(&handle);
+            crate::shortcuts::defer_to_main(&handle, |h| hide(h));
         }
     });
 
     // Yapıştırma izni ve hedef uygulama, kullanıcı seçim yapmadan hazırlansın.
-    if crate::platform::can_paste(true) {
+    // Sistem diyaloğu çalıştırma başına EN FAZLA BİR KEZ (Electron `promptedThisRun`):
+    // verilen izin ancak yeniden başlatmada etkin oluyor, her açılışta yeniden sormak
+    // kullanıcıyı bir şey yapamayacağı bir diyalogla dürtmek demek.
+    let prompt = !AX_PROMPTED.swap(true, std::sync::atomic::Ordering::AcqRel);
+    if crate::platform::can_paste(prompt) {
         crate::platform::note_front_app();
     }
+}
+
+static AX_PROMPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Dil değişimi sayfayı yeniden yüklüyor: dinleyiciler gidiyor, `window_ready` yeniden
+/// gelecek. Arada bir gösterim olursa bekletilmeli, yoksa olay boş sayfaya düşer.
+pub fn reset_ready() {
+    READY.store(false, std::sync::atomic::Ordering::Release);
 }
 
 /// Kaydırma evresi Escape'i geri bıraktığında, seçici hâlâ açıksa onu yeniden kaydeder.
@@ -134,17 +148,22 @@ pub fn rearm_escape_if_visible(app: &tauri::AppHandle) {
     let handle = app.clone();
     let _ = app.global_shortcut().on_shortcut(escape_shortcut(), move |_a, _s, e| {
         if e.state == ShortcutState::Pressed {
-            hide(&handle);
+            crate::shortcuts::defer_to_main(&handle, |h| hide(h));
         }
     });
 }
 
 pub fn hide(app: &tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window(LABEL) {
-        if w.is_visible().unwrap_or(false) {
-            let _ = w.hide();
-        }
+    // Escape'i YALNIZ gerçekten görünürken bırak. quickpaste.js'in boşta/ayrılma
+    // zamanlayıcıları seçici çoktan gizlendikten sonra da `quickPasteDismiss`
+    // gönderebiliyor; koşulsuz `unregister`, o arada başlamış bir kaydırmalı
+    // yakalamanın Escape'ini çalıyordu (Electron'da `hideQuickPaste` görünmezken
+    // no-op'tu ve kaydı pencerenin `hide` olayı düşürüyordu).
+    let Some(w) = app.get_webview_window(LABEL) else { return };
+    if !w.is_visible().unwrap_or(false) {
+        return;
     }
+    let _ = w.hide();
     let _ = app.global_shortcut().unregister(escape_shortcut());
 }
 

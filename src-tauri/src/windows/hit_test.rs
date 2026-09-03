@@ -147,7 +147,11 @@ fn start_tracker(app: &tauri::AppHandle) {
                     }
                     let over = cursor
                         .and_then(|(cx, cy)| {
-                            let pos = window.outer_position().ok()?;
+                            // İSTEMCİ alanının kökeni, dış çerçevenin değil: renderer'ın
+                            // CSS koordinatları buradan başlıyor. Windows'ta gölgeli
+                            // çerçevesiz pencerelerde dış dikdörtgen 8 px sola/1 px yukarı
+                            // taşıyor; `outer_position` ile alanlar o kadar kayıyordu.
+                            let pos = window.inner_position().ok()?;
                             let sf = window.scale_factor().ok()?;
                             // Pencereye göreli MANTIKSAL konum → CSS pikseli (zoom'a bölünür)
                             let x = (cx - pos.x as f64 / sf) / zoom;

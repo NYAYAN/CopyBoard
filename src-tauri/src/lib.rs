@@ -11,12 +11,16 @@
 pub mod capture;
 pub mod clipboard;
 pub mod commands;
+#[cfg(debug_assertions)]
+pub mod dbgtrace;
 pub mod gallery;
 pub mod geom;
 pub mod i18n;
 pub mod migrate;
 pub mod ocr;
 pub mod platform;
+#[cfg(debug_assertions)]
+pub mod qa;
 pub mod shortcuts;
 pub mod state;
 pub mod store;
@@ -38,10 +42,19 @@ pub fn run() {
     install_panic_hook();
 
     tauri::Builder::default()
+        // Tek örnek kilidi İLK eklenti: ikinci kopya, günlük dosyasına ya da başka
+        // bir eklentiye dokunmadan var olanı öne getirip çıksın (eklenti belgesi de
+        // bunu istiyor).
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            main_window::show(app);
+        }))
         // Günlükleme. Olmadan `log::` çağrılarının tamamı sessizce yok oluyor —
         // ilk çalıştırmada tam olarak bu oldu ve pencerenin neden görünmediği
         // görünmez kaldı. Konsola VE dosyaya yazıyor; dosya, kullanıcıda çıkan
         // bir sorunu istemenin tek makul yolu.
+        //
+        // Dosya: macOS `~/Library/Logs/com.nurullahyayan.copyboard/copyboard.log`,
+        // Windows `%LOCALAPPDATA%\com.nurullahyayan.copyboard\logs\copyboard.log`.
         .plugin(
             tauri_plugin_log::Builder::new()
                 // Geliştirmede Debug, paketlenmiş sürümde Info: Debug seviyesi
@@ -52,6 +65,14 @@ pub fn run() {
                 } else {
                     log::LevelFilter::Info
                 })
+                // Eklentinin varsayılanı 40 KB ve dolunca dosyayı SİLİYOR; renderer'ın
+                // warn/error'ları da buraya aktığı için "kullanıcıdan log iste" planı
+                // birkaç yüz satıra sığıyordu. 4 MB, günlerce geçmiş demek.
+                .max_file_size(4 * 1024 * 1024)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                // Kullanıcının saatiyle: UTC damgaları, "saat 14:03'te oldu" ile
+                // eşleştirmeyi zorlaştırıyordu.
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
@@ -60,10 +81,6 @@ pub fn run() {
                 ])
                 .build(),
         )
-        // Tek örnek kilidi: ikinci bir kopya açılırsa var olanı öne getir.
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            main_window::show(app);
-        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -80,6 +97,7 @@ pub fn run() {
             commands::core::set_autostart,
             commands::core::set_clipboard_paused,
             commands::core::close_window,
+            commands::core::close_current_window,
             commands::core::minimize_window,
             commands::core::toast_finished,
             commands::core::toast_resize,
@@ -178,7 +196,7 @@ pub fn run() {
             handle.manage(AppState::new(store));
             handle.manage(capture::CaptureState::default());
             handle.manage(windows::hit_test::Registry::default());
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             {
                 handle.manage(capture::recorder::RecorderState::default());
                 handle.manage(capture::scroll_stream::ScrollState::default());
@@ -245,9 +263,15 @@ pub fn run() {
             // sonraya bırakılıyor — toast penceresi ilk kullanımda kuruluyor.
             if report.performed {
                 let h = handle.clone();
-                let msg = format!(
-                    "Verileriniz aktarıldı: {} geçmiş, {} favori, {} ekran görüntüsü. Eski sürümün verileri olduğu yerde duruyor.",
-                    report.history, report.favorites, report.screenshots_copied
+                let (h_n, f_n, s_n) = (
+                    report.history.to_string(),
+                    report.favorites.to_string(),
+                    report.screenshots_copied.to_string(),
+                );
+                let msg = i18n::t_vars(
+                    &handle.state::<AppState>().store,
+                    "Verileriniz aktarıldı: {history} geçmiş, {favorites} favori, {shots} ekran görüntüsü. Eski sürümün verileri olduğu yerde duruyor.",
+                    &[("history", h_n.as_str()), ("favorites", f_n.as_str()), ("shots", s_n.as_str())],
                 );
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1200));
@@ -259,25 +283,33 @@ pub fn run() {
             // Geliştirme kolaylığı: `--record-test` sabit bir bölgeyi 5 sn kaydedip
             // dosyayı raporlar — kaydetme paneline uğramadan, kayıt motorunun
             // uygulamaya entegre hâlini sınamak için.
-            #[cfg(all(debug_assertions, target_os = "macos"))]
-            if std::env::args().any(|a| a == "--record-test") {
+            // `--record-test` ya da `--record-test=<kalite>[,<saniye>]` (ör. `ultra,60`).
+            #[cfg(all(debug_assertions, any(target_os = "macos", target_os = "windows")))]
+            if let Some(spec) = std::env::args().find_map(|a| {
+                if a == "--record-test" { Some(String::new()) } else { a.strip_prefix("--record-test=").map(str::to_string) }
+            }) {
                 let h = handle.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1200));
+                    // Üçüncü parça `noaudio` ise sistem sesi kapalı (bellek/CPU ayrıştırması için).
+                    let mut parts = spec.split(',');
+                    let quality = parts.next().filter(|q| !q.is_empty()).unwrap_or("high").to_string();
+                    let secs: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(5);
+                    let with_audio = parts.next() != Some("noaudio");
                     let monitors = geom::all_monitors(&h);
                     let Some(m) = monitors.first().cloned() else {
                         println!("RECORD_TEST: monitör yok");
                         return;
                     };
-                    let path = std::env::temp_dir().join("copyboard-record-test.mp4");
+                    let path = std::env::temp_dir().join(format!("copyboard-record-test-{quality}.mp4"));
                     let started = capture::recorder::start(
-                        &m, 200.0, 200.0, 1280.0, 720.0, "high",
-                        false, true, "test".into(), path.clone(),
+                        &m, 200.0, 200.0, 1280.0, 720.0, &quality,
+                        false, with_audio, "test".into(), path.clone(),
                     );
                     match started {
                         Ok(mut rec) => {
-                            println!("RECORD_TEST: başladı");
-                            std::thread::sleep(std::time::Duration::from_secs(5));
+                            println!("RECORD_TEST: başladı ({quality}, {secs} sn, ses={})", if with_audio { "sistem" } else { "yok" });
+                            std::thread::sleep(std::time::Duration::from_secs(secs));
                             match rec.stop() {
                                 Ok(p) => {
                                     let size = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
@@ -292,6 +324,41 @@ pub fn run() {
                 });
             }
 
+            // Ölçüm: `--shot-test` birincil monitörü 12 kez yakalar (xcap + PNG), medyanı
+            // yazar ve çıkar. Release'te de çalışır — Electron'un desktopCapturer.getSources
+            // + toPNG yoluyla aynı işi karşılaştırmak için (bkz. docs/PERF_WINDOWS.md).
+            if std::env::args().any(|a| a == "--shot-test") {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(1200));
+                    let monitors = geom::all_monitors(&h);
+                    let Some(m) = monitors.first().cloned() else {
+                        println!("SHOT_TEST: monitör yok");
+                        h.exit(0);
+                        return;
+                    };
+                    let mut times: Vec<f64> = Vec::new();
+                    let (mut bytes, mut dims) = (0usize, (0u32, 0u32));
+                    for _ in 0..12 {
+                        let t = std::time::Instant::now();
+                        if let Some(f) = capture::screenshot::capture_monitor(&m, 0) {
+                            times.push(t.elapsed().as_secs_f64() * 1000.0);
+                            bytes = f.png.len();
+                            dims = (f.width, f.height);
+                        }
+                    }
+                    let mut sorted = times.clone();
+                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    let med = sorted.get(sorted.len() / 2).copied().unwrap_or(0.0);
+                    println!(
+                        "SHOT_TEST {}x{}: yakalama+PNG medyan {:.1} ms (ilk {:.1}), PNG {} KB",
+                        dims.0, dims.1, med, times.first().copied().unwrap_or(0.0), bytes / 1024
+                    );
+                    println!("  turlar (ms): {}", times.iter().map(|t| format!("{t:.0}")).collect::<Vec<_>>().join(", "));
+                    h.exit(0);
+                });
+            }
+
             // Geliştirme kolaylığı: `--set-lang=en` — dil değişiminin GERÇEKTEN
             // uygulanıp uygulanmadığını sınamak için.
             #[cfg(debug_assertions)]
@@ -301,9 +368,45 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_millis(2500));
                     let inner = h.clone();
                     let _ = h.run_on_main_thread(move || {
-                        let st = inner.state::<AppState>();
-                        commands::core::set_language(inner.clone(), st, lang);
+                        commands::core::apply_language(&inner, &lang);
                     });
+                });
+            }
+
+            // Hata ayıklama derlemesinde ana thread bekçisi: kilitlenmeyi loga yazar.
+            #[cfg(debug_assertions)]
+            dbgtrace::start(handle.clone());
+
+            // Geliştirme kolaylığı: `--qa` — Rust tarafındaki kullanıcı akışlarını
+            // sırayla çalıştırıp sonuçlarını günlüğe yazan kendini-sınama (bkz. `qa.rs`).
+            #[cfg(debug_assertions)]
+            if std::env::args().any(|a| a == "--qa") {
+                qa::run(handle.clone());
+            }
+
+            // Geliştirme kolaylığı: `--copy-test=metin` — listeden kopyalamanın
+            // (`copy_text` komutu) panoya GERÇEKTEN yazıp yazmadığını, geri okuyarak
+            // sınar. Windows'ta "kopyalandı diyor ama yapıştırınca eski içerik geliyor"
+            // raporunu yeniden üretmek için eklendi.
+            #[cfg(debug_assertions)]
+            if let Some(text) = std::env::args().find_map(|a| a.strip_prefix("--copy-test=").map(str::to_string)) {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(2000));
+                    let inner = h.clone();
+                    let t = text.clone();
+                    let _ = h.run_on_main_thread(move || {
+                        let before = platform::clipboard_read_text();
+                        // `copy_text` komutu async; senkron gövdesi `write_and_record`.
+                        commands::clipboard::write_and_record(&inner, &t);
+                        let after = platform::clipboard_read_text();
+                        log::info!(
+                            "COPY_TEST: yazılan={t:?} · önce={before:?} · hemen sonra={after:?}"
+                        );
+                    });
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    let later = platform::clipboard_read_text();
+                    log::info!("COPY_TEST: 1,5 sn sonra pano={later:?}");
                 });
             }
 
@@ -399,10 +502,21 @@ async fn tokio_sleep(ms: u64) {
 fn sync_autostart(app: &tauri::AppHandle) {
     use tauri_plugin_autostart::ManagerExt;
 
+    // Yalnız paketlenmiş uygulama (Electron `app.isPackaged`): `tauri dev`,
+    // geliştiricinin makinesine `target/debug/copyboard --hidden`i oturum açılış
+    // öğesi olarak yazıyordu.
+    if tauri::is_dev() {
+        return;
+    }
     let want = app.state::<AppState>().settings().auto_start();
     let mgr = app.autolaunch();
     let have = mgr.is_enabled().unwrap_or(false);
-    if want == have {
+    // İstenen AÇIK ise `enable()` her açılışta yeniden yazılıyor, "zaten açık" olsa
+    // bile: macOS LaunchAgent plist'i MUTLAK yolu saklıyor ve `is_enabled()` yalnız
+    // dosyanın varlığına bakıyor. Uygulama İndirilenler'den /Applications'a taşınınca
+    // eski kayıt silinmiş bir binary'yi gösterip kalıyordu. Electron
+    // `setLoginItemSettings`i her paketli açılışta yeniden uyguluyordu.
+    if !want && !have {
         return;
     }
     let result = if want { mgr.enable() } else { mgr.disable() };

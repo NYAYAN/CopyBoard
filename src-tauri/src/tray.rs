@@ -139,14 +139,26 @@ pub fn init(app: &tauri::AppHandle) -> tauri::Result<()> {
                 // ekran görüntüsü/OCR/kayıt patlaması.
                 //
                 // Kapanma anını yakalamanın yolu, sorunun kendisini detektör olarak
-                // kullanmak: menü açılır açılmaz ana thread'e bir iş bırakıyoruz.
-                // O iş, modal döngü bitene kadar ÇALIŞMAZ — yani çalıştığı an menü
-                // kapanmış demektir.
+                // kullanmak: menü açılırken ana thread'e bir iş bırakıyoruz. O iş,
+                // modal döngü bitene kadar ÇALIŞMAZ — yani çalıştığı an menü kapanmış
+                // demektir.
+                //
+                // ⚠ İş BAŞKA bir thread'den bırakılmalı. Bu işleyici ana thread'de
+                // koşuyor ve tauri-runtime-wry'nin `run_on_main_thread`'i, çağıran
+                // zaten ana thread'deyse kapanışı KUYRUĞA KOYMADAN hemen çalıştırıyor
+                // (`send_user_message`). İlk hâli burada doğrudan çağırıyordu; `resume`
+                // menü daha açılmadan koşuyor ve askıya alma fiilen hiç olmuyordu.
+                // Ayrı thread'den gelen çağrı olay döngüsü proxy'sine düşüyor ve o
+                // ancak modal döngü bitince servis ediliyor.
                 (MouseButton::Right, MouseButtonState::Down) => {
                     crate::shortcuts::suspend(&handle);
                     let h = handle.clone();
-                    let inner = handle.clone();
-                    let _ = h.run_on_main_thread(move || crate::shortcuts::resume(&inner));
+                    std::thread::spawn(move || {
+                        // Menünün modal döngüsü kurulmadan proxy olayı işlenmesin.
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        let inner = h.clone();
+                        let _ = h.run_on_main_thread(move || crate::shortcuts::resume(&inner));
+                    });
                 }
                 _ => {}
             }

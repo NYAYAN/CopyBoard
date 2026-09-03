@@ -12,6 +12,14 @@ use crate::state::AppState;
 /// sırada ne yapıyorsa onun üstünde — ortaya çıkıyordu.
 static SAVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
 
+/// Yakalama oturumu bitince kilidi düşür. Panel overlay'e parent'lı; overlay panel
+/// açıkken kapanırsa (Esc → `snip_close`) rfd geri çağrısı hiç gelmeyebiliyor ve
+/// kilit takılı kalıyordu — sonraki her kaydetme sessizce no-op oluyordu. Electron
+/// bunu `finally` ile sıfırlıyordu; burada `capture::finish()` çağırıyor.
+pub fn reset_save_guard() {
+    SAVE_DIALOG_OPEN.store(false, Ordering::Release);
+}
+
 /// `data:image/png;base64,...` → ham baytlar.
 pub fn decode_data_url_pub(data_url: &str) -> Option<Vec<u8>> { decode_data_url(data_url) }
 
@@ -55,7 +63,7 @@ fn copy_png(app: &tauri::AppHandle, png: Vec<u8>) {
 
 /// Snipper'dan gelen data URL.
 #[tauri::command]
-pub fn snip_copy_image(app: tauri::AppHandle, data_url: String) {
+pub async fn snip_copy_image(app: tauri::AppHandle, data_url: String) {
     let Some(png) = decode_data_url(&data_url) else {
         crate::windows::toast::show(&app, "Kopyalama Hatası: görüntü çözülemedi", "error");
         crate::capture::close_all(&app, None);
@@ -73,13 +81,17 @@ pub fn snip_copy_buffer(app: tauri::AppHandle, request: tauri::ipc::Request<'_>)
         crate::windows::toast::show(&app, "Kopyalama Hatası: ham veri bekleniyordu", "error");
         return;
     };
-    copy_png(&app, bytes.clone());
+    // `Request<'_>` ödünç aldığı için komut `async` olamıyor; baytlar kopyalanıp iş
+    // runtime'a devrediliyor — pencere işleri IPC geri çağrısının içinde kalmasın
+    // (Windows kilitlenmesi, bkz. `commands/mod.rs`).
+    let bytes = bytes.clone();
+    tauri::async_runtime::spawn(async move { copy_png(&app, bytes) });
 }
 
 /// Renk seçici kipi: overlay, artı imlecin altındaki hex'i gönderiyor. Bu bir resim
 /// değil metin, o yüzden panoya ve geçmişe kopyalanan her dize gibi davranıyor.
 #[tauri::command]
-pub fn snip_copy_color(app: tauri::AppHandle, hex: String) {
+pub async fn snip_copy_color(app: tauri::AppHandle, hex: String) {
     let value = hex.trim().to_lowercase();
     let valid = value.len() == 7
         && value.starts_with('#')
@@ -167,15 +179,17 @@ fn save_png(app: &tauri::AppHandle, window: Option<tauri::WebviewWindow>, png: V
                 crate::capture::close_all(&handle, None);
             }
             Err(e) => {
-                restore_overlay();
+                // Electron yazma hatasında da overlay'leri kapatıyordu: hata toast'ı
+                // karartmanın arkasında kalmasın, kullanıcı yeniden deneyebilsin.
                 crate::windows::toast::show(&handle, &format!("Kaydetme Hatası: {e}"), "error");
+                crate::capture::close_all(&handle, None);
             }
         }
     });
 }
 
 #[tauri::command]
-pub fn snip_save_image(app: tauri::AppHandle, window: tauri::WebviewWindow, data_url: String) {
+pub async fn snip_save_image(app: tauri::AppHandle, window: tauri::WebviewWindow, data_url: String) {
     let Some(png) = decode_data_url(&data_url) else {
         crate::windows::toast::show(&app, "Kaydetme Hatası: görüntü çözülemedi", "error");
         return;
@@ -193,7 +207,8 @@ pub fn snip_save_buffer(
         crate::windows::toast::show(&app, "Kaydetme Hatası: ham veri bekleniyordu", "error");
         return;
     };
-    save_png(&app, Some(window), bytes.clone(), "scroll");
+    let bytes = bytes.clone();
+    tauri::async_runtime::spawn(async move { save_png(&app, Some(window), bytes, "scroll") });
 }
 
 /// Metin tanıma. Görüntü verisi elde olduğu için overlay'ler ÖNCE kapanıyor.
@@ -242,7 +257,7 @@ pub async fn ocr_process(app: tauri::AppHandle, data_url: String) {
 /// Overlay'i tıklama geçirgen yapar/kaldırır. Kaydedici ve kaydırmalı yakalama,
 /// kullanıcının altındaki uygulamayla etkileşmesi için bunu kullanıyor.
 #[tauri::command]
-pub fn set_ignore_mouse_events(window: tauri::WebviewWindow, ignore: bool) {
+pub async fn set_ignore_mouse_events(window: tauri::WebviewWindow, ignore: bool) {
     if let Err(e) = window.set_ignore_cursor_events(ignore) {
         log::warn!("tıklama geçirgenliği ayarlanamadı: {e}");
     }

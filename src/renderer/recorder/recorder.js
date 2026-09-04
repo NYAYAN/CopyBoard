@@ -392,26 +392,36 @@ function stopRecording() {
     window.api.recordStop();
     clearInterval(state.timerInterval);
     document.body.classList.remove('is-recording');
-    // Araç çubuğunu seçim durumuna döndür (pencere genelde hemen kapanır; kapanmazsa
-    // — ör. durdurma hatası — kullanıcı yeniden başlatabilsin).
+    // Kayıt bitti: bu pencerenin kalan TEK işi kaydetme panelinin SAHİBİ olmak — panel
+    // böylece kaydın yapıldığı monitörde ve önde açılıyor (bkz. `record_stop`). Sayfa
+    // tamamen boşaltılıyor.
+    //
+    // Eski hâli seçim arayüzünü geri getiriyordu: karartma + bir dakika önce çekilmiş
+    // donmuş ekran görüntüsü. Pencere gizlenmediği için kullanıcı bunu görüyor ve
+    // "durdurunca ekran karardı, yeniden alan seçme geldi" diyordu (A14).
+    toolbar.classList.add('hidden');
     btnStop.classList.add('hidden');
     timerElement.classList.add('hidden');
-    btnRecord.classList.remove('hidden');
-    btnFullscreen.classList.remove('hidden');
-    if (btnResetSize) btnResetSize.classList.remove('hidden');
-    if (qualitySelect) qualitySelect.classList.remove('hidden');
-    if (qualityLabel) qualityLabel.classList.remove('hidden');
-    if (btnMic) btnMic.classList.remove('hidden');
-    if (btnSystemAudio) btnSystemAudio.classList.remove('hidden');
     selectionBox.classList.remove('recording-border');
-    canvas.style.pointerEvents = '';
-    reportToolbarHitArea();
     selectionBox.style.display = 'none';
-    canvas.style.display = 'block';
-    overlay.style.display = 'block';
-    selectionBox.style.pointerEvents = 'auto';
-    document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'block');
+    canvas.style.display = 'none';
+    overlay.style.display = 'none';
+    document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
+    // Görünmez ama hâlâ orada: her tıklama altındaki uygulamaya geçsin.
+    window.api.setHitAreas([]);
+    // Mux'un dosyayı kapatması bir dakikalık kayıtta ~1,3 sn sürüyor; o boşlukta hiçbir
+    // şey olmaması "durdurunca takılıyor" olarak görülüyordu. Panel açılmak üzereyken
+    // ana süreç `record-save-ready` yolluyor ve bu yazı kalkıyor.
+    if (instruction) {
+        instruction.textContent = t('Video hazırlanıyor…');
+        instruction.classList.remove('hidden');
+        instruction.style.display = '';
+    }
 }
+
+window.api.onRecordSaveReady(() => {
+    if (instruction) instruction.style.display = 'none';
+});
 
 btnRecord.addEventListener('click', startRecording);
 function applyDefaultSize() {

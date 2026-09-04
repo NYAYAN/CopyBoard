@@ -190,6 +190,8 @@ pub async fn record_stop(app: tauri::AppHandle) {
             "kaydetme paneli açılıyor: {default_name} (sahip pencere: {})",
             if overlay.is_some() { label.as_str() } else { "yok" }
         );
+        // Kaydedicideki "Video hazırlanıyor…" yazısı kalksın — panel geliyor.
+        crate::windows::emit_to(&app, &label, "record-save-ready", ());
         builder.save_file(move |chosen| {
             match chosen.and_then(|p| p.into_path().ok()) {
                 Some(dest) => match std::fs::copy(&temp, &dest) {

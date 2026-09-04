@@ -184,6 +184,15 @@ pub async fn record_stop(app: tauri::AppHandle) {
             builder = builder.set_directory(dir);
         }
         if let Some(w) = &overlay {
+            // Sahip pencereyi panele HAZIRLA. Kayıt boyunca overlay tıklama-geçirgen
+            // (`WS_EX_TRANSPARENT`) ve her zaman üstte kalıyor; ayrıca kullanıcı bir
+            // dakika boyunca başka uygulamalarla çalıştığı için sürecimiz artık ön
+            // planda olmayabiliyor. Windows ön planda olmayan bir sürecin penceresini
+            // öne çıkarmaz: panel açılsa bile arkada kalır ve "hiç gelmedi" görünür.
+            crate::windows::hit_test::clear(&app, &label);
+            let _ = w.set_ignore_cursor_events(false);
+            let _ = w.set_always_on_top(false);
+            let _ = w.set_focus();
             builder = builder.set_parent(w);
         }
         log::info!(
@@ -193,24 +202,34 @@ pub async fn record_stop(app: tauri::AppHandle) {
         // Kaydedicideki "Video hazırlanıyor…" yazısı kalksın — panel geliyor.
         crate::windows::emit_to(&app, &label, "record-save-ready", ());
 
-        // ── Panel gelmezse kayıt KAYBOLMASIN ─────────────────────────────────────
-        // Panelin açılmasını Windows'a ve dosya sağlayıcısına bırakıyoruz; açılmadığı
-        // (ya da kullanıcının göremediği bir yerde açıldığı) durumda geri çağrı hiç
-        // gelmiyor ve kullanıcı bir dakikalık kaydını kaybetmiş sayıyor. Bekçi: 15 sn
-        // içinde sonuç yoksa yolu panoya koy, söyle ve günlüğe yaz. Panel sonradan
-        // yanıt verirse `settled` sayesinde ikinci kez uyarılmıyor.
+        // ── Panel AÇILAMAZSA kayıt kaybolmasın ───────────────────────────────────
+        // Panel açılmadığında geri çağrı hiç gelmiyor ve kullanıcı bir dakikalık kaydını
+        // kaybetmiş sayıyor. Bekçi 8 sn sonra bakıyor: sürecimize ait görünür bir kabuk
+        // iletişim kutusu VARSA panel açık demektir (kullanıcı klasör seçiyor olabilir) —
+        // susuyor. Yoksa yolu panoya koyup söylüyor ve günlüğe yazıyor.
         let settled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        #[cfg(target_os = "windows")]
         {
             let settled = settled.clone();
             let watchdog_app = app.clone();
             let watchdog_path = temp.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(15));
+                std::thread::sleep(std::time::Duration::from_secs(8));
+                if settled.load(Ordering::Acquire) {
+                    return;
+                }
+                if crate::platform::windows::find_open_file_dialog().is_some() {
+                    log::debug!("bekçi: kaydetme paneli açık, bekleniyor");
+                    return;
+                }
                 if settled.swap(true, Ordering::AcqRel) {
                     return;
                 }
                 let p = watchdog_path.to_string_lossy().to_string();
-                log::error!("kaydetme paneli 15 sn'dir yanıt vermedi — açılmamış olabilir; kayıt: {p}");
+                log::error!(
+                    "kaydetme paneli açılamadı (8 sn, görünür pencereler: {:?}) — kayıt: {p}",
+                    crate::platform::windows::visible_window_titles()
+                );
                 crate::platform::clipboard_write_text(&p);
                 let h = watchdog_app.clone();
                 let _ = watchdog_app.run_on_main_thread(move || {

@@ -366,9 +366,10 @@ impl Recording {
         let writer = self.writer.lock().unwrap_or_else(|e| e.into_inner()).take();
         let Some(writer) = writer else { return Err("yazıcı zaten kapalı".into()) };
         let audio_samples = writer.audio_samples();
-        // `IMFSinkWriter::Finalize()` donanım kodlayıcısını boşaltıyor; sürücü takılırsa
-        // süresiz bekleyebilir. Ayrı thread + zaman aşımı: uygulama kilitlenmesin, kullanıcı
-        // ne olduğunu görsün. Geride kalan thread işini bitirirse dosya yine de tamamlanır.
+        // `IMFSinkWriter::Finalize()` donanım kodlayıcısını boşaltıyor; büyük kayıtlarda
+        // uzun sürebiliyor, sürücü takılırsa hiç dönmeyebiliyor. Ayrı thread + GENİŞ bir
+        // üst sınır: normal yolu kesmesin (çağıran zaten 12 sn'de oturumu bırakıp bizi
+        // arka planda bekliyor), ama sonsuza dek de asılı kalmasın.
         let (tx, rx) = std::sync::mpsc::channel();
         let finalize_path = self.path.clone();
         std::thread::Builder::new()
@@ -377,12 +378,12 @@ impl Recording {
                 let _ = tx.send(writer.finish());
             })
             .map_err(|e| format!("sonlandırma thread'i başlatılamadı: {e}"))?;
-        let frames = match rx.recv_timeout(Duration::from_secs(20)) {
+        let frames = match rx.recv_timeout(Duration::from_secs(300)) {
             Ok(r) => r?,
             Err(_) => {
                 crate::capture::set_stop_phase(4);
                 return Err(format!(
-                    "video sonlandırılamadı: kodlayıcı 20 sn yanıt vermedi. Ham kayıt: {}",
+                    "video sonlandırılamadı: kodlayıcı 5 dakika yanıt vermedi. Ham kayıt: {}",
                     finalize_path.display()
                 ));
             }

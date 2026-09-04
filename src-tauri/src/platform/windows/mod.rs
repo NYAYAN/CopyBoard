@@ -67,6 +67,17 @@ pub fn visible_window_titles() -> Vec<String> {
     scan().titles
 }
 
+/// Bir pencerenin ekran dikdörtgeni (sol, üst, sağ, alt). Panel "açık ama görünmüyor"
+/// dendiğinde nerede olduğunu günlüğe yazmak için.
+pub fn window_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    let mut r = RECT::default();
+    // SAFETY: saf sorgu; geçersiz tanıtıcıda hata döner.
+    unsafe { GetWindowRect(HWND(hwnd as *mut core::ffi::c_void), &mut r) }.ok()?;
+    Some((r.left, r.top, r.right, r.bottom))
+}
+
 /// Tauri'nin `hwnd()`u KENDİ `windows` sürümünün (0.61) `HWND`ini veriyor; bu crate
 /// 0.62 kullanıyor ve iki tip farklı. İkisi de aynı ham işaretçiyi sarıyor, o yüzden
 /// işaretçi üzerinden çevriliyor.

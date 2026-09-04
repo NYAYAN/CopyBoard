@@ -58,6 +58,7 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 - [x] D9. Güncelleyici: `pubkey` boş uyarısı — elle kontrol yanıt veriyor, toast görünür (`--qa` 9c); imza anahtarı üretimi kullanıcıda (`SIGNING.md`)
 - [x] D10. Commit + push, aynı dal (`tauri-migration`) — 2026-09-03: 4 commit (yakalama motoru, Rust düzeltmeleri + QA araçları, renderer, ikon/betik/belgeler); package-lock.json değişikliği npm sürüm gürültüsüydü, geri alındı
 - [x] D12. Electron ↔ Tauri performans karşılaştırması → `docs/PERF_WINDOWS.md`: açılış 1958→359 ms, ekran görüntüsü yakalama+PNG 239→33 ms, Alt+9→boyanma ~760→~180 ms, boşta bellek eşit (~600 MB WS), video CPU tek çekirdeğin %19'u (Electron yazılım VP9, ölçülemedi). Ölçüm araçları: `--shot-test` (release'te de var), `PERF` günlükleri, `scratchpad/bench-electron.js`
+- [~] D13. Başka Windows PC'de `cargo run` çalışmadı → `scripts/win-env.cmd` sürüm/edisyon bağımsız (vswhere + msvcrt.lib doğrulaması, `COPYBOARD_VS` ile elle seçim, cmake yoksa VS kopyası/uyarı), `docs/BUILD_WINDOWS.md` (gereksinimler, sık hatalar). Bu makinede betik doğrulandı; diğer PC'de deneme + hata metni bekleniyor
 - [ ] D11. Dev çıktısında tao uyarısı "PostMessage failed … Invalid window handle" (0x80070578) — kapanan pencereye geç mesaj; zararsız görünüyor, tekrarlarsa incelenecek
 
 ## E. Talep günlüğü (kronolojik)
@@ -77,3 +78,4 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 13. Çok monitörde ekran görüntüsünde bölge seçilemiyor → A11
 14. Kaydırmalı yakalamada Başlat → hemen Bitir tuhaf davranıyor → A12
 15. Video kaydı başlat deyince başlamıyor → A13
+16. Diğer PC'de `cargo run` çalışmadı → D13 (derleme reçetesi)

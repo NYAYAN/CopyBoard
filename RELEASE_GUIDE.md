@@ -8,6 +8,7 @@
 | **cmake** | `tesseract-rs` Tesseract + Leptonica'yı kaynaktan derliyor. GitHub Actions imajlarında hazır gelir; yerelde `brew install cmake` ya da [cmake.org](https://cmake.org/download/) |
 | Node | 20+ (yalnız Tauri CLI için) |
 | macOS | 12.3+ SDK (ScreenCaptureKit) |
+| Windows | VS 2022 / Build Tools C++ iş yükü + cmake; `scripts\win-env.cmd` ortamı kurar — bkz. [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md) |
 
 ## Yerel yapı
 

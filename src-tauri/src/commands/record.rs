@@ -148,7 +148,44 @@ pub async fn record_stop(app: tauri::AppHandle) {
             let _ = w.set_always_on_top(false);
         }
 
+        // ── Durdurma takılırsa uygulama kilitlenmesin ────────────────────────────
+        // `Recording::stop()` üç bloklayıcı aşama: yakalamayı kapat, sesi kapat, mux'u
+        // tamamla. Biri dönmezse buradaki `await` hiç bitmiyor: panel açılmıyor, oturum
+        // kapanmıyor ve kullanıcı yeni yakalama başlatamıyor ("İşlem devam ediyor").
+        // 10 sn'de haber ver, 25 sn'de oturumu serbest bırak — hangi aşamada kalındığı
+        // günlükteki "durdurma:" satırlarından okunuyor.
+        let stop_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        {
+            let flag = stop_done.clone();
+            let h = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(10));
+                if flag.load(Ordering::Acquire) {
+                    return;
+                }
+                log::error!("kayıt durdurma 10 sn'dir sürüyor — son 'durdurma:' satırı hangi aşamada kalındığını söyler");
+                let h2 = h.clone();
+                let _ = h.run_on_main_thread(move || {
+                    crate::windows::toast::show(&h2, "Video hazırlanıyor, biraz sürüyor…", "info");
+                });
+                std::thread::sleep(std::time::Duration::from_secs(15));
+                if flag.load(Ordering::Acquire) {
+                    return;
+                }
+                log::error!("kayıt durdurma 25 sn'dir bitmedi — oturum serbest bırakılıyor");
+                let h3 = h.clone();
+                let _ = h.run_on_main_thread(move || {
+                    crate::windows::toast::show(
+                        &h3,
+                        "Kayıt durdurulamadı. Yeniden deneyebilirsiniz.",
+                        "error",
+                    );
+                    crate::capture::close_all(&h3, None);
+                });
+            });
+        }
         let stopped = tauri::async_runtime::spawn_blocking(move || recording.stop()).await;
+        stop_done.store(true, Ordering::Release);
         let temp = match stopped {
             Ok(Ok(p)) => p,
             // Günlüğe de yaz: kullanıcı yalnız toast'ı görüyor ve toast imlecin bulunduğu
@@ -218,8 +255,12 @@ pub async fn record_stop(app: tauri::AppHandle) {
                 if settled.load(Ordering::Acquire) {
                     return;
                 }
-                if crate::platform::windows::find_open_file_dialog().is_some() {
-                    log::debug!("bekçi: kaydetme paneli açık, bekleniyor");
+                if let Some(hwnd) = crate::platform::windows::find_open_file_dialog() {
+                    // Panel VAR ama kullanıcı göremiyor olabilir — nerede olduğunu yaz.
+                    log::warn!(
+                        "bekçi: kaydetme paneli açık (hwnd={hwnd:#x}, dikdörtgen={:?}), bekleniyor",
+                        crate::platform::windows::window_rect(hwnd)
+                    );
                     return;
                 }
                 if settled.swap(true, Ordering::AcqRel) {

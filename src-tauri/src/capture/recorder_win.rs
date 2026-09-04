@@ -303,22 +303,33 @@ pub fn start(
 impl Recording {
     /// Yakalamayı durdurur, sesi kapatır, yazıcıyı tamamlar (mux) ve dosya yolunu döner.
     pub fn stop(&mut self) -> Result<PathBuf, String> {
+        // Üç aşama da bloklayıcı ve üçü de takılabilir; hangisinde olduğunu günlükten
+        // okuyabilmek için her biri ayrı yazılıyor. (`windows-capture`nin `stop()`u
+        // yakalama thread'ine WM_QUIT yollayana kadar DÖNGÜDE bekliyor — thread'in
+        // mesaj kuyruğu yoksa orada kalınabilir.)
+        let t = std::time::Instant::now();
         // 1) Kare akışını kes — yakalama thread'i biter, işleyici düşer.
         if let Some(control) = self.control.take() {
+            log::info!("durdurma: yakalama kapatılıyor");
             if let Err(e) = control.stop() {
                 log::warn!("kayıt: yakalama durdurulurken: {e}");
             }
+            log::info!("durdurma: yakalama kapandı (+{} ms)", t.elapsed().as_millis());
         }
         // 2) Ses thread'leri: karıştırıcı son parçayı yazıp çıkıyor.
         if let Some(audio) = self.audio.take() {
+            log::info!("durdurma: ses kapatılıyor");
             audio.stop();
+            log::info!("durdurma: ses kapandı (+{} ms)", t.elapsed().as_millis());
         }
         // 3) Yazıcıyı BİZ kapatıyoruz (işleyici içinde kapatmak statik ekranda hiç kare
         //    gelmezken sonsuza dek beklerdi).
+        log::info!("durdurma: yazıcı kapatılıyor");
         let writer = self.writer.lock().unwrap_or_else(|e| e.into_inner()).take();
         let Some(writer) = writer else { return Err("yazıcı zaten kapalı".into()) };
         let audio_samples = writer.audio_samples();
         let frames = writer.finish()?;
+        log::info!("durdurma: yazıcı kapandı (+{} ms)", t.elapsed().as_millis());
         if let Some(err) = self.failed.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             return Err(err);
         }

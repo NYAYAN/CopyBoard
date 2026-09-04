@@ -262,6 +262,7 @@ Proje modern bir mimariye taşınmış ve modüler hale getirilmiştir.
 - **Node.js** 18.17+ veya 20+ (testler için Node 21+, aşağıya bakın)
 - **npm**
 - **CMake** — OCR motoru (`tesseract-rs`) kaynaktan derleniyor
+- **Windows için:** Visual Studio 2022 / Build Tools "Desktop development with C++" (cmake bileşeniyle) — adım adım [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md); komutlar `scripts\win-env.cmd cargo run` ile
 - **macOS için:** Xcode Command Line Tools
 
   Electron'un adlandıramadığı fiziksel tuşlar (Esc altındaki ISO tuşu, JIS tuşları)

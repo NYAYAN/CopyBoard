@@ -371,6 +371,119 @@ pub fn run(app: tauri::AppHandle) {
                 }
             }
 
+            // ── 9f. Video: Durdur → KAYDETME PANELİ gerçekten açılıyor mu (A14) ──
+            // 9e paneli atlıyordu (kaydı doğrudan alıp durduruyordu). Burada gerçek yol:
+            // araç çubuğundaki Durdur → renderer `stopRecording` → `record_stop` → panel.
+            // Panelin VARLIĞI Win32'den okunuyor: kendi sürecimize ait, görünür, sınıfı
+            // "#32770" olan üst düzey pencere. Önde olup olmadığı da ayrı bir kontrol —
+            // kullanıcının gördüğü hata "panel hiç gelmedi"ydi ve arkada açılmak buna eşit.
+            #[cfg(target_os = "windows")]
+            {
+                use crate::capture::recorder::RecorderState;
+                // `BOOL` windows 0.62'de `core`'da, `Win32::Foundation`da değil.
+                use windows::core::BOOL;
+                use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
+                use windows::Win32::UI::WindowsAndMessaging::{
+                    EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowTextW,
+                    GetWindowThreadProcessId, IsWindowVisible, PostMessageW, WM_CLOSE,
+                };
+
+                struct Ctx {
+                    pid: u32,
+                    found: isize,
+                    seen: Vec<String>,
+                }
+                unsafe extern "system" fn enum_cb(h: HWND, l: LPARAM) -> BOOL {
+                    let ctx = unsafe { &mut *(l.0 as *mut Ctx) };
+                    let mut pid = 0u32;
+                    unsafe { GetWindowThreadProcessId(h, Some(&mut pid)) };
+                    if pid != ctx.pid || !unsafe { IsWindowVisible(h) }.as_bool() {
+                        return BOOL(1);
+                    }
+                    let mut cls = [0u16; 64];
+                    let n = unsafe { GetClassNameW(h, &mut cls) };
+                    let class = String::from_utf16_lossy(&cls[..n.max(0) as usize]);
+                    let mut ttl = [0u16; 128];
+                    let m = unsafe { GetWindowTextW(h, &mut ttl) };
+                    let title = String::from_utf16_lossy(&ttl[..m.max(0) as usize]);
+                    ctx.seen.push(format!("{class}/{title}"));
+                    if class == "#32770" {
+                        ctx.found = h.0 as isize;
+                        return BOOL(0);
+                    }
+                    BOOL(1)
+                }
+                let find_dialog = || -> (Option<isize>, Vec<String>) {
+                    let mut ctx = Ctx { pid: std::process::id(), found: 0, seen: Vec::new() };
+                    unsafe { let _ = EnumWindows(Some(enum_cb), LPARAM(&mut ctx as *mut _ as isize)); }
+                    (if ctx.found != 0 { Some(ctx.found) } else { None }, ctx.seen)
+                };
+
+                on_main(&app, |h| crate::capture::start(h, "video"));
+                let mut up = false;
+                for _ in 0..30 { sleep(100); if visible(&app, "capture-0") == Some(true) { up = true; break; } }
+                if !up {
+                    check(false, "kaydetme paneli sınaması: kaydedici overlay'i açılmadı");
+                } else {
+                    sleep(400);
+                    let click = "document.getElementById('btn-record').click();";
+                    on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(click); } });
+                    let mut rec = false;
+                    for _ in 0..40 { sleep(100); if app.state::<RecorderState>().0.lock().unwrap().is_some() { rec = true; break; } }
+                    check(rec, "kaydetme paneli sınaması: kayıt başladı");
+                    if rec {
+                        sleep(2000); // birkaç kare birikin
+                        let stop = "document.getElementById('btn-stop').click();";
+                        on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(stop); } });
+                        let mut dlg = None;
+                        let mut seen = Vec::new();
+                        for _ in 0..150 {
+                            sleep(100);
+                            let (f, s) = find_dialog();
+                            if f.is_some() { dlg = f; break; }
+                            seen = s;
+                        }
+                        check(dlg.is_some(), &format!("Durdur → kaydetme paneli açıldı (görünen pencereler: {seen:?})"));
+                        if let Some(hwnd) = dlg {
+                            let fg = unsafe { GetForegroundWindow() };
+                            let mut fgpid = 0u32;
+                            unsafe { GetWindowThreadProcessId(fg, Some(&mut fgpid)) };
+                            check(fgpid == std::process::id(), &format!("kaydetme paneli ÖNDE (ön pencere pid={fgpid}, bizim pid={})", std::process::id()));
+                            // Panel KAYDIN YAPILDIĞI monitörde mi? Overlay o monitörü tam
+                            // kaplıyor, yani panelin merkezi onun dikdörtgeninde olmalı.
+                            // Sahipsiz panel üç monitörde başka ekranda açılıyordu (A14).
+                            let mut r = RECT::default();
+                            let got = unsafe { GetWindowRect(HWND(hwnd as *mut core::ffi::c_void), &mut r) }.is_ok();
+                            let (cx, cy) = ((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+                            let inside = app.get_webview_window("capture-0").and_then(|w| {
+                                let p = w.outer_position().ok()?;
+                                let s = w.outer_size().ok()?;
+                                Some(cx >= p.x && cx < p.x + s.width as i32 && cy >= p.y && cy < p.y + s.height as i32)
+                            }).unwrap_or(false);
+                            check(got && inside, &format!("kaydetme paneli kaydın yapıldığı monitörde (panel merkezi {cx},{cy})"));
+                            // İptal et: panel kapanınca geçici dosyanın yolu panoya gitmeli.
+                            unsafe { let _ = PostMessageW(Some(HWND(hwnd as *mut core::ffi::c_void)), WM_CLOSE, WPARAM(0), LPARAM(0)); }
+                            sleep(2000);
+                            let cb = crate::platform::clipboard_read_text().unwrap_or_default();
+                            check(
+                                cb.contains("copyboard_kayit_") && cb.ends_with(".mp4"),
+                                &format!("panel iptalinde geçici dosya yolu panoya kopyalandı (okunan: {cb:?})"),
+                            );
+                            if cb.ends_with(".mp4") { let _ = std::fs::remove_file(&cb); }
+                            let ids: Vec<String> = {
+                                let st = app.state::<AppState>();
+                                crate::clipboard::history::history(&st.store).iter()
+                                    .filter(|i| i.get("content").and_then(|c| c.as_str()).map(|c| c.contains("copyboard_kayit_")).unwrap_or(false))
+                                    .filter_map(|i| i.get("id").and_then(|v| v.as_str()).map(str::to_string)).collect()
+                            };
+                            for id in ids { on_main(&app, move |h| crate::clipboard::history::delete(h, &id)); }
+                        }
+                    }
+                    on_main(&app, |h| crate::capture::close_all(h, None));
+                    sleep(800);
+                }
+            }
+
             // ── 9b. Renderer → IPC → komut (gerçek yol) ───────────────────────
             // Ana pencerenin sayfasında `window.api.copyText` çalıştırılıyor: invoke
             // gerçekten Rust'a ulaşıyor ve pano değişiyor mu? Tıklama olmadan, sayfa

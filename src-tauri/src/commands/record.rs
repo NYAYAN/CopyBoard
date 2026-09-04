@@ -91,6 +91,9 @@ pub async fn record_start(
                 .unwrap_or(0)
         ));
 
+        // Motor kurulumu (ses aygıtları + kodlayıcı) bazı makinelerde saniyeler sürüyor;
+        // ne kadar sürdüğü ölçülebilsin.
+        let t_start = std::time::Instant::now();
         let recording = crate::capture::recorder::start(
             &monitor, x, y, width, height,
             &quality,
@@ -104,6 +107,7 @@ pub async fn record_start(
             e
         })?;
 
+        log::info!("kayıt motoru hazır (+{} ms)", t_start.elapsed().as_millis());
         // Kayıt bir monitörde başladı — DİĞER monitörlerin overlay'leri gitsin.
         crate::capture::close_all_except(&app, &label);
         *app.state::<crate::capture::recorder::RecorderState>().0.lock().unwrap() = Some(recording);

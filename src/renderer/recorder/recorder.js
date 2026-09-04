@@ -343,8 +343,12 @@ async function startRecording() {
             window.api.sendDebugLog(`Kayıt başlıyor: ${rect.w}x${rect.h} @ (${rect.x},${rect.y})`);
         }
 
-        await window.api.recordStart(rect);
-
+        // ── Arayüz ÖNCE kayıt durumuna geçiyor ───────────────────────────────
+        // `recordStart` motoru kuruyor: ses aygıtlarını açıyor, kodlayıcıyı hazırlıyor.
+        // Bu birkaç saniye sürebiliyor ve o süre boyunca overlay hâlâ TÜM tıklamaları
+        // yakalıyordu — kullanıcı "başlattım, 3-5 saniye ekrana tıklayamadım" diyordu.
+        // Geçirgenliği beklemeden açıyoruz; SAYAÇ motor gerçekten başlayınca başlıyor,
+        // yani gösterilen süre kaydın kendisiyle uyumlu kalıyor.
         state.isRecording = true;
         document.body.classList.add('is-recording');
         // Araç çubuğu kayıt durumuna geçiyor: Kaydı Başlat/tam ekran/kalite/ses düğmeleri
@@ -367,6 +371,9 @@ async function startRecording() {
         document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
         canvas.style.display = 'none';
         overlay.style.display = 'none';
+        reportToolbarHitArea();
+
+        await window.api.recordStart(rect);
 
         state.startTime = Date.now();
         state.timerInterval = setInterval(() => {
@@ -374,13 +381,28 @@ async function startRecording() {
             timerElement.textContent = `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
         }, 1000);
 
-        reportToolbarHitArea();
-
     } catch (e) {
         console.error(t('Kayıt hatası:'), e);
-        // Hatayı göster ve yeniden denenebilir duruma dön. Yukarıdaki UI değişiklikleri
-        // yalnız başarılı kurulumdan sonra çalışıyor, yani Kaydet düğmesi hâlâ görünür.
+        // Başlatma başarısız: arayüzü seçim durumuna geri al (yukarıda iyimser
+        // davranıp kayıt durumuna geçmiştik).
+        document.body.classList.remove('is-recording');
+        btnStop.classList.add('hidden');
+        timerElement.classList.add('hidden');
+        btnRecord.classList.remove('hidden');
+        btnFullscreen.classList.remove('hidden');
+        if (btnResetSize) btnResetSize.classList.remove('hidden');
+        if (qualitySelect) qualitySelect.classList.remove('hidden');
+        if (qualityLabel) qualityLabel.classList.remove('hidden');
+        if (btnMic) btnMic.classList.remove('hidden');
+        if (btnSystemAudio) btnSystemAudio.classList.remove('hidden');
+        selectionBox.classList.remove('recording-border');
+        selectionBox.style.pointerEvents = 'auto';
+        canvas.style.pointerEvents = '';
+        canvas.style.display = 'block';
+        overlay.style.display = 'block';
+        document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'block');
         state.isRecording = false;
+        reportToolbarHitArea();   // overlay yeniden tamamen etkileşimli
         alert('Kayıt başlatılamadı: ' + (e && e.message ? e.message : e));
     }
 }

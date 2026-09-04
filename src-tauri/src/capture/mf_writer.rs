@@ -67,6 +67,7 @@ impl MfWriter {
         fps: u32,
         bitrate: u32,
         audio: Option<AudioFormat>,
+        hardware: bool,
     ) -> Result<Self, String> {
         // SAFETY: Media Foundation çağrıları belgelenen sırayla yapılıyor; her COM
         // nesnesi `windows` crate'inin akıllı işaretçisiyle yönetiliyor.
@@ -81,7 +82,14 @@ impl MfWriter {
             // sınırsız biriktiriyor: 30 sn'lik ultra kayıtta çalışma kümesi 2,3 GB'a çıktı
             // (her kare ~3,7 MB, hepsi bellekte). Throttling ile `WriteSample` kodlayıcı
             // yetişemezse bloklar; bu WGC thread'ini duraklatır ve yalnız kare düşürür.
-            attrs.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1).map_err(|e| e.to_string())?;
+            //
+            // Donanım kodlayıcısı (GPU MFT) hızlı ama sürücüye bağımlı: bazı makinelerde
+            // `Finalize()` (mux sonlandırma) dakikalarca dönmüyor. `hardware: false`
+            // verildiğinde Media Foundation'ın YAZILIM H.264 kodlayıcısı kullanılıyor —
+            // daha çok CPU, ama sürücüden bağımsız.
+            attrs
+                .SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, u32::from(hardware))
+                .map_err(|e| e.to_string())?;
 
             let url = HSTRING::from(path.as_os_str());
             let writer = MFCreateSinkWriterFromURL(&url, None, Some(&attrs))

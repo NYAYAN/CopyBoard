@@ -61,6 +61,22 @@ struct Crop {
 const FPS: u32 = 30;
 const FRAME_DUR_HNS: i64 = HNS_PER_SEC / FPS as i64;
 
+/// Donanım (GPU) H.264 kodlayıcısı kullanılsın mı?
+///
+/// Varsayılan AÇIK — hızlı ve CPU'yu boşta bırakıyor. Ama sürücüye bağımlı: bazı
+/// makinelerde mux sonlandırma (`Finalize`) dakikalarca dönmüyor. Sonlandırma başarısız
+/// olduğunda [`set_hardware_encoder(false)`] çağrılıyor ve sonraki kayıtlar yazılım
+/// kodlayıcısıyla yapılıyor. `COPYBOARD_SOFTWARE_ENCODER` ortam değişkeni baştan kapatır.
+static HARDWARE_ENCODER: AtomicBool = AtomicBool::new(true);
+
+pub fn set_hardware_encoder(on: bool) {
+    HARDWARE_ENCODER.store(on, Ordering::Release);
+}
+
+pub fn hardware_encoder() -> bool {
+    HARDWARE_ENCODER.load(Ordering::Acquire) && std::env::var("COPYBOARD_SOFTWARE_ENCODER").is_err()
+}
+
 /// Yakalama thread'ine taşınan ayarlar.
 struct Flags {
     /// Durdurma isteği: işleyici bir sonraki karede yakalamayı KENDİ kapatıyor
@@ -247,6 +263,7 @@ pub fn start(
         FPS,
         bitrate_for(quality),
         want_audio.then_some(AudioFormat { sample_rate: wasapi::OUT_RATE, channels: wasapi::OUT_CHANNELS }),
+        hardware_encoder(),
     )?;
     let writer: SharedWriter = Arc::new(Mutex::new(Some(writer)));
     let failed = Arc::new(Mutex::new(None));
@@ -300,10 +317,11 @@ pub fn start(
     };
 
     log::info!(
-        "kayıt: {}x{} @{FPS}fps, kalite={quality} ({} kbps), ses={} → {}",
+        "kayıt: {}x{} @{FPS}fps, kalite={quality} ({} kbps), kodlayıcı={}, ses={} → {}",
         crop.w,
         crop.h,
         bitrate_for(quality) / 1000,
+        if hardware_encoder() { "donanım" } else { "yazılım" },
         match (audio.is_some(), capture_mic, capture_system_audio) {
             (false, _, _) => "yok".to_string(),
             (true, true, true) => "mikrofon+sistem".to_string(),

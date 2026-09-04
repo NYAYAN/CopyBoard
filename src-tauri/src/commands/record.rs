@@ -203,9 +203,28 @@ pub async fn record_stop(app: tauri::AppHandle) {
                         // Günlüğe de yaz: toast imlecin bulunduğu monitörde çıkıyor,
                         // gözden kaçarsa geriye hiç iz kalmıyordu.
                         log::error!("kayıt durdurulamadı: {e}");
+                        // Sonlandırma (mux) düştüyse suçlu büyük olasılıkla GPU kodlayıcısı:
+                        // bundan sonraki kayıtlar yazılım kodlayıcısıyla yapılsın.
+                        #[cfg(target_os = "windows")]
+                        let fell_back = if e.contains("sonlandırılamadı")
+                            && crate::capture::recorder::hardware_encoder()
+                        {
+                            crate::capture::recorder::set_hardware_encoder(false);
+                            log::warn!("donanım kodlayıcısı sonlandırmada takıldı — bundan sonra yazılım kodlayıcısı");
+                            true
+                        } else {
+                            false
+                        };
+                        #[cfg(not(target_os = "windows"))]
+                        let fell_back = false;
+                        let msg = if fell_back {
+                            "Donanım video kodlayıcısı yanıt vermedi. Sonraki kayıtlar yazılım kodlayıcısıyla yapılacak.".to_string()
+                        } else {
+                            format!("Hata: Video verisi alınamadı ({e})")
+                        };
                         let h = worker_app.clone();
                         let _ = worker_app.run_on_main_thread(move || {
-                            crate::windows::toast::show(&h, &format!("Hata: Video verisi alınamadı ({e})"), "error");
+                            crate::windows::toast::show(&h, &msg, "error");
                             crate::capture::close_all(&h, None);
                         });
                         return;

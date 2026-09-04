@@ -45,6 +45,8 @@ Günlük: `%LOCALAPPDATA%\com.nurullahyayan.copyboard\logs\copyboard.log`
 | `could not find Cargo.toml in ...` | `cargo` repo kökünde çalıştırıldı | `scripts\win-env.cmd cargo run` (betik `src-tauri`ye geçer) ya da `cd src-tauri` |
 | `failed to run custom build command for tesseract-rs` ve içinde `cmake` / `program not found` | cmake yok | "C++ CMake tools for Windows" bileşeni ya da cmake.org kurulumu; betiği kullanın |
 | `failed to run custom build command for aws-lc-sys` | cmake yok (aynı neden) | Aynı çözüm |
+| `cc-rs: command did not execute successfully ... VS\18\...\cl.exe` (exit code 2), `ring`/`tesseract-rs` derlenemiyor | Yeni ama YARIM bir VS kurulumu (yalnız `cl.exe` var; `include` ve `lib` yok) en yeni diye seçiliyor | Komutu `scripts\win-env.cmd` üzerinden verin (betik yarım kurulumu eler). Kalıcı çözüm: Visual Studio Installer'da o sürüme "Desktop development with C++" ekleyin ya da kaldırın |
+| `Access is denied (os error 5)` linker aşamasında | `copyboard.exe` çalışıyor, exe kilitli | Uygulamayı kapatın (tepsi → Çıkış) ya da `Stop-Process -Name copyboard` |
 | `linker 'link.exe' not found` | MSVC yok ya da ortam kurulmadı | VS C++ iş yükü; komutu `win-env.cmd` üzerinden verin |
 | `LNK1104: cannot open file 'msvcrt.lib'` | Eksik/yarım VS kurulumu seçildi | Betik `msvcrt.lib`i olan kurulumu seçer; gerekirse `set COPYBOARD_VS=<kurulum yolu>` |
 | `HATA: MSVC C++ araclari olan bir Visual Studio ... bulunamadi` | Hiç C++ araç seti yok | VS Installer'dan "Desktop development with C++" |

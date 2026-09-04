@@ -380,43 +380,18 @@ pub fn run(app: tauri::AppHandle) {
             #[cfg(target_os = "windows")]
             {
                 use crate::capture::recorder::RecorderState;
-                // `BOOL` windows 0.62'de `core`'da, `Win32::Foundation`da değil.
-                use windows::core::BOOL;
                 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
                 use windows::Win32::UI::WindowsAndMessaging::{
-                    EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowTextW,
-                    GetWindowThreadProcessId, IsWindowVisible, PostMessageW, WM_CLOSE,
+                    GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, PostMessageW, WM_CLOSE,
                 };
 
-                struct Ctx {
-                    pid: u32,
-                    found: isize,
-                    seen: Vec<String>,
-                }
-                unsafe extern "system" fn enum_cb(h: HWND, l: LPARAM) -> BOOL {
-                    let ctx = unsafe { &mut *(l.0 as *mut Ctx) };
-                    let mut pid = 0u32;
-                    unsafe { GetWindowThreadProcessId(h, Some(&mut pid)) };
-                    if pid != ctx.pid || !unsafe { IsWindowVisible(h) }.as_bool() {
-                        return BOOL(1);
-                    }
-                    let mut cls = [0u16; 64];
-                    let n = unsafe { GetClassNameW(h, &mut cls) };
-                    let class = String::from_utf16_lossy(&cls[..n.max(0) as usize]);
-                    let mut ttl = [0u16; 128];
-                    let m = unsafe { GetWindowTextW(h, &mut ttl) };
-                    let title = String::from_utf16_lossy(&ttl[..m.max(0) as usize]);
-                    ctx.seen.push(format!("{class}/{title}"));
-                    if class == "#32770" {
-                        ctx.found = h.0 as isize;
-                        return BOOL(0);
-                    }
-                    BOOL(1)
-                }
+                // Paneli arama işi `platform::windows` içinde: kaydetme bekçisi de aynı
+                // sorguyu kullanıyor (panel açıkken susması gerekiyor).
                 let find_dialog = || -> (Option<isize>, Vec<String>) {
-                    let mut ctx = Ctx { pid: std::process::id(), found: 0, seen: Vec::new() };
-                    unsafe { let _ = EnumWindows(Some(enum_cb), LPARAM(&mut ctx as *mut _ as isize)); }
-                    (if ctx.found != 0 { Some(ctx.found) } else { None }, ctx.seen)
+                    (
+                        crate::platform::windows::find_open_file_dialog(),
+                        crate::platform::windows::visible_window_titles(),
+                    )
                 };
 
                 on_main(&app, |h| crate::capture::start(h, "video"));

@@ -347,6 +347,22 @@ async function startRecording() {
 
         state.isRecording = true;
         document.body.classList.add('is-recording');
+        // Araç çubuğu kayıt durumuna geçiyor: Kaydı Başlat/tam ekran/kalite/ses düğmeleri
+        // gizlenir, Durdur ve sayaç görünür. Bu blok porta geçişte düşmüştü — kayıt Rust
+        // tarafında başlıyor ama düğme "Kaydı Başlat" olarak kalıyor, kullanıcı başlamadı
+        // sanıp yeniden basıyordu (A13; günlükte 5 sn arayla iki "kayıt:" satırı).
+        btnRecord.classList.add('hidden');
+        btnFullscreen.classList.add('hidden');
+        if (btnResetSize) btnResetSize.classList.add('hidden');
+        if (qualitySelect) qualitySelect.classList.add('hidden');
+        if (qualityLabel) qualityLabel.classList.add('hidden');
+        if (btnMic) btnMic.classList.add('hidden');
+        if (btnSystemAudio) btnSystemAudio.classList.add('hidden');
+        btnStop.classList.remove('hidden');
+        timerElement.classList.remove('hidden');
+        timerElement.textContent = '00:00';
+        selectionBox.classList.add('recording-border');
+        canvas.style.pointerEvents = 'none';
         selectionBox.style.pointerEvents = 'none';
         document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
         canvas.style.display = 'none';
@@ -375,8 +391,21 @@ function stopRecording() {
     // açıyor. Renderer'ın elinde tutulan kare/parça YOK.
     window.api.recordStop();
     clearInterval(state.timerInterval);
-    reportToolbarHitArea();
     document.body.classList.remove('is-recording');
+    // Araç çubuğunu seçim durumuna döndür (pencere genelde hemen kapanır; kapanmazsa
+    // — ör. durdurma hatası — kullanıcı yeniden başlatabilsin).
+    btnStop.classList.add('hidden');
+    timerElement.classList.add('hidden');
+    btnRecord.classList.remove('hidden');
+    btnFullscreen.classList.remove('hidden');
+    if (btnResetSize) btnResetSize.classList.remove('hidden');
+    if (qualitySelect) qualitySelect.classList.remove('hidden');
+    if (qualityLabel) qualityLabel.classList.remove('hidden');
+    if (btnMic) btnMic.classList.remove('hidden');
+    if (btnSystemAudio) btnSystemAudio.classList.remove('hidden');
+    selectionBox.classList.remove('recording-border');
+    canvas.style.pointerEvents = '';
+    reportToolbarHitArea();
     selectionBox.style.display = 'none';
     canvas.style.display = 'block';
     overlay.style.display = 'block';

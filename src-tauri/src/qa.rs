@@ -332,6 +332,20 @@ pub fn run(app: tauri::AppHandle) {
                     for _ in 0..40 { sleep(100); if app.state::<RecorderState>().0.lock().unwrap().is_some() { rec = true; break; } }
                     check(rec, "Kayıt düğmesi: kayıt başladı (RecorderState dolu)");
                     if rec {
+                        // Arayüz de kayıt durumuna geçmiş olmalı: Kaydı Başlat gizli, Durdur ve sayaç görünür
+                        // (A13: kayıt başlıyor ama düğme "Kaydı Başlat" kalıyordu).
+                        let probe = r#"window.api.copyText('QA-REC ' + document.body.className
+                            + ' record-hidden=' + document.getElementById('btn-record').classList.contains('hidden')
+                            + ' stop-hidden=' + document.getElementById('btn-stop').classList.contains('hidden')
+                            + ' timer-hidden=' + document.getElementById('timer').classList.contains('hidden'));"#;
+                        on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(probe); } });
+                        sleep(700);
+                        let ui = crate::platform::clipboard_read_text().unwrap_or_default();
+                        check(
+                            ui.starts_with("QA-REC") && ui.contains("is-recording") && ui.contains("record-hidden=true")
+                                && ui.contains("stop-hidden=false") && ui.contains("timer-hidden=false"),
+                            &format!("Kayıt düğmesi: arayüz kayıt durumuna geçti (okunan: {ui:?})"),
+                        );
                         for _ in 0..3 {
                             on_main(&app, |h| crate::windows::main_window::show(h));
                             sleep(300);

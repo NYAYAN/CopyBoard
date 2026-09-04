@@ -102,6 +102,12 @@ pub fn start(
     t0: i64,
     writer: Arc<Mutex<Option<MfWriter>>>,
 ) -> Result<AudioCapture, String> {
+    // Sınama kancası: ses aygıtı açılamamış gibi davran. "Ses istendi ama açılamadı"
+    // yolu, aygıtı olmayan makinelerde çıkan hatayı burada üretebilmek için gerekiyor.
+    #[cfg(debug_assertions)]
+    if std::env::var("COPYBOARD_FORCE_AUDIO_FAIL").is_ok() {
+        return Err("sınama: ses açılamadı".into());
+    }
     let mut kinds = Vec::new();
     if system { kinds.push(true); }   // loopback
     if mic { kinds.push(false); }

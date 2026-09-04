@@ -148,70 +148,124 @@ pub async fn record_stop(app: tauri::AppHandle) {
             let _ = w.set_always_on_top(false);
         }
 
-        // ── Durdurma takılırsa uygulama kilitlenmesin ────────────────────────────
+        // ── Durdurma uzarsa kullanıcı BEKLEMESİN, kayıt da KAYBOLMASIN ───────────
         // `Recording::stop()` üç bloklayıcı aşama: yakalamayı kapat, sesi kapat, mux'u
-        // tamamla. Biri dönmezse buradaki `await` hiç bitmiyor: panel açılmıyor, oturum
-        // kapanmıyor ve kullanıcı yeni yakalama başlatamıyor ("İşlem devam ediyor").
-        // 10 sn'de haber ver, 25 sn'de oturumu serbest bırak — hangi aşamada kalındığı
-        // günlükteki "durdurma:" satırlarından okunuyor.
+        // tamamla. Sonuncusu donanım kodlayıcısını boşaltıyor ve bazı makinelerde çok
+        // uzun sürüyor. Eskiden burada `await` ediliyordu: panel açılmıyor, oturum
+        // kapanmıyor ve kullanıcı yeni yakalama başlatamıyordu ("İşlem devam ediyor").
+        //
+        // Artık durdurma kendi thread'inde: 12 sn'de bitmezse oturum BIRAKILIYOR
+        // (overlay'ler kapanır, uygulama serbest) ve iş arka planda sürüyor. Bittiğinde
+        // panel yerine dosya doğrudan Videolar'a alınıp yolu söyleniyor — kayıt her
+        // hâlükârda elde kalıyor.
         let stop_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let released = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         {
-            let flag = stop_done.clone();
+            let done = stop_done.clone();
+            let released = released.clone();
             let h = app.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(10));
-                if flag.load(Ordering::Acquire) {
+                std::thread::sleep(std::time::Duration::from_secs(12));
+                if done.load(Ordering::Acquire) {
                     return;
                 }
-                // Uyarı hangi ADIMDA kalındığını söylüyor: kullanıcı günlüğe bakmadan
-                // "şurada takıldı" diyebilsin (üç adımın çözümü farklı).
+                released.store(true, Ordering::Release);
+                // Hangi ADIMDA olduğumuzu da söyle: üç adımın nedeni ve çözümü farklı.
                 let phase = crate::capture::stop_phase_name();
-                log::error!("kayıt durdurma 10 sn'dir sürüyor — aşama: {phase}");
+                log::warn!("durdurma 12 sn'yi geçti (aşama: {phase}) — oturum bırakılıyor, hazırlama arka planda sürüyor");
                 let h2 = h.clone();
                 let _ = h.run_on_main_thread(move || {
                     crate::windows::toast::show(
                         &h2,
-                        &format!("Video hazırlanıyor… ({phase}) Uzun sürüyor."),
+                        &format!("Video hazırlanıyor ({phase})… Bitince nereye kaydedildiğini bildireceğim."),
                         "info",
                     );
-                });
-                std::thread::sleep(std::time::Duration::from_secs(15));
-                if flag.load(Ordering::Acquire) {
-                    return;
-                }
-                let phase = crate::capture::stop_phase_name();
-                log::error!("kayıt durdurma 25 sn'dir bitmedi (aşama: {phase}) — oturum serbest bırakılıyor");
-                let h3 = h.clone();
-                let _ = h.run_on_main_thread(move || {
-                    crate::windows::toast::show(
-                        &h3,
-                        &format!("Kayıt durdurulamadı ({phase}). Yeniden deneyebilirsiniz."),
-                        "error",
-                    );
-                    crate::capture::close_all(&h3, None);
+                    crate::capture::close_all(&h2, None);
                 });
             });
         }
-        let stopped = tauri::async_runtime::spawn_blocking(move || recording.stop()).await;
-        stop_done.store(true, Ordering::Release);
-        let temp = match stopped {
-            Ok(Ok(p)) => p,
-            // Günlüğe de yaz: kullanıcı yalnız toast'ı görüyor ve toast imlecin bulunduğu
-            // monitörde çıkıyor — gözden kaçarsa geriye hiç iz kalmıyordu.
-            Ok(Err(e)) => {
-                log::error!("kayıt durdurulamadı: {e}");
-                crate::windows::toast::show(&app, &format!("Hata: Video verisi alınamadı ({e})"), "error");
-                crate::capture::close_all(&app, None);
-                return;
+
+        let worker_app = app.clone();
+        let worker_label = label.clone();
+        let worker_overlay = overlay.clone();
+        let spawned = std::thread::Builder::new()
+            .name("copyboard-record-stop".into())
+            .spawn(move || {
+                let result = recording.stop();
+                stop_done.store(true, Ordering::Release);
+                let temp = match result {
+                    Ok(p) => p,
+                    Err(e) => {
+                        // Günlüğe de yaz: toast imlecin bulunduğu monitörde çıkıyor,
+                        // gözden kaçarsa geriye hiç iz kalmıyordu.
+                        log::error!("kayıt durdurulamadı: {e}");
+                        let h = worker_app.clone();
+                        let _ = worker_app.run_on_main_thread(move || {
+                            crate::windows::toast::show(&h, &format!("Hata: Video verisi alınamadı ({e})"), "error");
+                            crate::capture::close_all(&h, None);
+                        });
+                        return;
+                    }
+                };
+                if released.load(Ordering::Acquire) {
+                    save_without_dialog(&worker_app, temp);
+                } else {
+                    open_save_dialog(&worker_app, &worker_label, worker_overlay, temp);
+                }
+            });
+        if let Err(e) = spawned {
+            log::error!("durdurma thread'i başlatılamadı: {e}");
+            crate::windows::toast::show(&app, "Hata: Kayıt durdurulamadı", "error");
+            crate::capture::close_all(&app, None);
+        }
+    }
+}
+
+/// Kaydetme paneli olmadan bitir: oturum çoktan bırakıldığı için paneli sahiplenecek
+/// pencere yok. Kayıt KAYBOLMASIN — Videolar klasörüne alınıp yolu söyleniyor.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn save_without_dialog(app: &tauri::AppHandle, temp: std::path::PathBuf) {
+    let name = temp.file_name().map(|n| n.to_os_string());
+    let dest = app
+        .path()
+        .video_dir()
+        .ok()
+        .filter(|d| d.is_dir())
+        .zip(name)
+        .map(|(dir, n)| dir.join(n));
+    let final_path = match dest {
+        Some(d) => match std::fs::copy(&temp, &d) {
+            Ok(_) => {
+                let _ = std::fs::remove_file(&temp);
+                d
             }
             Err(e) => {
-                log::error!("kayıt durdurma görevi düştü: {e}");
-                crate::windows::toast::show(&app, &format!("Hata: Video verisi alınamadı ({e})"), "error");
-                crate::capture::close_all(&app, None);
-                return;
+                log::warn!("video Videolar klasörüne alınamadı ({e}) — geçici konumda kalıyor");
+                temp
             }
-        };
+        },
+        None => temp,
+    };
+    let p = final_path.to_string_lossy().to_string();
+    log::info!("video (panel olmadan) kaydedildi: {p}");
+    crate::platform::clipboard_write_text(&p);
+    let h = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        crate::clipboard::history::add(&h, &p);
+        crate::windows::toast::show(&h, "Video kaydedildi. Dosya yolu panoya kopyalandı.", "success");
+    });
+}
 
+/// Kaydetme panelini açar ve sonucunu işler.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn open_save_dialog(
+    app: &tauri::AppHandle,
+    label: &str,
+    overlay: Option<tauri::WebviewWindow>,
+    temp: std::path::PathBuf,
+) {
+    let app = app.clone();
+    {
         let default_name = temp
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -242,7 +296,7 @@ pub async fn record_stop(app: tauri::AppHandle) {
         }
         log::info!(
             "kaydetme paneli açılıyor: {default_name} (sahip pencere: {})",
-            if overlay.is_some() { label.as_str() } else { "yok" }
+            if overlay.is_some() { label } else { "yok" }
         );
         // Kaydedicideki "Video hazırlanıyor…" yazısı kalksın — panel geliyor.
         crate::windows::emit_to(&app, &label, "record-save-ready", ());

@@ -85,7 +85,7 @@ Düzeltme: `set_focusable(false)` → `show()` → `set_focusable(true)` (tao yo
 | 21 | Tema "light" göçü → görüntüleyici açık tema | ekran | ✓ |
 | 22 | Olay hedefleme: başka pencereye `emit_to` → bu pencereye sızmamalı; kendi etiketi ve `emit` yayını ulaşmalı (A11 kök nedeni) | --qa 9b-2 | ✓ 3/3 |
 | 23 | Kaydırmalı yakalama arayüz akışı: sentetik seçim → Enter (Başlat) → hemen Enter (Bitir) → tekrar Başlat → Bitir (A12) | --qa 9d | ✓ 10/10 — seçim evresine dönüş, akış bırakıldı, yeniden kuruldu, inceleme evresi |
-| 24 | Video arayüz akışı: Kayıt düğmesi → RecorderState → dosya (A13/B6) | --qa 9e | ✓ 4/4 |
+| 24 | Video arayüz akışı: Kayıt düğmesi → RecorderState → arayüz kayıt durumuna geçti (Başlat gizli, Durdur + sayaç görünür) → dosya (A13/B6) | --qa 9e | ✓ 5/5 |
 
 ## Manuel test bekleyenler (renderer tıklaması gerektirir)
 

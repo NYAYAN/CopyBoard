@@ -46,9 +46,20 @@ npx tauri build --bundles app
 
 ## Güncelleyici
 
+> **⚠ İlk sürümden ÖNCE yapılması gereken:** güncelleyici imza anahtar çifti **henüz
+> üretilmedi** (4 Eylül 2026'da bilerek ertelendi). Bunun iki sonucu var:
+>
+> * Her `npm run build` şu satırla bitiyor — paket üretiliyor, yalnız çıkışta hata
+>   basılıyor: `A public key has been found, but no private key.`
+> * CI'daki sürüm iş akışı `TAURI_SIGNING_PRIVATE_KEY` secret'ını okuyor; anahtar
+>   olmadan **release yapıları imza adımında düşer.**
+>
+> Anahtar tek yönlü bir karar: açık anahtar bir kez yayınlanmış sürüme girdikten sonra
+> değiştirilemez — değiştirmek mevcut tüm kurulumların otomatik güncellemesini kalıcı
+> olarak kırar. Üretim adımları [SIGNING.md](SIGNING.md) §1'de.
+
 `plugins.updater.pubkey` boşsa güncelleyici "yapılandırılmamış" sayılır: açılış
 kontrolü atlanır, elle kontrol bir uyarı toast'ı gösterir; uygulama normal çalışır.
-Anahtar kurulumu için [SIGNING.md](SIGNING.md).
 
 Windows'ta akış Electron'daki gibi: indir → "İndirme Tamamlandı" → 3-2-1 geri sayım
 (Daha Sonra ile iptal edilebilir) → NSIS sessiz kurulum ve yeniden başlatma.

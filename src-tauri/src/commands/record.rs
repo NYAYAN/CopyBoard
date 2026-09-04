@@ -192,7 +192,52 @@ pub async fn record_stop(app: tauri::AppHandle) {
         );
         // Kaydedicideki "Video hazırlanıyor…" yazısı kalksın — panel geliyor.
         crate::windows::emit_to(&app, &label, "record-save-ready", ());
+
+        // ── Panel gelmezse kayıt KAYBOLMASIN ─────────────────────────────────────
+        // Panelin açılmasını Windows'a ve dosya sağlayıcısına bırakıyoruz; açılmadığı
+        // (ya da kullanıcının göremediği bir yerde açıldığı) durumda geri çağrı hiç
+        // gelmiyor ve kullanıcı bir dakikalık kaydını kaybetmiş sayıyor. Bekçi: 15 sn
+        // içinde sonuç yoksa yolu panoya koy, söyle ve günlüğe yaz. Panel sonradan
+        // yanıt verirse `settled` sayesinde ikinci kez uyarılmıyor.
+        let settled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        {
+            let settled = settled.clone();
+            let watchdog_app = app.clone();
+            let watchdog_path = temp.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(15));
+                if settled.swap(true, Ordering::AcqRel) {
+                    return;
+                }
+                let p = watchdog_path.to_string_lossy().to_string();
+                log::error!("kaydetme paneli 15 sn'dir yanıt vermedi — açılmamış olabilir; kayıt: {p}");
+                crate::platform::clipboard_write_text(&p);
+                let h = watchdog_app.clone();
+                let _ = watchdog_app.run_on_main_thread(move || {
+                    crate::clipboard::history::add(&h, &p);
+                    crate::windows::toast::show(
+                        &h,
+                        "Kaydetme penceresi açılmadı. Video geçici klasörde, yolu panoya kopyalandı.",
+                        "warning",
+                    );
+                    crate::capture::close_all(&h, None);
+                });
+            });
+        }
+
         builder.save_file(move |chosen| {
+            // Bekçi zaten devreye girdiyse (panel çok geç yanıt verdi) tekrar toast atma.
+            let already = settled.swap(true, Ordering::AcqRel);
+            if already {
+                log::warn!("kaydetme paneli geç yanıt verdi — bekçi zaten devreye girmişti");
+                if let Some(dest) = chosen.and_then(|p| p.into_path().ok()) {
+                    if std::fs::copy(&temp, &dest).is_ok() {
+                        let _ = std::fs::remove_file(&temp);
+                        log::info!("video kaydedildi (geç): {}", dest.display());
+                    }
+                }
+                return;
+            }
             match chosen.and_then(|p| p.into_path().ok()) {
                 Some(dest) => match std::fs::copy(&temp, &dest) {
                     Ok(_) => {

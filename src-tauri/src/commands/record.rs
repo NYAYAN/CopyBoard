@@ -135,18 +135,32 @@ pub async fn record_stop(app: tauri::AppHandle) {
         let Some(mut recording) = taken else { return };
         let label = recording.window_label.clone();
 
-        // Kaydedici penceresini HEMEN gizle ki kaydetme panelinin önünü kapatmasın.
-        crate::windows::hide_if_open(&app, &label);
+        // ── Panelin GÖRÜNDÜĞÜ yer ────────────────────────────────────────────────
+        // İlk hâli overlay'i gizliyordu ("panelin önünü kapatmasın") ve panele parent
+        // VERMİYORDU. Sahipsiz bir kaydetme paneli Windows'ta öndeki pencereye/BİRİNCİL
+        // monitöre göre konumlanır: üç monitörlü kurulumda kullanıcı ortadaki ekranda
+        // kaydı durduruyor, panel başka ekranda açılıyor ve "panel hiç gelmedi" olarak
+        // görülüyordu (A14). Ekran görüntüsü kaydetme yolu (`capture::save_png`) bunu
+        // zaten doğru yapıyor: overlay'i GİZLEME, yalnız her-zaman-üstte'yi indir ve
+        // paneli ona parent'la — panel o monitörde, overlay'in üstünde açılır.
+        let overlay = app.get_webview_window(&label);
+        if let Some(w) = &overlay {
+            let _ = w.set_always_on_top(false);
+        }
 
         let stopped = tauri::async_runtime::spawn_blocking(move || recording.stop()).await;
         let temp = match stopped {
             Ok(Ok(p)) => p,
+            // Günlüğe de yaz: kullanıcı yalnız toast'ı görüyor ve toast imlecin bulunduğu
+            // monitörde çıkıyor — gözden kaçarsa geriye hiç iz kalmıyordu.
             Ok(Err(e)) => {
+                log::error!("kayıt durdurulamadı: {e}");
                 crate::windows::toast::show(&app, &format!("Hata: Video verisi alınamadı ({e})"), "error");
                 crate::capture::close_all(&app, None);
                 return;
             }
             Err(e) => {
+                log::error!("kayıt durdurma görevi düştü: {e}");
                 crate::windows::toast::show(&app, &format!("Hata: Video verisi alınamadı ({e})"), "error");
                 crate::capture::close_all(&app, None);
                 return;
@@ -160,22 +174,40 @@ pub async fn record_stop(app: tauri::AppHandle) {
         let videos = app.path().video_dir().ok();
         let handle = app.clone();
 
-        let mut builder = app.dialog().file().set_file_name(&default_name)
+        let mut builder = app.dialog().file()
+            .set_title("Videoyu Kaydet")
+            .set_file_name(&default_name)
             .add_filter("Videos", &["mp4", "mov"]);
-        if let Some(dir) = videos {
+        // Var olmayan bir başlangıç dizini (yönlendirilmiş/senkronize Videolar klasörü)
+        // panelin hiç açılmamasına yol açabiliyor — yoksa hiç verme.
+        if let Some(dir) = videos.filter(|d| d.is_dir()) {
             builder = builder.set_directory(dir);
         }
+        if let Some(w) = &overlay {
+            builder = builder.set_parent(w);
+        }
+        log::info!(
+            "kaydetme paneli açılıyor: {default_name} (sahip pencere: {})",
+            if overlay.is_some() { label.as_str() } else { "yok" }
+        );
         builder.save_file(move |chosen| {
             match chosen.and_then(|p| p.into_path().ok()) {
                 Some(dest) => match std::fs::copy(&temp, &dest) {
                     Ok(_) => {
                         let _ = std::fs::remove_file(&temp);
+                        log::info!("video kaydedildi: {}", dest.display());
                         crate::windows::toast::show(&handle, "Video Kaydedildi.", "success");
                     }
-                    Err(e) => crate::windows::toast::show(&handle, &format!("Kaydetme Hatası: {e}"), "error"),
+                    Err(e) => {
+                        log::error!("video kopyalanamadı ({}): {e}", dest.display());
+                        crate::windows::toast::show(&handle, &format!("Kaydetme Hatası: {e}"), "error")
+                    }
                 },
                 None => {
                     // İptal: kayıt KAYBOLMASIN — geçici dosyanın yolu panoya gitsin.
+                    // (Panel hiç açılamadığında da buraya düşüyoruz; günlük ikisini
+                    // ayırt etmeye yarayan tek iz, o yüzden yazılıyor.)
+                    log::info!("kaydetme paneli kapandı (seçim yok) — geçici dosya panoya");
                     let p = temp.to_string_lossy().to_string();
                     crate::platform::clipboard_write_text(&p);
                     crate::clipboard::history::add(&handle, &p);

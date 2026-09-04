@@ -71,6 +71,80 @@ Apple Developer sertifikası ($99/yıl) alınırsa:
 
 ve notarization eklenir. macOS'ta uygulama içi güncelleme ancak bundan sonra açılabilir.
 
+### Geliştirme sırasında: izinler neden her derlemede sıfırlanıyor
+
+macOS izinleri (TCC — Ekran Kaydı, Erişilebilirlik) uygulamayı **kod imzasının
+"belirlenmiş gereksinimi"** ile tanır. İmzasız derlemede bağlayıcı ad-hoc bir imza
+basar ve o imzanın gereksinimi binary'nin içerik hash'idir:
+
+```
+$ codesign -d -r- src-tauri/target/release/bundle/macos/CopyBoard.app
+designated => cdhash H"029b55677ea8c42fc58633eb1f2e75048b2eec9b"
+```
+
+Her derleme farklı bir hash, yani macOS'a göre **her `npm run build` yeni bir
+uygulama** — eski izin ona ait değil, Ayarlar'dan yeniden verilmesi gerekir.
+
+İzni tamamen atlamanın yolu yok: Ekran Kaydı, MDM profiliyle bile önceden VERİLEMEYEN
+(yalnız reddedilebilen) tek izin sınıfı. Ama derlemeden bağımsız, **sabit bir kimlikle**
+imzalanırsa gereksinim şu hâle gelir ve izin kalıcı olur:
+
+```
+designated => identifier "com.nurullahyayan.copyboard" and certificate leaf = H"…"
+```
+
+Bunun için $99'lık Apple hesabı gerekmiyor; kendinden imzalı bir sertifika yeter
+(yalnız BU makinede geçerli — dağıtım için değil, geliştirme için).
+
+**1. Sertifika oluştur (bir kez):** Keychain Access → menü *Keychain Access →
+Certificate Assistant → Create a Certificate…*
+
+| Alan | Değer |
+|---|---|
+| Name | `CopyBoard Dev` |
+| Identity Type | Self Signed Root |
+| Certificate Type | **Code Signing** |
+
+Oluşan sertifikaya çift tıkla → *Trust* → *Code Signing: Always Trust* (parola ister).
+Doğrulama — bir kimlik listelenmeli:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+**2. Tauri'ye söyle (bir kez):** `~/.zshrc` dosyasına:
+
+```bash
+export APPLE_SIGNING_IDENTITY="CopyBoard Dev"
+```
+
+Tauri, `signingIdentity` yapılandırmada boşsa bu değişkeni kullanır — yapılandırmaya
+makineye özgü bir değer yazmak gerekmez, CI de etkilenmez.
+
+**3. Derle ve doğrula:**
+
+```bash
+npm run build
+codesign -d -r- src-tauri/target/release/bundle/macos/CopyBoard.app
+```
+
+Çıktı `cdhash` değil `identifier "com.nurullahyayan.copyboard" and certificate leaf`
+demeli. İzni bir kez ver; sonraki derlemeler aynı kimliği taşıdığı için yeniden
+sormaz. *Sistem Ayarları → Gizlilik ve Güvenlik → Ekran Kaydı*'nda biriken eski
+"CopyBoard" girdileri `−` ile silinebilir.
+
+Notlar:
+
+* `npm run dev` / `cargo run` ile çalışan **çıplak binary** için durum farklı: macOS
+  izni genelde onu başlatan "sorumlu sürece" (Terminal, VS Code) yazar; o uygulamaya
+  bir kez verilen izin derlemeler arasında kalır. Yeniden sorma sorunu esas olarak
+  `.app` paketini Finder'dan/`open` ile açarken yaşanır.
+* Dağıtım için Developer ID ile imzalanan uygulama **ayrı bir kimliktir** — onun için
+  de bir kez izin istenir; beklenen davranış.
+* macOS 15+ ekran kaydı yapan uygulamalar için aralıklı bir "izin vermeye devam et"
+  hatırlatması gösterir. Bu Ayarlar'a gitmeyi gerektirmeyen tek tıklık bir diyalog ve
+  Apple'ın sistem seçicisini kullanmayan her uygulamada çıkıyor — imzayla ilgisi yok.
+
 ---
 
 ## 3. Windows kod imzası

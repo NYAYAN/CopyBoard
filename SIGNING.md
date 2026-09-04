@@ -124,14 +124,74 @@ makineye özgü bir değer yazmak gerekmez, CI de etkilenmez.
 **3. Derle ve doğrula:**
 
 ```bash
-npm run build
+npm run build -- --bundles app
 codesign -d -r- src-tauri/target/release/bundle/macos/CopyBoard.app
 ```
 
-Çıktı `cdhash` değil `identifier "com.nurullahyayan.copyboard" and certificate leaf`
-demeli. İzni bir kez ver; sonraki derlemeler aynı kimliği taşıdığı için yeniden
-sormaz. *Sistem Ayarları → Gizlilik ve Güvenlik → Ekran Kaydı*'nda biriken eski
-"CopyBoard" girdileri `−` ile silinebilir.
+Çıktı `cdhash` değil şunu demeli:
+
+```
+designated => identifier "com.nurullahyayan.copyboard" and certificate leaf = H"…"
+```
+
+İzni bir kez ver; sonraki derlemeler aynı kimliği taşıdığı için yeniden sormaz.
+*Sistem Ayarları → Gizlilik ve Güvenlik → Ekran Kaydı*'nda biriken eski "CopyBoard"
+girdileri `−` ile silinebilir.
+
+**Bu makinede doğrulandı.** Üç ayrı derleme (kaynak değiştirilip yeniden derlenerek,
+yani binary hash'i her seferinde farklı) aynı gereksinimi üretti:
+
+| | Belirlenmiş gereksinim |
+|---|---|
+| İmzasız (önce) | `cdhash H"029b5567…"` — her derlemede DEĞİŞİR |
+| `CopyBoard Dev` ile (sonra) | `identifier "com.nurullahyayan.copyboard" and certificate leaf = H"998278a1…"` — 3/3 derlemede AYNI |
+
+### Yerel derlemede DMG neden başarısız oluyor (`-1743`)
+
+`npm run build` (bayraksız) `.app`i imzaladıktan sonra DMG üretmeye geçiyor ve orada
+duruyor:
+
+```
+execution error: Not authorized to send Apple events to Finder. (-1743)
+Failed running AppleScript
+```
+
+İronik biçimde bu, uygulamanın kendisinden kaldırdığımız hata sınıfının aynısı — ama
+bu kez hatayı veren uygulama değil, **derleme betiği**: `bundle_dmg.sh`, DMG
+penceresini süslemek (ikon konumları, arka plan) için Finder'a AppleScript gönderiyor
+ve derlemeyi başlatan sürecin Otomasyon izni yok.
+
+Üç seçenek:
+
+1. **Yerel geliştirmede DMG'ye gerek yok** — `.app` yeterli:
+   ```bash
+   npm run build -- --bundles app
+   ```
+2. **Sürüm çıkarırken** derlemeyi Terminal.app'ten bir kez çalıştır; macOS
+   *"Terminal, Finder'ı kontrol etmek istiyor"* diyaloğunu gösterir, *İzin Ver*
+   dedikten sonra kalıcı olur (*Ayarlar → Gizlilik ve Güvenlik → Otomasyon*).
+3. **CI'da sorun çıkmaz** — GitHub Actions runner'ında Otomasyon izni istenmiyor.
+
+Betiği yamamak işe yaramaz: `tauri-bundler` onu her derlemede `target/` altına
+yeniden yazıyor.
+
+Not: `bundle_dmg.sh` üstüste başarısız olursa `/Volumes/dmg.XXXXXX` altında bağlı
+birimler bırakabiliyor. Zararsız ama birikirler; `hdiutil detach /Volumes/dmg.XXXXXX`
+ile ayrılır.
+
+### Güncelleyici anahtarı üretilmeden derleme sonunda hata çıkıyor
+
+`npm run build` şu satırla bitiyor:
+
+```
+Error A public key has been found, but no private key. Make sure to set
+`TAURI_SIGNING_PRIVATE_KEY` environment variable.
+```
+
+`tauri.conf.json`'daki `plugins.updater.pubkey` BOŞ olmasına rağmen bundler
+güncelleyici yapıtını (`.app.tar.gz`) imzalamaya çalışıyor. Paket üretilmiş oluyor,
+yalnız çıkışta bu hata basılıyor. §1'deki anahtar üretilip `TAURI_SIGNING_PRIVATE_KEY`
+verilince geçiyor.
 
 Notlar:
 

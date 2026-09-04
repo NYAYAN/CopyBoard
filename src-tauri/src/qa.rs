@@ -432,9 +432,26 @@ pub fn run(app: tauri::AppHandle) {
                     for _ in 0..40 { sleep(100); if app.state::<RecorderState>().0.lock().unwrap().is_some() { rec = true; break; } }
                     check(rec, "kaydetme paneli sınaması: kayıt başladı");
                     if rec {
-                        sleep(2000); // birkaç kare birikin
+                        // Uzun kayıtta durdurma süresi ölçülebilsin: COPYBOARD_QA_RECORD_SECS=60
+                        let secs: u64 = std::env::var("COPYBOARD_QA_RECORD_SECS")
+                            .ok().and_then(|v| v.parse().ok()).unwrap_or(2);
+                        sleep(secs * 1000);
+                        let t_stop = std::time::Instant::now();
                         let stop = "document.getElementById('btn-stop').click();";
                         on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(stop); } });
+                        // Sayfa BOŞALMALI: durdurunca seçim arayüzü + bayat ekran görüntüsü
+                        // geri geliyordu ("ekran karardı, yeniden alan seçme geldi" — A14).
+                        let blank = r#"setTimeout(() => window.api.copyText('QA-BLANK'
+                            + ' canvas=' + getComputedStyle(document.getElementById('screen-canvas')).display
+                            + ' overlay=' + getComputedStyle(document.getElementById('overlay')).display
+                            + ' toolbar=' + document.getElementById('recorder-toolbar').classList.contains('hidden')), 400);"#;
+                        on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(blank); } });
+                        sleep(1200);
+                        let bl = crate::platform::clipboard_read_text().unwrap_or_default();
+                        check(
+                            bl.starts_with("QA-BLANK") && bl.contains("canvas=none") && bl.contains("overlay=none") && bl.contains("toolbar=true"),
+                            &format!("Durdur sonrası overlay boşaltıldı (okunan: {bl:?})"),
+                        );
                         let mut dlg = None;
                         let mut seen = Vec::new();
                         for _ in 0..150 {
@@ -443,7 +460,13 @@ pub fn run(app: tauri::AppHandle) {
                             if f.is_some() { dlg = f; break; }
                             seen = s;
                         }
-                        check(dlg.is_some(), &format!("Durdur → kaydetme paneli açıldı (görünen pencereler: {seen:?})"));
+                        check(
+                            dlg.is_some(),
+                            &format!(
+                                "Durdur → kaydetme paneli açıldı ({} sn kayıt, Durdur'dan {} ms sonra; görünen pencereler: {seen:?})",
+                                secs, t_stop.elapsed().as_millis()
+                            ),
+                        );
                         if let Some(hwnd) = dlg {
                             let fg = unsafe { GetForegroundWindow() };
                             let mut fgpid = 0u32;
@@ -473,7 +496,7 @@ pub fn run(app: tauri::AppHandle) {
                             let ids: Vec<String> = {
                                 let st = app.state::<AppState>();
                                 crate::clipboard::history::history(&st.store).iter()
-                                    .filter(|i| i.get("content").and_then(|c| c.as_str()).map(|c| c.contains("copyboard_kayit_")).unwrap_or(false))
+                                    .filter(|i| i.get("content").and_then(|c| c.as_str()).map(|c| c.contains("copyboard_kayit_") || c.starts_with("QA-BLANK")).unwrap_or(false))
                                     .filter_map(|i| i.get("id").and_then(|v| v.as_str()).map(str::to_string)).collect()
                             };
                             for id in ids { on_main(&app, move |h| crate::clipboard::history::delete(h, &id)); }

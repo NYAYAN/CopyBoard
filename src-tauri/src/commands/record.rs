@@ -163,21 +163,29 @@ pub async fn record_stop(app: tauri::AppHandle) {
                 if flag.load(Ordering::Acquire) {
                     return;
                 }
-                log::error!("kayıt durdurma 10 sn'dir sürüyor — son 'durdurma:' satırı hangi aşamada kalındığını söyler");
+                // Uyarı hangi ADIMDA kalındığını söylüyor: kullanıcı günlüğe bakmadan
+                // "şurada takıldı" diyebilsin (üç adımın çözümü farklı).
+                let phase = crate::capture::stop_phase_name();
+                log::error!("kayıt durdurma 10 sn'dir sürüyor — aşama: {phase}");
                 let h2 = h.clone();
                 let _ = h.run_on_main_thread(move || {
-                    crate::windows::toast::show(&h2, "Video hazırlanıyor, biraz sürüyor…", "info");
+                    crate::windows::toast::show(
+                        &h2,
+                        &format!("Video hazırlanıyor… ({phase}) Uzun sürüyor."),
+                        "info",
+                    );
                 });
                 std::thread::sleep(std::time::Duration::from_secs(15));
                 if flag.load(Ordering::Acquire) {
                     return;
                 }
-                log::error!("kayıt durdurma 25 sn'dir bitmedi — oturum serbest bırakılıyor");
+                let phase = crate::capture::stop_phase_name();
+                log::error!("kayıt durdurma 25 sn'dir bitmedi (aşama: {phase}) — oturum serbest bırakılıyor");
                 let h3 = h.clone();
                 let _ = h.run_on_main_thread(move || {
                     crate::windows::toast::show(
                         &h3,
-                        "Kayıt durdurulamadı. Yeniden deneyebilirsiniz.",
+                        &format!("Kayıt durdurulamadı ({phase}). Yeniden deneyebilirsiniz."),
                         "error",
                     );
                     crate::capture::close_all(&h3, None);

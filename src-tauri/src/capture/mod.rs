@@ -48,6 +48,26 @@ use crate::state::AppState;
 /// ama sınırlı ki tepe bellek monitör sayısıyla karesel büyümesin.
 const CONCURRENCY: usize = 2;
 
+/// Kayıt durdurmanın hangi aşamasında olduğumuz. Durdurma üç bloklayıcı adım
+/// (yakalamayı kapat → sesi kapat → mux'u tamamla) ve biri takılırsa panel hiç
+/// açılmıyor. Uzayan durdurmada gösterilen uyarı bunu SÖYLÜYOR ki kullanıcı günlüğe
+/// bakmadan hangi adımda kalındığını iletebilsin.
+static STOP_PHASE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+pub fn set_stop_phase(phase: u8) {
+    STOP_PHASE.store(phase, std::sync::atomic::Ordering::Release);
+}
+
+pub fn stop_phase_name() -> &'static str {
+    match STOP_PHASE.load(std::sync::atomic::Ordering::Acquire) {
+        1 => "ekran yakalama kapatılıyor",
+        2 => "ses kapatılıyor",
+        3 => "video dosyası yazılıyor",
+        4 => "bitti",
+        _ => "başlıyor",
+    }
+}
+
 /// Ölçüm: son `begin` anı. `deliver` ve renderer'ın `snip-painted` bildirimi buna göre
 /// "+ms" yazar (docs/PERF_WINDOWS.md). Yalnız günlük; davranışı etkilemez.
 static CAPTURE_T0: Mutex<Option<std::time::Instant>> = Mutex::new(None);

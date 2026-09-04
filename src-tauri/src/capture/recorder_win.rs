@@ -30,7 +30,7 @@
 #![cfg(target_os = "windows")]
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -63,6 +63,9 @@ const FRAME_DUR_HNS: i64 = HNS_PER_SEC / FPS as i64;
 
 /// Yakalama thread'ine taşınan ayarlar.
 struct Flags {
+    /// Durdurma isteği: işleyici bir sonraki karede yakalamayı KENDİ kapatıyor
+    /// (dışarıdan `CaptureControl::stop()` sonsuz döngüye girebiliyor — bkz. `stop`).
+    stopping: Arc<AtomicBool>,
     writer: SharedWriter,
     crop: Crop,
     t0: i64,
@@ -71,6 +74,7 @@ struct Flags {
 }
 
 struct Handler {
+    stopping: Arc<AtomicBool>,
     writer: SharedWriter,
     crop: Crop,
     t0: i64,
@@ -86,6 +90,7 @@ impl GraphicsCaptureApiHandler for Handler {
     fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
         let f = ctx.flags;
         Ok(Self {
+            stopping: f.stopping,
             writer: f.writer,
             crop: f.crop,
             t0: f.t0,
@@ -98,8 +103,15 @@ impl GraphicsCaptureApiHandler for Handler {
     fn on_frame_arrived(
         &mut self,
         frame: &mut Frame,
-        _control: InternalCaptureControl,
+        control: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
+        // Durdurma istendi: thread'i BURADAN bitir. Dışarıdan `CaptureControl::stop()`
+        // yakalama thread'ine WM_QUIT yollayabilmek için döngüde bekliyor ve mesaj
+        // kuyruğu yoksa çıkamıyor; içeriden bırakmak o riski atlıyor.
+        if self.stopping.load(Ordering::Acquire) {
+            control.stop();
+            return Ok(());
+        }
         // 30 fps'ye indir: WGC 60 kare/sn verebiliyor.
         let now = Instant::now();
         if let Some(last) = self.last_sent {
@@ -153,6 +165,8 @@ impl GraphicsCaptureApiHandler for Handler {
 
 pub struct Recording {
     control: Option<CaptureControl<Handler, BoxError>>,
+    /// İşleyiciye "dur" bayrağı — nazik durdurma (bkz. `stop`).
+    stopping: Arc<AtomicBool>,
     audio: Option<wasapi::AudioCapture>,
     writer: SharedWriter,
     failed: Arc<Mutex<Option<String>>>,
@@ -252,7 +266,9 @@ pub fn start(
         None
     };
 
+    let stopping = Arc::new(AtomicBool::new(false));
     let make_flags = || Flags {
+        stopping: stopping.clone(),
         writer: writer.clone(),
         crop,
         t0,
@@ -297,7 +313,7 @@ pub fn start(
         out_path.display()
     );
 
-    Ok(Recording { control: Some(control), audio, writer, failed, frames, path: out_path, window_label })
+    Ok(Recording { control: Some(control), stopping, audio, writer, failed, frames, path: out_path, window_label })
 }
 
 impl Recording {
@@ -308,15 +324,36 @@ impl Recording {
         // yakalama thread'ine WM_QUIT yollayana kadar DÖNGÜDE bekliyor — thread'in
         // mesaj kuyruğu yoksa orada kalınabilir.)
         let t = std::time::Instant::now();
-        // 1) Kare akışını kes — yakalama thread'i biter, işleyici düşer.
+        // 1) Kare akışını kes.
+        //
+        // ⚠ `CaptureControl::stop()` yakalama thread'ine WM_QUIT yollayana kadar
+        // DÖNGÜDE bekliyor ve thread'in mesaj kuyruğu yoksa `ERROR_INVALID_THREAD_ID`
+        // ile sonsuza dek dönebiliyor (crate'in kodu: `is_finished()` olmadıkça çıkmaz).
+        // Bu yüzden önce NAZİK yol: işleyiciye "dur" diyoruz, o bir sonraki karede
+        // `InternalCaptureControl::stop()` çağırıp thread'i kendi kendine bitiriyor.
+        // Yarım saniyede bitmezse (statik ekranda hiç kare gelmeyebilir) eski yola düşülüyor.
+        crate::capture::set_stop_phase(1);
         if let Some(control) = self.control.take() {
             log::info!("durdurma: yakalama kapatılıyor");
+            self.stopping.store(true, Ordering::Release);
+            for _ in 0..25 {
+                if control.is_finished() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let graceful = control.is_finished();
             if let Err(e) = control.stop() {
                 log::warn!("kayıt: yakalama durdurulurken: {e}");
             }
-            log::info!("durdurma: yakalama kapandı (+{} ms)", t.elapsed().as_millis());
+            log::info!(
+                "durdurma: yakalama kapandı (+{} ms, {})",
+                t.elapsed().as_millis(),
+                if graceful { "nazik" } else { "WM_QUIT" }
+            );
         }
         // 2) Ses thread'leri: karıştırıcı son parçayı yazıp çıkıyor.
+        crate::capture::set_stop_phase(2);
         if let Some(audio) = self.audio.take() {
             log::info!("durdurma: ses kapatılıyor");
             audio.stop();
@@ -324,11 +361,33 @@ impl Recording {
         }
         // 3) Yazıcıyı BİZ kapatıyoruz (işleyici içinde kapatmak statik ekranda hiç kare
         //    gelmezken sonsuza dek beklerdi).
+        crate::capture::set_stop_phase(3);
         log::info!("durdurma: yazıcı kapatılıyor");
         let writer = self.writer.lock().unwrap_or_else(|e| e.into_inner()).take();
         let Some(writer) = writer else { return Err("yazıcı zaten kapalı".into()) };
         let audio_samples = writer.audio_samples();
-        let frames = writer.finish()?;
+        // `IMFSinkWriter::Finalize()` donanım kodlayıcısını boşaltıyor; sürücü takılırsa
+        // süresiz bekleyebilir. Ayrı thread + zaman aşımı: uygulama kilitlenmesin, kullanıcı
+        // ne olduğunu görsün. Geride kalan thread işini bitirirse dosya yine de tamamlanır.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let finalize_path = self.path.clone();
+        std::thread::Builder::new()
+            .name("copyboard-mux-finalize".into())
+            .spawn(move || {
+                let _ = tx.send(writer.finish());
+            })
+            .map_err(|e| format!("sonlandırma thread'i başlatılamadı: {e}"))?;
+        let frames = match rx.recv_timeout(Duration::from_secs(20)) {
+            Ok(r) => r?,
+            Err(_) => {
+                crate::capture::set_stop_phase(4);
+                return Err(format!(
+                    "video sonlandırılamadı: kodlayıcı 20 sn yanıt vermedi. Ham kayıt: {}",
+                    finalize_path.display()
+                ));
+            }
+        };
+        crate::capture::set_stop_phase(4);
         log::info!("durdurma: yazıcı kapandı (+{} ms)", t.elapsed().as_millis());
         if let Some(err) = self.failed.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             return Err(err);

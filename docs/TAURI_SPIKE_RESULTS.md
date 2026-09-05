@@ -1204,16 +1204,59 @@ hedefini başlığı farklı, ayrı bir pencerede açıyor. Ekranda gerçekten d
 WKWebView'ın boyadığı ve akışa gerçek ScreenCaptureKit üzerinden giren bir pencere —
 kullanıcının senaryosundan tek farkı pencerenin sahibi.
 
+## GERÇEK imleç — `--qa-capture=pointer,save,through`
+
+Yukarıdaki altı akış sentetik `MouseEvent` kullanıyor: uygulamanın kendi
+dinleyicilerinden geçiyorlar ama pencere sunucusunun İSABET SINAMASINDAN
+geçmiyorlar. Overlay yanlış katmanda dursa, yanlış ekrana otursa ya da tıklama
+geçirgenliği hiç çalışmasa sentetik olay bunu göremez.
+
+Kullanıcı Erişilebilirlik izni verdi; bu üç akış `CGEventPost` ile GERÇEK imleci
+sürüyor. Varsayılan listede DEĞİLLER — izin istiyorlar ve çalışırken imleci
+gerçekten hareket ettiriyorlar.
+
+| Akış | Kanıt |
+|---|---|
+| Gerçek imleçle seçim | İşletim sistemi düzeyinde sürükleme, seçim istenen dikdörtgene ±0 px; Kopyala'ya gerçek tıklama; panodaki görüntünün çeyrekleri doğru |
+| Yerel kaydetme paneli | Kaydet'e gerçek tıklama → `NSSavePanel` → Return → `~/Pictures/snip_*.png` 1176×936, sol üst kırmızı, sağ üst yeşil; dosya sonra silindi |
+| Tıklama geçirgenliği | Kayıt öncesi gerçek tıklama alta GEÇMEDİ (overlay yuttu); kayıt sırasında overlay'in kendi sayacı 0 kaldı ve alttaki pencere tıklamayı ALDI |
+
+Geçirgenlik sınaması üç yönlü ayırt ediyor: overlay'de ve alttaki pencerede ayrı
+sayaçlar var, ve olumsuz durum (kayıt başlamadan) önce ölçülüyor. Tek sayaçla
+"geçirgenlik çalışıyor" ile "tıklama bambaşka bir yere gitti" ayırt edilemezdi.
+
+### Yol boyunca çıkan üç tuzak
+
+**Ana pencere overlay'in ÜSTÜNDE.** Ana pencere `ScreenSaver` (1000), yakalama
+overlay'i `PopUpMenu` (101) katmanında. Sınama kartı ana pencerede olduğu için
+gerçek tıklama overlay'e hiç ulaşmıyordu. Ekran görüntüsü zaten alındığından kart
+overlay açıldıktan sonra indiriliyor (`lower_main`).
+
+**macOS "first mouse".** Etkin olmayan bir pencereye ilk tıklama pencereyi
+etkinleştirmekle harcanıyor ve içeriğe ulaşmıyor. Tek tıklamayla ölçen sınama
+"geçirgenlik çalışmıyor" diyordu; iki tıklama gerçeği gösterdi. Bu yalnız bir test
+ayrıntısı değil: kayıt sırasında alttaki uygulamaya dönen kullanıcı da ilk
+tıklamasını pencereyi etkinleştirmeye harcıyor.
+
+**Hangi düğme hangi olayı dinliyor.** Snipper araç çubuğu `mousedown`, kaydedici ve
+kaydırma düğmeleri `click`. `btn-record`a `mousedown` göndermek kaydı hiç
+başlatmıyordu ve harness bunu "kayıt başlamadı" diye doğru raporladı. Yanlış olayı
+gönderen bir sınama sessizce yeşil verebilirdi.
+
 ### Hâlâ doğrulanmayan
 
-- **Gerçek işaretçi donanımı.** Olaylar sentetik: uygulamanın kendi dinleyicilerinden
-  geçiyorlar ama işletim sisteminin isabet sınamasından geçmiyorlar. Tıklama
-  geçirgenliği (`set_ignore_mouse_events`) bu yolla ölçülemez — CGEvent ile gerçek
-  imleç sürmek Erişilebilirlik izni ister.
-- **Yerel kaydetme paneli.** macOS'ta `NSSavePanel` içindeki dosya adı ve Kaydet
-  düğmesi ancak Erişilebilirlik iznine sahip bir süreçten sürülebilir. Panelin
-  AÇILDIĞI Windows tarafında `--qa` ile ölçülü.
-- **Üç veya daha fazla monitör.** Bu makinede iki ekran var.
+- **Üç veya daha fazla monitör.** Bu makinede iki ekran var. Kullanıcının hatayı
+  bildirdiği düzen Windows'ta üç ekrandı.
 - **Kalan açıklama araçları** (ok, kare, yuvarlak, bulanıklaştırma, metin). Kalem
   yolu ölçüldü; hepsi aynı `mousedown`/`mousemove` dalını ve aynı `drawCanvas`
   bileşimini kullanıyor.
+
+### Harness'ı çalıştırırken
+
+Bitince süreç kendini kapatıyor (`app.exit(0)`). Kapanmasaydı tek-örnek eklentisi
+bir sonraki başlatmayı sessizce düşürürdü ve ikinci koşu hiçbir şey yazmadan
+biterdi — "takıldı" gibi görünen ama aslında hiç başlamamış bir koşu.
+
+Koşu ekranı, panoyu ve imleci devralıyor. Kullanıcı aynı anda çalışıyorsa sonuçlar
+bozulur: bir koşuda kullanıcının kendi tıklamaları sürüklemeyi kesti ve sınama
+haklı olarak düştü. Aynı sebeple iki oturum aynı anda çalıştırmamalı.

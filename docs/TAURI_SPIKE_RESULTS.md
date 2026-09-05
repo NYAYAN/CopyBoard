@@ -948,10 +948,19 @@ derlenemeyen `avassetwriter` crate'i (Swift köprüsü, macOS 26 SDK'sında dü�
 DEĞİL. Kapsam küçük değil: kare/ses zamanlaması, oturum yönetimi ve sonlandırma
 elle yazılacak.
 
-> Kare hızının dosyaya yansıdığı ÖLÇÜLEMEDİ: ölçüm sırasında makinenin ekranı
-> uykuya geçti ve `available_monitors()` boş dönüyor. Eşleme birim testiyle
-> korunuyor (`kalite_kademesi_kare_hizina_donusuyor`), ama gerçek kayıtta
-> doğrulanması gerekiyor.
+**Kare hızı ölçüldü — düzeltme çalışıyor.** İlk deneme yanıltıcı çıktı: durağan
+ekranda 10 saniyede **1 kare** üretildi. Sebep ScreenCaptureKit'in değişim-güdümlü
+olması — ekran değişmiyorsa kare göndermiyor. Ölçüm, kayıt bölgesinde imleci daire
+çizdiren küçük bir C programıyla denetimli hareket üretilerek tekrarlandı:
+
+| Kademe | Yapılandırma | Ölçülen | Çözünürlük |
+|---|---|---|---|
+| high   | 60 fps | **48,2 fps** (485 kare / 10,06 sn) | 1280×720 |
+| medium | 30 fps | **25,5 fps** (256 kare / 10,06 sn) | 960×540 |
+
+Ölçülen değerin tavanın altında kalması normal: `with_fps` bir TAVAN ve yalnız imleç
+hareket ettiği için her karede değişiklik olmuyor. Belirleyici olan `high`ın 30'u
+açık ara aşması — eski `with_fps(30)` sabitiyle bu mümkün değildi.
 
 ### 🟡 BULGU R-18 — Durdurmadan sonra ekran bir an tamamen boş kalıyordu
 

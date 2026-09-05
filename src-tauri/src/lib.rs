@@ -373,7 +373,8 @@ pub fn run() {
             // webview içinde sınar ve sonucu günlüğe yazar. Taklit köprüyle yapılan
             // test renderer'ı doğruluyor ama Tauri katmanını atlıyor; bu onu kapatıyor.
             #[cfg(debug_assertions)]
-            if std::env::args().any(|a| a == "--ui-test") {
+            if std::env::args().any(|a| a == "--ui-test" || a == "--ui-test=sil") {
+                let silme_testi = std::env::args().any(|a| a == "--ui-test=sil");
                 let h = handle.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(2500));
@@ -389,6 +390,7 @@ pub fn run() {
                     };
                     let script = r#"
 (async () => {
+  window.__UI_TEST_DELETE = __SILME__;
   const rapor = [];
   const app = document.querySelector('.app');
   const vis = (id) => { const e = document.getElementById(id); return e ? getComputedStyle(e).display : 'yok'; };
@@ -401,8 +403,35 @@ pub fn run() {
   kayit('VIDEO');
   const kart = document.querySelectorAll('#videos-grid .video-item').length;
   const bos  = document.querySelector('#videos-grid .empty-state') ? 'evet' : 'hayir';
-  const dugme = [...document.querySelectorAll('#videos-grid .video-item .shot-actions button')]
+  const kartlar = [...document.querySelectorAll('#videos-grid .video-item')];
+  const dugme = [...(kartlar[0]?.querySelectorAll('.shot-actions button') || [])]
                   .map(b => b.dataset.act).join(',') || '(yok)';
+  const izgara = getComputedStyle(document.getElementById('videos-grid')).gridTemplateColumns;
+  const dikey  = kartlar[0] ? getComputedStyle(kartlar[0]).flexDirection : '(yok)';
+  const arac   = ['videos-layout-1','videos-layout-2','videos-play-btn','videos-folder-btn']
+                  .filter(id => document.getElementById(id)).length;
+  // Sil düğmesine bas: ONAY diyaloğu açılmalı, silme HEMEN olmamalı.
+  let onay = 'test yok';
+  if (kartlar[0]) {
+    const before = kartlar.length;
+    kartlar[0].querySelector('[data-act="delete"]').click();
+    await bekle(300);
+    const modal = document.getElementById('confirm-modal');
+    const acik = modal && !modal.classList.contains('hidden');
+    const kalan = document.querySelectorAll('#videos-grid .video-item').length;
+    onay = 'diyalog=' + (acik ? 'acildi' : 'ACILMADI') + ' hemen_silmedi=' + (kalan === before);
+    // ONAYLA ve gerçekten silindiğini gör. Test yalnız `--ui-test=sil` ile bunu yapar;
+    // aksi hâlde iptal edilir ki kullanıcının kaydı gitmesin.
+    if (location.search.includes('x') || window.__UI_TEST_DELETE) {
+      document.getElementById('confirm-ok').click();
+      await bekle(600);
+      onay += ' onaydan_sonra=' + before + '->' + document.querySelectorAll('#videos-grid .video-item').length;
+    } else {
+      document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+      await bekle(300);
+      onay += ' (iptal edildi)';
+    }
+  }
   document.getElementById('gallery-btn').click(); await bekle(300);
   kayit('RESIM');
   const shot = document.querySelectorAll('#gallery-grid .gallery-item').length;
@@ -413,12 +442,15 @@ pub fn run() {
 
   window.api.sendDebugLog('UI_TEST ' + rapor.join(' | ')
      + ' || video_kart=' + kart + ' bos_durum=' + bos + ' dugmeler=' + dugme
+     + ' izgara=' + izgara + ' kart_yon=' + dikey + ' arac_dugme=' + arac
+     + ' || SILME: ' + onay
      + ' ekran_goruntusu=' + shot
      + ' || mikrofon=' + JSON.stringify(mik)
      + ' || kalite=' + JSON.stringify(kal));
 })();
 "#;
-                    if let Err(e) = w.eval(script) {
+                    let script = script.replace("__SILME__", if silme_testi { "true" } else { "false" });
+                    if let Err(e) = w.eval(&script) {
                         println!("UI_TEST: script çalıştırılamadı: {e}");
                     }
                     std::thread::sleep(std::time::Duration::from_millis(2500));

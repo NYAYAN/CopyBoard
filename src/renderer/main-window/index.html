@@ -127,7 +127,41 @@
 
         <!-- ══ Video gallery view ════════════════════════════════════════════════ -->
         <section class="view view-videos" id="videos-panel" data-view-name="videos">
-            <div id="videos-grid" class="gallery-grid single" role="listbox" aria-label="Videolar"
+            <div class="gallery-toolbar">
+                <div class="btn-group">
+                    <button id="videos-folder-btn" title="Klasörde Göster" aria-label="Klasörde Göster">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                    </button>
+                    <button id="videos-play-btn" title="Oynat (en yeni)" aria-label="Oynat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M7 4.5v15l12-7.5z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="btn-group" id="videos-layout-toggle">
+                    <button id="videos-layout-1" title="Tek sütun" aria-label="Tek sütun">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="7" rx="1.5" />
+                            <rect x="3" y="14" width="18" height="7" rx="1.5" />
+                        </svg>
+                    </button>
+                    <button id="videos-layout-2" title="İki sütun" aria-label="İki sütun">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="8" height="7" rx="1.5" />
+                            <rect x="13" y="4" width="8" height="7" rx="1.5" />
+                            <rect x="3" y="14" width="8" height="7" rx="1.5" />
+                            <rect x="13" y="14" width="8" height="7" rx="1.5" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="videos-grid" class="gallery-grid" role="listbox" aria-label="Videolar"
                 tabindex="-1">
                 <!-- Kartlar modules/videos.js tarafından basılıyor -->
             </div>

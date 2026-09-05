@@ -4,11 +4,15 @@
 // videonun küçük resmi tek başına hangi kayıt olduğunu söylemiyor. Kart, küçük resmin
 // yanında ad, süre, boyut ve tarih taşıyor.
 //
-// Videolar uygulamanın kendi klasöründe DEĞİL, kullanıcının kaydetme panelinde seçtiği
-// yerde duruyor; burada tutulan yalnızca bir indeks. Dosya Finder'dan silinirse ana
-// süreç onu listeden eliyor, yani burada "kayıp dosya" durumu ele alınmıyor.
+// Kayıtlar uygulamanın kendi `videos/` klasörüne yazılıyor ve burada bir indeksle
+// listeleniyor. Dosya Finder'dan silinirse ana süreç onu listeden eliyor, yani burada
+// "kayıp dosya" durumu ele alınmıyor.
+//
+// Silme ONAY İSTİYOR: kayıt uygulamanın kendi klasöründe olduğu için dosya da gidiyor
+// ve geri alınamıyor. Ekran görüntüsü galerisi de aynı sebeple soruyor.
 
 import { elements } from './dom.js';
+import { confirmAction } from './modals.js';
 
 const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 
@@ -64,7 +68,7 @@ export function render() {
 
     items.forEach((v, i) => {
         const card = document.createElement('div');
-        card.className = 'video-item' + (i === selected ? ' selected' : '');
+        card.className = 'gallery-item video-item' + (i === selected ? ' selected' : '');
         card.setAttribute('role', 'option');
         card.setAttribute('aria-selected', String(i === selected));
         card.dataset.id = v.id;
@@ -115,7 +119,7 @@ export function render() {
         };
         mkBtn('play', t('Oynat'), ICONS.play, () => window.api.openVideo(v.id));
         mkBtn('folder', t('Klasörde Göster'), ICONS.folder, () => window.api.revealVideo(v.id));
-        mkBtn('delete', t('Sil'), ICONS.trash, () => window.api.deleteVideo(v.id, true));
+        mkBtn('delete', t('Sil'), ICONS.trash, () => askDelete(v));
 
         card.append(thumb, meta, actions);
         card.addEventListener('click', () => {
@@ -132,16 +136,39 @@ export function render() {
     grid.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
 }
 
+// Silmeden önce sor. Video uygulamanın kendi klasöründe duruyor, yani "listeden
+// çıkar" ile "dosyayı sil" aynı şey — geri dönüşü yok.
+function askDelete(v) {
+    if (!v) return;
+    confirmAction({
+        title: t('Videoyu sil'),
+        text: t('Bu kayıt diskten silinecek.'),
+        confirmLabel: t('Sil'),
+    }).then((ok) => {
+        if (ok) window.api.deleteVideo(v.id, true);
+    });
+}
+
 /// Panel açıkken klavye. `true` dönerse olay tüketilmiştir.
 export function handleKey(e) {
     if (!items.length) return false;
     const current = items[selected];
     switch (e.key) {
+        // Izgara bir veya iki sütunlu olabiliyor, o yüzden yukarı/aşağı sabit 1 değil
+        // SÜTUN SAYISI kadar atlıyor — tek sütunda da doğru çalışıyor.
         case 'ArrowDown':
-            selected = Math.min(selected + 1, items.length - 1);
+            selected = Math.min(selected + columns(), items.length - 1);
             render();
             return true;
         case 'ArrowUp':
+            selected = Math.max(selected - columns(), 0);
+            render();
+            return true;
+        case 'ArrowRight':
+            selected = Math.min(selected + 1, items.length - 1);
+            render();
+            return true;
+        case 'ArrowLeft':
             selected = Math.max(selected - 1, 0);
             render();
             return true;
@@ -154,14 +181,40 @@ export function handleKey(e) {
             return true;
         case 'Backspace':
         case 'Delete':
-            // Ctrl/Cmd + Backspace dosyayı da siler; tek başına yalnız listeden düşürür.
-            // Ayrım bilinçli: kullanıcının kendi seçtiği klasördeki dosyayı sessizce
-            // silmek, listeyi temizlemekle aynı şey değil.
-            if (current) window.api.deleteVideo(current.id, e.metaKey || e.ctrlKey);
+            askDelete(current);
             return true;
         default:
             return false;
     }
+}
+
+function columns() {
+    return elements.videosGrid?.classList.contains('single') ? 1 : 2;
+}
+
+// Araç çubuğu: sütun düzeni ve seçili kayda kısayollar.
+export function initVideos() {
+    const applyLayout = (cols) => {
+        elements.videosGrid?.classList.toggle('single', cols === 1);
+        elements.videosLayout1?.classList.toggle('active', cols === 1);
+        elements.videosLayout2?.classList.toggle('active', cols !== 1);
+        // Saf arayüz tercihi — ayar deposunu kirletmeye değmez.
+        try { localStorage.setItem('videosLayout', String(cols)); } catch (e) { }
+    };
+    elements.videosLayout1?.addEventListener('click', () => applyLayout(1));
+    elements.videosLayout2?.addEventListener('click', () => applyLayout(2));
+    let saved = 2;
+    try { saved = parseInt(localStorage.getItem('videosLayout'), 10) || 2; } catch (e) { }
+    applyLayout(saved);
+
+    elements.videosPlayBtn?.addEventListener('click', () => {
+        const v = items[selected];
+        if (v) window.api.openVideo(v.id);
+    });
+    elements.videosFolderBtn?.addEventListener('click', () => {
+        const v = items[selected];
+        if (v) window.api.revealVideo(v.id);
+    });
 }
 
 export function refresh() {

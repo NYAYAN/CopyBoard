@@ -194,18 +194,33 @@ function columns() {
 
 // Araç çubuğu: sütun düzeni ve seçili kayda kısayollar.
 export function initVideos() {
-    const applyLayout = (cols) => {
+    // Varsayılan TEK sütun: yatay kart ada, süreye ve tarihe yer bırakıyor; video
+    // listesinde bunlar küçük resmin kendisi kadar ayırt edici.
+    const DEFAULT_COLS = 1;
+    // Anahtar sürümlü: önceki yapı açılışta da yazıyordu, yani depodaki değer
+    // kullanıcının SEÇİMİ değil kodun kendi ilk hâliydi. Yeni anahtar o kalıntıyı
+    // yok sayıyor.
+    const KEY = 'videosLayout.v2';
+
+    const applyLayout = (cols, persist) => {
         elements.videosGrid?.classList.toggle('single', cols === 1);
         elements.videosLayout1?.classList.toggle('active', cols === 1);
         elements.videosLayout2?.classList.toggle('active', cols !== 1);
-        // Saf arayüz tercihi — ayar deposunu kirletmeye değmez.
-        try { localStorage.setItem('videosLayout', String(cols)); } catch (e) { }
+        // Yalnız kullanıcı tıkladığında yazılıyor. İlk uygulamada da yazsaydı
+        // varsayılan anında "seçim" hâline gelir ve bir daha değiştirilemezdi.
+        if (persist) {
+            try { localStorage.setItem(KEY, String(cols)); } catch (e) { }
+        }
     };
-    elements.videosLayout1?.addEventListener('click', () => applyLayout(1));
-    elements.videosLayout2?.addEventListener('click', () => applyLayout(2));
-    let saved = 2;
-    try { saved = parseInt(localStorage.getItem('videosLayout'), 10) || 2; } catch (e) { }
-    applyLayout(saved);
+    elements.videosLayout1?.addEventListener('click', () => applyLayout(1, true));
+    elements.videosLayout2?.addEventListener('click', () => applyLayout(2, true));
+
+    let saved = DEFAULT_COLS;
+    try {
+        const v = parseInt(localStorage.getItem(KEY), 10);
+        if (v === 1 || v === 2) saved = v;
+    } catch (e) { }
+    applyLayout(saved, false);
 
     elements.videosPlayBtn?.addEventListener('click', () => {
         const v = items[selected];

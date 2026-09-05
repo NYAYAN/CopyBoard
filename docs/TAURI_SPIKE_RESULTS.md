@@ -876,3 +876,42 @@ taşınmıyor) ama içerik geçmişte hiç yoksa bir kez ekleniyor.
 | Hata ayıklama çalıştırması | ayakta, panik yok, boşta %0,0 CPU |
 | Sürüm çalıştırması | ayakta, 100 MB RSS, uyarı/hata yok |
 | Sürüm binary'sinde `--capture=`/`--viewer`/`--record-test`/`--set-lang=` | **yok** (hepsi `debug_assertions` arkasında) |
+
+---
+
+### 🔴 BULGU R-16 — Video durdurma her seferinde 5,5 sn boşa bekliyordu
+
+Kullanıcı bildirdi: Electron sürümünde "Durdur" deyince kaydetme paneli hemen
+geliyordu; Tauri'de "Video hazırlanıyor…" yazıp uzun sürüyordu.
+
+`Recording::stop()` yalnız `stream.stop_capture()` çağırıyordu. O çağrı kare akışını
+kesiyor ama **kayıt çıktısını kapatmıyor** ve `on_finish` delegate'ini tetiklemiyor.
+Kütüphanenin belgelediği kapatma sırası iki adımlı:
+
+```rust
+stream.stop_capture()?;
+stream.remove_recording_output(&recording)?;   // ← bu eksikti
+```
+
+İkincisi kendi tamamlanma geri çağrısını bekliyor — mux'un gerçekten kapandığı an
+orası. Eksikken `finished` bayrağı hiç `true` olmuyor ve emniyet döngüsü her
+durdurmada 5 sn'lik zaman aşımını sonuna kadar bekliyordu. Üstüne koşulsuz 300 ms
+uyku vardı.
+
+Ölçüm (15 sn'lik kayıt, sistem sesiyle):
+
+| | `stop_capture` | mux | **toplam** | `finished` |
+|---|---|---|---|---|
+| Önce | 18,5 ms | 5,19 s | **5,51 s** | `false` |
+| Sonra | 8,3 ms | 6,3 ms | **14,5 ms** | `true` |
+
+**380× hızlandı.** Bekleme tamamen boşunaydı: dosya çoktan hazırdı.
+
+Yan bulgu: emniyet döngüsünün adımı 100 ms'ti, yani bayrak hemen otursa bile ölçüm
+hep 100 ms çıkıyordu. Adım 5 ms'ye indirildi (tavan yine 5 sn).
+
+Çıktı doğrulandı — mp4 başlığı elle ayrıştırıldı: süre 10,05 sn (10 sn'lik kayıt),
+`vide` + `soun` izleri yerinde, `ftyp`/`mdat`/`moov` yapısı tam.
+
+> Windows'un durdurma yolu ayrı (`MfWriter`, Media Foundation) ve bu düzeltmeden
+> etkilenmiyor; orada ayrıca sınanması gerekir.

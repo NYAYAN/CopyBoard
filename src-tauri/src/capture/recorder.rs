@@ -14,39 +14,38 @@
 //! sanal ses aygıtı gerekebilir" diyordu. ScreenCaptureKit sesi doğrudan veriyor
 //! (Spike-4'te 8 saniyede 302 ses buffer'ı ölçüldü).
 //!
-//! ## Bilinen sınır: bitrate kontrolü yok
+//! ## Neden `SCRecordingOutput` değil `AVAssetWriter`
 //!
-//! `SCRecordingOutput` encode ve mux'u kendi içinde yapıyor ve bitrate ayarı sunmuyor.
-//! Kalite kademesi bu yüzden ÇÖZÜNÜRLÜK üzerinden uygulanıyor (yüksek 1.0×, orta 0.75×,
-//! düşük 0.5×) — dosya boyutu üzerinde gerçek bir kaldıraç, ama Electron'un
-//! `videoBitsPerSecond`'ı kadar ince değil.
+//! İlk port `SCRecordingOutput` kullanıyordu: encode ve mux'u kendi yapıyor, kod az.
+//! Ama **bit hızı ayarı sunmuyor** ve ölçüldüğünde (BULGU R-19) sıkıştırılamaz gürültüde
+//! bile 1280×720@54fps'te ~10 Mbps'te tıkandığı görüldü — Apple'ın sabit bütçesi.
+//! Electron `videoBitsPerSecond` veriyordu (ultra 50, high 25 Mbps) ve fark kullanıcıya
+//! "görüntü kalitesi düştü" olarak yansıyordu.
 //!
-//! İnce kontrol ve macOS 12.3 desteği için `objc2-av-foundation` ile doğrudan
-//! `AVAssetWriter` yolu gerekiyor (bkz. plan §5.1). `SCRecordingOutput` macOS **15.0+**
-//! ister; daha eski sürümlerde kayıt kapalı ve kullanıcıya söyleniyor.
+//! Artık kareler `SCStream`den alınıp [`crate::capture::writer::AssetWriter`] ile
+//! yazılıyor; kalite kademesi hem KARE HIZINI hem BİT HIZINI belirliyor, Electron'daki
+//! gibi. Çözünürlük ölçeği yalnız düşük kademelerde korunuyor (dosya boyutu için).
 
 #![cfg(target_os = "macos")]
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use screencapturekit::cm::{CMSampleBufferSCExt, CMSampleBuffer, SCFrameStatus};
+use screencapturekit::dispatch_queue::{DispatchQoS, DispatchQueue};
 use screencapturekit::prelude::*;
-use screencapturekit::recording_output::{
-    RecordingCallbacks, SCRecordingOutput, SCRecordingOutputCodec, SCRecordingOutputConfiguration,
-    SCRecordingOutputFileType,
-};
+use screencapturekit::stream::output_trait::SCStreamOutputTrait;
+use screencapturekit::stream::output_type::SCStreamOutputType;
+
+use super::writer::AssetWriter;
 
 pub struct Recording {
     stream: SCStream,
-    /// Kayıt çıktısı DURDURMADA gerekiyor: `stop_capture()` tek başına mux'u
-    /// sonlandırmıyor — bkz. [`Recording::stop`].
-    recording: SCRecordingOutput,
+    /// Kareleri yazan AVAssetWriter. Akış geri çağrılarıyla paylaşıldığı için `Arc`.
+    writer: Arc<AssetWriter>,
     /// Kaydın yazıldığı geçici dosya. Kullanıcı kaydetmeyi iptal ederse yolu
     /// panoya gidiyor — kayıt kaybolmuyor.
     pub path: PathBuf,
-    finished: Arc<AtomicBool>,
-    failed: Arc<Mutex<Option<String>>>,
     /// Bu monitörün penceresi; durdurmada diğer overlay'lerin kapatılması için.
     pub window_label: String,
 }
@@ -147,7 +146,18 @@ pub fn start(
         })
         .with_width(out_w)
         .with_height(out_h)
-        .with_pixel_format(PixelFormat::BGRA)
+        // ── Piksel biçimi: YUV, BGRA DEĞİL ───────────────────────────────────
+        // H.264 kodlayıcısı YCbCr istiyor. BGRA verildiğinde `AVAssetWriter` İLK
+        // kareyi kabul ediyor, sonra kodlayıcı ASENKRON çöküyor (-16122) ve yazıcı
+        // `Failed` durumuna düşüp sonraki her kareyi reddediyor: ölçümde 1 kare
+        // yazılıp 300 kare düşürülüyordu. Hata mesajı biçimden hiç söz etmiyor,
+        // bu yüzden ayarları ve zamanlamayı eleyerek bulundu.
+        //
+        // Kaydırmalı yakalama (`scroll_stream`) BGRA kullanmaya devam ediyor: orada
+        // kareler CPU'da birleştiriliyor, yani paketlenmiş RGB gerekiyor. Burada
+        // kareye hiç dokunmuyoruz, doğrudan kodlayıcıya gidiyor — dönüşüm de bedava
+        // kalkmış oluyor.
+        .with_pixel_format(PixelFormat::YCbCr_420v)
         .with_fps(fps)
         .with_shows_cursor(true)
         .with_captures_audio(capture_system_audio)
@@ -158,91 +168,141 @@ pub fn start(
         .with_channel_count(2)
         .with_queue_depth(8);
 
+    // AVAssetWriter var olan dosyayı reddediyor.
     let _ = std::fs::remove_file(&out_path);
-    let rec_config = SCRecordingOutputConfiguration::new()
-        .with_output_url(&out_path)
-        .with_video_codec(SCRecordingOutputCodec::H264)
-        .with_output_file_type(SCRecordingOutputFileType::MP4);
 
-    let finished = Arc::new(AtomicBool::new(false));
-    let failed: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    let (f1, x1) = (finished.clone(), failed.clone());
+    let bitrate = super::writer::quality_bitrate(quality);
+    let writer = Arc::new(AssetWriter::new(
+        &out_path,
+        out_w,
+        out_h,
+        fps,
+        bitrate,
+        capture_system_audio || capture_mic,
+    )?);
 
-    let callbacks = RecordingCallbacks::new()
-        .on_start(|| log::info!("kayıt başladı"))
-        .on_finish(move || {
-            f1.store(true, Ordering::Release);
-            log::info!("kayıt bitti");
-        })
-        .on_fail(move |e| {
-            let msg = format!("{e:?}");
-            log::error!("kayıt hatası: {msg}");
-            *x1.lock().unwrap() = Some(msg);
-        });
+    // ── Akış çıktısı ─────────────────────────────────────────────────────────
+    // Görüntü ve ses AYRI işleyiciler ve AYRI kuyruklardan geliyor; ikisi de aynı
+    // `AssetWriter`a yazıyor. Eş zamanlılık orada input başına `Mutex` ile çözülü.
+    struct Sink(Arc<AssetWriter>);
+    impl SCStreamOutputTrait for Sink {
+        fn did_output_sample_buffer(&self, sample: CMSampleBuffer, of_type: SCStreamOutputType) {
+            // Hazır olmayan tamponu eklemek yazıcıyı hata durumuna düşürür.
+            if !sample.is_valid() || !sample.data_is_ready() {
+                return;
+            }
+            // ScreenCaptureKit ekran DEĞİŞMEDİĞİNDE de kare yolluyor — ama bu
+            // karelerde piksel verisi YOK (`Idle`, `Blank`, `Suspended`). Yazıcıya
+            // verilirse ekleme başarısız oluyor ve yazıcı hata durumuna düşüp bir
+            // daha hiçbir kareyi kabul etmiyor: ölçümde 1 kare yazıldı, 537 düşürüldü.
+            // Yalnız gerçekten içerik taşıyan kareler geçiyor.
+            // Filtre "izin verilenler" değil "reddedilenler" listesi: `frame_status()`
+            // ek bilgi bulamazsa `None` dönüyor ve beyaz liste yaklaşımı o durumda
+            // HER kareyi eliyordu (ölçümde sıfır kare yazıldı).
+            if of_type == SCStreamOutputType::Screen {
+                if matches!(
+                    sample.frame_status(),
+                    Some(SCFrameStatus::Idle)
+                        | Some(SCFrameStatus::Blank)
+                        | Some(SCFrameStatus::Suspended)
+                ) {
+                    return;
+                }
+            }
+            let ptr = sample.as_ptr();
+            match of_type {
+                SCStreamOutputType::Screen => {
+                    let pts = sample.presentation_timestamp();
+                    // apple_cf ve objc2-core-media CMTime'ları alan alan aynı
+                    // (`value`, `timescale`, `flags`, `epoch`) — C ABI'sinde tek tip.
+                    let pts = objc2_core_media::CMTime {
+                        value: pts.value,
+                        timescale: pts.timescale,
+                        flags: objc2_core_media::CMTimeFlags(pts.flags),
+                        epoch: pts.epoch,
+                    };
+                    // ── `image_buffer_ptr()` DEĞİL, `image_buffer()` ──────────────
+                    // Alttaki Swift köprüsü piksel tamponunu **+1 (passRetained)**
+                    // döndürüyor — kütüphanenin kendi güvenlik notu bunu söylüyor.
+                    // `image_buffer_ptr()` o +1'i sahipsiz bırakıyor, yani her kare
+                    // bir retain sızdırıyor ve ScreenCaptureKit'in havuzu tam
+                    // `queueDepth` karede tükenip akış tamamen duruyordu (ölçüm:
+                    // derinlik 8 → 8 kare, derinlik 32 → 32 kare, sonra sıfır;
+                    // hiçbir şey yapmayan bir işleyici aynı sürede 572 kare alıyordu).
+                    //
+                    // `image_buffer()` +1'i sahipleniyor ve `Drop` ile bırakıyor.
+                    // Sarmalayıcı ekleme bitene kadar CANLI tutulmalı.
+                    let Some(pb) = sample.image_buffer() else { return };
+                    unsafe { self.0.append_video(pb.as_ptr(), pts) };
+                    drop(pb);
+                }
+                SCStreamOutputType::Audio | SCStreamOutputType::Microphone => {
+                    unsafe { self.0.append_audio(ptr) };
+                }
+            }
+        }
+    }
 
-    let recording = SCRecordingOutput::new_with_delegate(&rec_config, callbacks)
-        .ok_or("kayıt çıktısı oluşturulamadı (macOS 15.0+ gerekiyor)")?;
+    // ── İşleyiciler KENDİ kuyruklarında ──────────────────────────────────────
+    // Varsayılan kuyrukta encode çağrısı, karelerin teslim edildiği kuyruğu bloke
+    // ediyor: ScreenCaptureKit havuzundaki tamponlar tükenince akış tamamen duruyor.
+    // Ölçüldü — hiçbir şey yapmayan bir işleyici 10 saniyede 572 kare alırken,
+    // yazıcıya bağlı olan tam `queueDepth` kadar (8, derinlik 32'yken 32) kare alıp
+    // susuyordu. Ayrı kuyruk, encode'u teslimden ayırıyor.
+    let vq = DispatchQueue::new("com.copyboard.record.video", DispatchQoS::UserInteractive);
+    let aq = DispatchQueue::new("com.copyboard.record.audio", DispatchQoS::UserInitiated);
 
-    let stream = SCStream::new(&filter, &config);
-    stream.add_recording_output(&recording).map_err(|e| e.to_string())?;
+    let mut stream = SCStream::new(&filter, &config);
+    stream.add_output_handler_with_queue(
+        Sink(writer.clone()),
+        SCStreamOutputType::Screen,
+        Some(&vq),
+    );
+    if capture_system_audio {
+        stream.add_output_handler_with_queue(
+            Sink(writer.clone()),
+            SCStreamOutputType::Audio,
+            Some(&aq),
+        );
+    }
+    if capture_mic {
+        stream.add_output_handler_with_queue(
+            Sink(writer.clone()),
+            SCStreamOutputType::Microphone,
+            Some(&aq),
+        );
+    }
     stream.start_capture().map_err(|e| e.to_string())?;
 
     log::info!(
-        "kayıt: {out_w}x{out_h} @{fps}fps, kalite={quality}, mikrofon={capture_mic}, sistem sesi={capture_system_audio}"
+        "kayıt: {out_w}x{out_h} @{fps}fps, {:.1} Mbps, kalite={quality}, mikrofon={capture_mic}, sistem sesi={capture_system_audio}",
+        f64::from(bitrate) / 1e6
     );
-    Ok(Recording { stream, recording, path: out_path, finished, failed, window_label })
+    Ok(Recording { stream, writer, path: out_path, window_label })
 }
 
 impl Recording {
     /// Akışı durdurur ve mux'un kapanmasını bekler. Dosya yolunu döner.
     pub fn stop(&mut self) -> Result<PathBuf, String> {
         let t0 = std::time::Instant::now();
+
+        // Sıra ÖNEMLİ: önce kare akışı kesilir, sonra yazıcı sonlandırılır. Ters
+        // sırada, sonlandırma sürerken gelen kareler kapanmış bir input'a eklenmeye
+        // çalışılır ve yazıcı hata durumuna düşer.
         self.stream.stop_capture().map_err(|e| e.to_string())?;
         let t_capture = t0.elapsed();
 
-        // ── Mux'u SONLANDIR ──────────────────────────────────────────────────────
-        //
-        // `stop_capture()` yalnız kare akışını kesiyor; kayıt çıktısını kapatmıyor ve
-        // `on_finish` delegate'ini TETİKLEMİYOR. Kütüphanenin belgelediği sıra
-        // `stop_capture()` + `remove_recording_output()`; ikincisi kendi tamamlanma
-        // geri çağrısını BEKLİYOR, yani mux'un gerçekten kapandığı an burası.
-        //
-        // Bu çağrı eksikken `finished` bayrağı hiç `true` olmuyordu ve aşağıdaki
-        // döngü her seferinde 5 sn'lik zaman aşımını sonuna kadar bekliyordu —
-        // ölçüldü: yakalama 18 ms, "mux" 5,19 s, bayrak `false`. Yani kullanıcının
-        // "video hazırlanıyor, uzun sürüyor" dediği bekleme tamamen boşa geçiyordu;
-        // dosya çoktan hazırdı.
         let t1 = std::time::Instant::now();
-        let removed = self.stream.remove_recording_output(&self.recording);
-        if let Err(e) = &removed {
-            // Sonlandırma başarısızsa aşağıdaki bekleme yine de denenir: dosya
-            // yarım da olsa elde kalsın, hata `failed` üzerinden raporlansın.
-            log::warn!("kayıt çıktısı kaldırılamadı: {e}");
-        }
-
-        // Emniyet: `remove_recording_output` döndükten sonra bayrağın oturması için
-        // kısa bir pencere. Tavan yine 5 sn ama adım 5 ms — bekleme gerçekte ne
-        // kadarsa o kadar sürsün. 100 ms'lik adımda ölçüm hep 100 ms çıkıyordu:
-        // bayrak zaten oturmuştu, sadece uykunun bitmesi bekleniyordu.
-        for _ in 0..1000 {
-            if self.finished.load(Ordering::Acquire) {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
+        let result = self.writer.finish(std::time::Duration::from_secs(10));
         let t_mux = t1.elapsed();
 
         log::info!(
-            "durdurma süreleri: yakalama={:?} mux={:?} toplam={:?} (mux bitti bayrağı: {})",
-            t_capture,
-            t_mux,
-            t0.elapsed(),
-            self.finished.load(Ordering::Acquire)
+            "durdurma süreleri: yakalama={t_capture:?} yazma={t_mux:?} toplam={:?}",
+            t0.elapsed()
         );
 
-        if let Some(err) = self.failed.lock().unwrap().clone() {
-            return Err(err);
-        }
+        result?;
+
         let size = std::fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0);
         if size == 0 {
             return Err("kayıt dosyası boş".into());

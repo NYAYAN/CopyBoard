@@ -20,6 +20,8 @@
 // imzalarla: `commands/record.rs` hangi platformda olduğunu bilmiyor.
 #[cfg(target_os = "macos")]
 pub mod recorder;
+#[cfg(target_os = "macos")]
+pub mod writer;
 #[cfg(target_os = "windows")]
 #[path = "recorder_win.rs"]
 pub mod recorder;

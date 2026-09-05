@@ -972,3 +972,49 @@ açıldıysa nereye bakacağını da söylüyor.
 
 İkinci basış zaten zararsızdı (`RecorderState` `take()` ile boşaltılıyor), ama
 kullanıcı bunu bilemezdi.
+
+### 🔴 BULGU R-19 — Bit hızı denetimi: `SCRecordingOutput` → `AVAssetWriter`
+
+Kullanıcı "görüntü kalitesi düşük" dedi. Kare hızı (R-17) düzeltildikten sonra geriye
+bit hızı kaldı ve **tavan olduğu ölçümle kanıtlandı**: sıkıştırılamaz gürültü
+kaydedilirken bile 1280×720@54fps'te 10 Mbps'te, kare başına 49 KB'ta tıkanıyordu.
+İçerik sınırı olsa gürültü onlarca Mbps üretirdi.
+
+`SCRecordingOutputConfiguration` yalnız üç şey sunuyor: URL, kodek, dosya türü. Bit
+hızı yok. Bu yüzden kayıt `AVAssetWriter`a taşındı (`capture/writer.rs`); kalite
+kademesi artık Electron'daki hedefleri veriyor: ultra 50, high 25, medium 10, low 5 Mbps.
+
+**Yol boyunca çıkan dört ayrı tuzak** — hepsi ölçümle bulundu, hiçbiri hata mesajından
+anlaşılmıyordu:
+
+| # | Belirti | Sebep |
+|---|---|---|
+| 1 | `canAddInput` sesi reddediyor | `None` ayar = passthrough; MP4 ham PCM taşımıyor, AAC ayarı şart |
+| 2 | 1 kare yazılıyor, sonra `Failed` (-11800/-16122) | `appendSampleBuffer` ile ScreenCaptureKit örnek tamponu doğrudan verilemiyor; piksel tamponu adaptörü gerekiyor |
+| 3 | Kayıt tam `queueDepth` karede duruyor | **`image_buffer_ptr()` +1 retain sızdırıyor** — bkz. aşağıda |
+| 4 | Yüksek bit hızında kodlayıcı çöküyor | `AVVideoProfileLevelKey` verilmezse varsayılan H.264 seviyesi bit hızını sınırlıyor; `HighAutoLevel` gerekiyor |
+
+**Üçüncüsü en sinsisiydi.** Kayıt tam olarak `queueDepth` kadar kare alıp susuyordu:
+derinlik 8 → 8 kare, derinlik 32 → 32 kare. Hiçbir şey yapmayan bir işleyici aynı
+sürede 572 kare alıyordu, yani akış sağlamdı. Sebep `apple-cf`in kendi güvenlik
+notunda yazılı:
+
+> `cm_sample_buffer_get_image_buffer` returns a **+1 (passRetained)** CVImageBuffer
+
+`image_buffer_ptr()` o +1'i sahipsiz döndürüyor — her kare bir retain sızdırıyor ve
+ScreenCaptureKit'in havuzu tükeniyor. Sahiplenen `image_buffer()` kullanılınca
+**8 kare → 523 kare**.
+
+Doğrulama (imleç hareketiyle, `high`):
+
+```
+AVAssetWriter: 1280x720 @60fps, 25.0 Mbps, ses=true
+412 kare yazıldı
+dosya: 1280x720, 8.03 sn, 412 kare = 51.3 fps, izler=['vide', 'soun']
+durdurma: 36 ms
+```
+
+> **Ölçülemeyen:** gerçek bit hızının hedefe ne kadar yaklaştığı. Gürültü aracı, ekran
+> koruyucu seviyesindeki penceresi yakalamayı bastırdığı için AVAssetWriter yolunda
+> kare üretmedi; imleç hareketi ise fazla sıkıştırılabilir olduğundan bit hızını
+> doyurmuyor. Gerçek kullanımda ölçülmesi gerekiyor.

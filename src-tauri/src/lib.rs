@@ -410,6 +410,18 @@ pub fn run() {
   const dikey  = kartlar[0] ? getComputedStyle(kartlar[0]).flexDirection : '(yok)';
   const arac   = ['videos-layout-1','videos-layout-2','videos-play-btn','videos-folder-btn']
                   .filter(id => document.getElementById(id)).length;
+  // Tek sütuna geç: kart YATAY olmalı (yazı sağda), sonra iki sütuna dön.
+  let tekli = '(kart yok)';
+  if (kartlar[0]) {
+    document.getElementById('videos-layout-1').click(); await bekle(250);
+    const k = document.querySelector('#videos-grid .video-item');
+    const st = getComputedStyle(k);
+    const thumb = k.querySelector('.video-thumb').getBoundingClientRect();
+    const meta  = k.querySelector('.video-meta').getBoundingClientRect();
+    tekli = 'display=' + st.display + ' sutun=' + st.gridTemplateColumns
+          + ' yazi_sagda=' + (meta.left > thumb.right - 2);
+    document.getElementById('videos-layout-2').click(); await bekle(250);
+  }
   // Sil düğmesine bas: ONAY diyaloğu açılmalı, silme HEMEN olmamalı.
   let onay = 'test yok';
   if (kartlar[0]) {
@@ -443,6 +455,7 @@ pub fn run() {
   window.api.sendDebugLog('UI_TEST ' + rapor.join(' | ')
      + ' || video_kart=' + kart + ' bos_durum=' + bos + ' dugmeler=' + dugme
      + ' izgara=' + izgara + ' kart_yon=' + dikey + ' arac_dugme=' + arac
+     + ' || TEKLI: ' + tekli
      + ' || SILME: ' + onay
      + ' ekran_goruntusu=' + shot
      + ' || mikrofon=' + JSON.stringify(mik)

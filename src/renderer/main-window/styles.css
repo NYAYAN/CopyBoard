@@ -1561,3 +1561,42 @@ kbd+kbd {
     right: var(--sp-2);
     flex-direction: column;
 }
+
+/* ── Tek sütunda kart YATAY ────────────────────────────────────────────────────
+   İki sütunda kart dikey duruyor (küçük resim üstte) çünkü genişlik dar. Tek
+   sütunda ise satır boyu uzuyor ve dikey kart hem küçük resmi gereksiz büyütüyor
+   hem de ad/tarih şeridini kaybediyor; yan yana yerleşim aynı yüksekliğe çok daha
+   fazla bilgi sığdırıyor. */
+.gallery-grid.single .video-item {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2);
+}
+
+.gallery-grid.single .video-thumb {
+    border-radius: var(--r-sm);
+}
+
+.gallery-grid.single .video-meta {
+    padding: 0;
+    /* Düğmeler sağda duruyor; yazı altlarına akmasın. */
+    padding-right: 84px;
+}
+
+.gallery-grid.single .video-name {
+    font-size: 13px;
+}
+
+.gallery-grid.single .video-sub {
+    font-size: 12px;
+}
+
+/* Yatay kartta düğmeler sağda, dikeyde ortalı ve yan yana. */
+.gallery-grid.single .video-item .shot-actions {
+    top: 50%;
+    right: var(--sp-2);
+    transform: translateY(-50%);
+    flex-direction: row;
+}

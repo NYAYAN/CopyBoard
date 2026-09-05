@@ -7,6 +7,8 @@ import { initKeyboard } from './modules/keyboard.js';
 import { initColorPicker } from './modules/color-picker.js';
 import { elements } from './modules/dom.js';
 import { keycapFor, applyLayoutMap } from './modules/accelerator.js';
+// Bölüm başlığı özetleri: değerler kontrollere yazıldıktan SONRA kuruluyor.
+import { initSummaries } from './modules/settings-ui.js';
 
 // Ses giriş aygıtlarını doldurur. Liste her yüklemede tazeleniyor: kulaklık takılıp
 // çıkarıldığında aygıtlar gelip gidiyor ve kalıcı bir liste yanıltıcı olurdu.
@@ -82,6 +84,8 @@ async function fillMicDevices(selected) {
     elements.pasteShortcutInput.value = format(settings.globalShortcutPaste);
     if (settings.videoQuality) elements.videoQualitySelect.value = settings.videoQuality;
     fillMicDevices(settings.audioMicDevice || '');
+    // Özetler kontrollerin değerinden okunuyor; ayarlar YAZILDIKTAN sonra kurulmalı.
+    initSummaries();
 
     const enabled = settings.shortcutsEnabled || {};
     ['list', 'draw', 'ocr', 'color', 'scroll', 'video', 'paste'].forEach(k => applyShortcutEnabled(k, enabled[k] !== false));

@@ -480,8 +480,12 @@ pub fn run() {
     q.dispatchEvent(new Event('input', {bubbles:true}));
     await bekle(300);
   }
+  const ozet = kartlar2.map(c => c.dataset.section + '="'
+                 + (c.querySelector('.card-sum')?.textContent || '') + '"').join(' ');
   const ayarBilgi = 'bolum=' + kartlar2.length + ' acik=[' + acik.join(',') + ']'
-                  + ' gorunur_satir=' + ilkGorunur + ' || ARAMA: ' + arama;
+                  + ' gorunur_satir=' + ilkGorunur
+                  + ' || OZETLER: ' + ozet
+                  + ' || ARAMA: ' + arama;
   const mik = [...(document.getElementById('audio-mic-device')?.options || [])].map(o => o.textContent);
   const kal = [...(document.getElementById('video-quality')?.options || [])].map(o => o.textContent);
 

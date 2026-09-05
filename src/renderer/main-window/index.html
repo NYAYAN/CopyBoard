@@ -294,14 +294,14 @@
                             <span class="set-title">Maksimum kayıt</span>
                             <span class="set-desc">Geçmişte tutulacak en fazla öğe sayısı</span>
                         </label>
-                        <input type="number" id="max-items" class="control number" min="1" max="500" value="50">
+                        <input type="number" id="max-items" class="control number" min="1" max="500" value="50" autocomplete="off" spellcheck="false">
                     </div>
                     <div class="set-row">
                         <label class="set-label" for="quickpaste-count">
                             <span class="set-title">Hızlı yapıştır liste sayısı</span>
                             <span class="set-desc">Hızlı yapıştır listesinde gösterilecek son kayıt sayısı</span>
                         </label>
-                        <input type="number" id="quickpaste-count" class="control number" min="1" max="100" value="20">
+                        <input type="number" id="quickpaste-count" class="control number" min="1" max="100" value="20" autocomplete="off" spellcheck="false">
                     </div>
                     <div class="set-row">
                         <label class="set-label" for="incognito-check">
@@ -332,7 +332,7 @@
                         </label>
                         <div class="shortcut-control">
                             <input type="text" id="shortcut-input" class="control shortcut" placeholder="Tuşlara basın"
-                                readonly>
+                                readonly autocomplete="off" spellcheck="false">
                             <input type="checkbox" id="shortcut-enabled" class="switch sm" aria-label="Kısayolu aç/kapa">
                         </div>
                     </div>
@@ -343,7 +343,7 @@
                         </label>
                         <div class="shortcut-control">
                             <input type="text" id="image-shortcut-input" class="control shortcut"
-                                placeholder="Tuşlara basın" readonly>
+                                placeholder="Tuşlara basın" readonly autocomplete="off" spellcheck="false">
                             <input type="checkbox" id="image-shortcut-enabled" class="switch sm"
                                 aria-label="Kısayolu aç/kapa">
                         </div>
@@ -355,7 +355,7 @@
                         </label>
                         <div class="shortcut-control">
                             <input type="text" id="ocr-shortcut-input" class="control shortcut"
-                                placeholder="Tuşlara basın" readonly>
+                                placeholder="Tuşlara basın" readonly autocomplete="off" spellcheck="false">
                             <input type="checkbox" id="ocr-shortcut-enabled" class="switch sm"
                                 aria-label="Kısayolu aç/kapa">
                         </div>
@@ -367,7 +367,7 @@
                         </label>
                         <div class="shortcut-control">
                             <input type="text" id="color-shortcut-input" class="control shortcut"
-                                placeholder="Tuşlara basın" readonly>
+                                placeholder="Tuşlara basın" readonly autocomplete="off" spellcheck="false">
                             <input type="checkbox" id="color-shortcut-enabled" class="switch sm"
                                 aria-label="Kısayolu aç/kapa">
                         </div>
@@ -379,7 +379,7 @@
                         </label>
                         <div class="shortcut-control">
                             <input type="text" id="scroll-shortcut-input" class="control shortcut"
-                                placeholder="Tuşlara basın" readonly>
+                                placeholder="Tuşlara basın" readonly autocomplete="off" spellcheck="false">
                             <input type="checkbox" id="scroll-shortcut-enabled" class="switch sm"
                                 aria-label="Kısayolu aç/kapa">
                         </div>
@@ -391,7 +391,7 @@
                         </label>
                         <div class="shortcut-control">
                             <input type="text" id="video-shortcut-input" class="control shortcut"
-                                placeholder="Tuşlara basın" readonly>
+                                placeholder="Tuşlara basın" readonly autocomplete="off" spellcheck="false">
                             <input type="checkbox" id="video-shortcut-enabled" class="switch sm"
                                 aria-label="Kısayolu aç/kapa">
                         </div>
@@ -403,7 +403,7 @@
                         </label>
                         <div class="shortcut-control">
                             <input type="text" id="paste-shortcut-input" class="control shortcut"
-                                placeholder="Tuşlara basın" readonly>
+                                placeholder="Tuşlara basın" readonly autocomplete="off" spellcheck="false">
                             <input type="checkbox" id="paste-shortcut-enabled" class="switch sm"
                                 aria-label="Kısayolu aç/kapa">
                         </div>
@@ -609,7 +609,7 @@
 
             <div id="note-view-content" class="note-view hidden"></div>
             <textarea id="note-input" class="note-input hidden" placeholder="Bu öğe için notunuzu girin"
-                rows="5"></textarea>
+                rows="5" autocomplete="off"></textarea>
 
             <div class="modal-actions" id="note-view-actions">
                 <button id="close-note-btn" class="btn">Kapat</button>

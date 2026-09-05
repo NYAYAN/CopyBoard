@@ -390,6 +390,7 @@ pub fn run() {
                     };
                     let script = r#"
 (async () => {
+ try {
   window.__UI_TEST_DELETE = __SILME__;
   const rapor = [];
   const app = document.querySelector('.app');
@@ -413,6 +414,10 @@ pub fn run() {
   // Tek sütuna geç: kart YATAY olmalı (yazı sağda), sonra iki sütuna dön.
   let tekli = '(kart yok)';
   if (kartlar[0]) {
+    // Test kullanıcının TERCİHİNİ bozmamalı: düğmelere basmak onu kalıcı yazıyor.
+    // Önceki değer saklanıp sonunda geri konuyor (yoksa anahtar siliniyor).
+    const LKEY = 'videosLayout.v2';
+    const onceki = localStorage.getItem(LKEY);
     document.getElementById('videos-layout-1').click(); await bekle(250);
     const k = document.querySelector('#videos-grid .video-item');
     const st = getComputedStyle(k);
@@ -421,6 +426,8 @@ pub fn run() {
     tekli = 'display=' + st.display + ' sutun=' + st.gridTemplateColumns
           + ' yazi_sagda=' + (meta.left > thumb.right - 2);
     document.getElementById('videos-layout-2').click(); await bekle(250);
+    if (onceki === null) localStorage.removeItem(LKEY); else localStorage.setItem(LKEY, onceki);
+    tekli += ' tercih_geri_kondu=' + (onceki === null ? 'silindi' : onceki);
   }
   // Sil düğmesine bas: ONAY diyaloğu açılmalı, silme HEMEN olmamalı.
   let onay = 'test yok';
@@ -449,6 +456,32 @@ pub fn run() {
   const shot = document.querySelectorAll('#gallery-grid .gallery-item').length;
   document.getElementById('settings-btn').click(); await bekle(300);
   kayit('AYARLAR');
+  // ── Ayarlar bölümü incelemesi ──
+  const kartlar2 = [...document.querySelectorAll('.view-settings .card')];
+  const acik = kartlar2.filter(c => c.querySelector('.card-head')?.getAttribute('aria-expanded') === 'true')
+                       .map(c => c.dataset.section);
+  const gorunur = () => [...document.querySelectorAll('.view-settings .set-row')]
+                          .filter(r => r.offsetParent !== null).length;
+  const ilkGorunur = gorunur();
+  // Arama çalışıyor mu?
+  const q = document.getElementById('settings-search');
+  let arama = 'kutu yok';
+  if (q) {
+    q.value = 'mikrofon';
+    q.dispatchEvent(new Event('input', {bubbles:true}));
+    await bekle(350);
+    arama = 'mikrofon -> ' + gorunur() + ' satir';
+    q.value = 'zzzyok';
+    q.dispatchEvent(new Event('input', {bubbles:true}));
+    await bekle(350);
+    arama += ' | eslesmeyen -> ' + gorunur() + ' satir'
+           + ' bos_mesaji=' + (document.querySelector('.view-settings .empty-state, #settings-empty') ? 'var' : 'YOK');
+    q.value = '';
+    q.dispatchEvent(new Event('input', {bubbles:true}));
+    await bekle(300);
+  }
+  const ayarBilgi = 'bolum=' + kartlar2.length + ' acik=[' + acik.join(',') + ']'
+                  + ' gorunur_satir=' + ilkGorunur + ' || ARAMA: ' + arama;
   const mik = [...(document.getElementById('audio-mic-device')?.options || [])].map(o => o.textContent);
   const kal = [...(document.getElementById('video-quality')?.options || [])].map(o => o.textContent);
 
@@ -458,15 +491,21 @@ pub fn run() {
      + ' || TEKLI: ' + tekli
      + ' || SILME: ' + onay
      + ' ekran_goruntusu=' + shot
+     + ' || AYARLAR: ' + ayarBilgi
      + ' || mikrofon=' + JSON.stringify(mik)
      + ' || kalite=' + JSON.stringify(kal));
+ } catch (e) {
+  window.api.sendDebugLog('UI_TEST HATA: ' + (e && e.stack ? e.stack : e));
+ }
 })();
 "#;
                     let script = script.replace("__SILME__", if silme_testi { "true" } else { "false" });
                     if let Err(e) = w.eval(&script) {
                         println!("UI_TEST: script çalıştırılamadı: {e}");
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(2500));
+                    // Betik ayar bölümünü de yokluyor ve içinde beklemeler var; 2,5 sn yetmiyordu
+                    // ve uygulama sonucu YAZMADAN kapanıyordu (çıktı hiç görünmedi).
+                    std::thread::sleep(std::time::Duration::from_millis(8000));
                     h.exit(0);
                 });
             }

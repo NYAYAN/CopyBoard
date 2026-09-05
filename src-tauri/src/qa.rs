@@ -103,10 +103,10 @@ pub fn run(app: tauri::AppHandle) {
             }
 
             // ── 3. Ana pencere göster / gizle ─────────────────────────────────
-            on_main(&app, |h| crate::windows::main_window::show(h));
+            on_main(&app, crate::windows::main_window::show);
             sleep(400);
             check(visible(&app, "main") == Some(true), "ana pencere show() sonrası görünür");
-            on_main(&app, |h| crate::windows::main_window::hide(h));
+            on_main(&app, crate::windows::main_window::hide);
             sleep(300);
             check(visible(&app, "main") == Some(false), "ana pencere hide() sonrası gizli");
 
@@ -121,10 +121,10 @@ pub fn run(app: tauri::AppHandle) {
             check(visible(&app, "widget") == Some(true), "widget hit-test geçişinden sonra hâlâ görünür");
 
             // ── 5. Hızlı yapıştır aç / kapa ───────────────────────────────────
-            on_main(&app, |h| crate::windows::quickpaste::toggle(h));
+            on_main(&app, crate::windows::quickpaste::toggle);
             sleep(600);
             check(visible(&app, "quickpaste") == Some(true), "hızlı yapıştır açıldı");
-            on_main(&app, |h| crate::windows::quickpaste::toggle(h));
+            on_main(&app, crate::windows::quickpaste::toggle);
             sleep(300);
             check(visible(&app, "quickpaste") == Some(false), "hızlı yapıştır kapandı");
 
@@ -146,21 +146,21 @@ pub fn run(app: tauri::AppHandle) {
                     on_main(&app, move |h| crate::commands::viewer::open(h, &id2));
                     sleep(1200);
                     check(visible(&app, "viewer") == Some(true), "görüntüleyici açıldı ve görünür");
-                    on_main(&app, |h| crate::commands::viewer::minimize(h));
+                    on_main(&app, crate::commands::viewer::minimize);
                     sleep(700);
                     let min = app.get_webview_window("viewer").and_then(|w| w.is_minimized().ok());
                     check(min == Some(true), &format!("görüntüleyici küçültüldü (is_minimized={min:?})"));
                     on_main(&app, |h| { if let Some(w) = h.get_webview_window("viewer") { let _ = w.unminimize(); } });
                     sleep(500);
-                    on_main(&app, |h| crate::commands::viewer::toggle_maximize(h));
+                    on_main(&app, crate::commands::viewer::toggle_maximize);
                     sleep(700);
                     let max = app.get_webview_window("viewer").and_then(|w| w.is_maximized().ok());
                     check(max == Some(true), &format!("görüntüleyici büyütüldü (is_maximized={max:?})"));
-                    on_main(&app, |h| crate::commands::viewer::toggle_maximize(h));
+                    on_main(&app, crate::commands::viewer::toggle_maximize);
                     sleep(500);
                     on_main(&app, |h| crate::commands::viewer::nav(h, "next"));
                     sleep(300);
-                    on_main(&app, |h| crate::commands::viewer::close(h));
+                    on_main(&app, crate::commands::viewer::close);
                     sleep(800);
                     check(app.get_webview_window("viewer").is_none(), "görüntüleyici kapandı (pencere yok)");
                 }
@@ -202,9 +202,9 @@ pub fn run(app: tauri::AppHandle) {
                                 check(true, "video kaydı başladı");
                                 // Ekranda hareket üret: ana pencereyi birkaç kez göster/gizle.
                                 for _ in 0..4 {
-                                    on_main(&app, |h| crate::windows::main_window::show(h));
+                                    on_main(&app, crate::windows::main_window::show);
                                     sleep(350);
-                                    on_main(&app, |h| crate::windows::main_window::hide(h));
+                                    on_main(&app, crate::windows::main_window::hide);
                                     sleep(350);
                                 }
                                 match rec.stop() {
@@ -230,9 +230,9 @@ pub fn run(app: tauri::AppHandle) {
                             Err(e) => check(false, &format!("kaydırma akışı başlatılamadı: {e}")),
                             Ok(mut s) => {
                                 for _ in 0..3 {
-                                    on_main(&app, |h| crate::windows::main_window::show(h));
+                                    on_main(&app, crate::windows::main_window::show);
                                     sleep(300);
-                                    on_main(&app, |h| crate::windows::main_window::hide(h));
+                                    on_main(&app, crate::windows::main_window::hide);
                                     sleep(300);
                                 }
                                 s.stop();
@@ -287,9 +287,9 @@ pub fn run(app: tauri::AppHandle) {
                     for _ in 0..30 { sleep(100); if streaming(&app) { restarted = true; break; } }
                     check(restarted, "tekrar Başlat: akış yeniden kuruldu");
                     for _ in 0..3 {
-                        on_main(&app, |h| crate::windows::main_window::show(h));
+                        on_main(&app, crate::windows::main_window::show);
                         sleep(300);
-                        on_main(&app, |h| crate::windows::main_window::hide(h));
+                        on_main(&app, crate::windows::main_window::hide);
                         sleep(300);
                     }
                     let finish2 = r#"document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -347,9 +347,9 @@ pub fn run(app: tauri::AppHandle) {
                             &format!("Kayıt düğmesi: arayüz kayıt durumuna geçti (okunan: {ui:?})"),
                         );
                         for _ in 0..3 {
-                            on_main(&app, |h| crate::windows::main_window::show(h));
+                            on_main(&app, crate::windows::main_window::show);
                             sleep(300);
-                            on_main(&app, |h| crate::windows::main_window::hide(h));
+                            on_main(&app, crate::windows::main_window::hide);
                             sleep(300);
                         }
                         // Kaydetme panelini açmadan durdur: kaydı al, kapat, dosyayı ölç.

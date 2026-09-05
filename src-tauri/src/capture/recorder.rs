@@ -231,8 +231,8 @@ pub fn start(
             // Filtre "izin verilenler" değil "reddedilenler" listesi: `frame_status()`
             // ek bilgi bulamazsa `None` dönüyor ve beyaz liste yaklaşımı o durumda
             // HER kareyi eliyordu (ölçümde sıfır kare yazıldı).
-            if of_type == SCStreamOutputType::Screen {
-                if matches!(
+            if of_type == SCStreamOutputType::Screen
+                && matches!(
                     sample.frame_status(),
                     Some(SCFrameStatus::Idle)
                         | Some(SCFrameStatus::Blank)
@@ -240,7 +240,6 @@ pub fn start(
                 ) {
                     return;
                 }
-            }
             let ptr = sample.as_ptr();
             match of_type {
                 SCStreamOutputType::Screen => {

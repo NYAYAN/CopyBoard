@@ -224,12 +224,11 @@ fn normalize_items(items: &mut Vec<Value>) -> bool {
                 *item = json!({ "id": new_id(), "content": s, "timestamp": now_iso() });
                 changed = true;
             }
-            Value::Object(o) => {
-                if !o.contains_key("id") {
+            Value::Object(o)
+                if !o.contains_key("id") => {
                     o.insert("id".into(), json!(new_id()));
                     changed = true;
                 }
-            }
             _ => {}
         }
     }

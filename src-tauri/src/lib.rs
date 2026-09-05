@@ -375,12 +375,20 @@ pub fn run() {
             #[cfg(debug_assertions)]
             if std::env::args().any(|a| a == "--ui-test" || a == "--ui-test=sil") {
                 let silme_testi = std::env::args().any(|a| a == "--ui-test=sil");
+                windows::main_window::UI_TEST_KEEP_VISIBLE.store(true, std::sync::atomic::Ordering::Relaxed);
                 let h = handle.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(2500));
                     let inner = h.clone();
                     let _ = h.run_on_main_thread(move || {
                         windows::main_window::show(&inner);
+                        // Test boyunca EN ÖNDE ve odaklı: başka bir pencere örterse
+                        // WKWebView belgeyi "hidden" sayıyor ve zamanlayıcıları
+                        // askıya alıyor — betikteki her `await` sonsuza dek bekliyor.
+                        if let Some(w) = inner.get_webview_window(windows::main_window::LABEL) {
+                            let _ = w.set_always_on_top(true);
+                            let _ = w.set_focus();
+                        }
                     });
                     std::thread::sleep(std::time::Duration::from_millis(1500));
                     let Some(w) = h.get_webview_window(windows::main_window::LABEL) else {
@@ -393,14 +401,78 @@ pub fn run() {
  try {
   window.__UI_TEST_DELETE = __SILME__;
   const rapor = [];
+  // Aşama izi: betik bir yerde ölürse en son hangi adıma geldiği görülsün.
+  const t0 = performance.now();
+  const step = (n) => window.api.sendDebugLog('UI_TEST adim: ' + n + ' [+' + Math.round(performance.now() - t0) + 'ms]');
   const app = document.querySelector('.app');
   const vis = (id) => { const e = document.getElementById(id); return e ? getComputedStyle(e).display : 'yok'; };
-  const bekle = (ms) => new Promise(r => setTimeout(r, ms));
+  // Bekleme setTimeout'a DAYANMIYOR. WKWebView, belge "hidden" sayıldığında (pencere
+  // örtülü ya da odaksız) zamanlayıcıları kısıyor/askıya alıyor ve betik bir
+  // `await`te sonsuza dek kalıyordu — ölçüldü: visibility=hidden iken sil düğmesinden
+  // sonraki bekleme hiç dönmedi. MessageChannel mesajları bu kısıtlamaya girmiyor;
+  // saat performance.now() ile tutuluyor.
+  const tick = () => new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0); });
+  const bekle = async (ms) => { const t = performance.now() + ms; while (performance.now() < t) await tick(); };
   const kayit = (ad) => rapor.push(ad + ': view=' + app.dataset.view
       + ' galeri=' + vis('gallery-panel') + ' video=' + vis('videos-panel'));
 
-  kayit('baslangic');
+  kayit('baslangic'); step('baslangic | visibility=' + document.visibilityState + ' hasFocus=' + document.hasFocus());
+
+  // ── Pano geçmişi (asıl özellik) ──
+  // Test başlamadan önce kabuk `pbcopy` ile benzersiz bir metin koyuyor; açılışta
+  // izleyici onu yakalayıp listeye eklemeli.
+  const marker = 'CB_UITEST_' + (window.__UI_TEST_MARKER || '');
+  const rows = () => [...document.querySelectorAll('#history-list .row')];
+  const satirBasi = rows().length;
+  const markerVar = rows().some(r => r.textContent.includes(marker));
+  // Arama: yalnız işaretli satır kalmalı
+  const hq = document.getElementById('search-input');
+  hq.value = marker; hq.dispatchEvent(new Event('input', {bubbles:true})); await bekle(300);
+  const aramaSonuc = rows().length;
+  hq.value = 'ZZZ_olmayan_' + Date.now(); hq.dispatchEvent(new Event('input', {bubbles:true})); await bekle(300);
+  const bosArama = rows().length + '/' + (document.querySelector('#history-list .empty') ? 'bos-mesaji-var' : 'bos-mesaji-YOK');
+  hq.value = ''; hq.dispatchEvent(new Event('input', {bubbles:true})); await bekle(300);
+  // Favoriler: sekmeye geç, sayıyı al, ilk kaydı favorile, tekrar say
+  const favTab = document.querySelector('[data-tab="favorites"]');
+  const allTab = document.querySelector('[data-tab="all"]');
+  favTab.click(); await bekle(300);
+  const favOnce = rows().length;
+  allTab.click(); await bekle(200);
+  const ilk = rows()[0];
+  let favSonra = 'satir yok';
+  if (ilk) {
+    const yildiz = ilk.querySelector('.action-btn.star');
+    if (yildiz) { yildiz.click(); await bekle(400); }
+    favTab.click(); await bekle(300);
+    favSonra = rows().length + (yildiz ? '' : ' (yildiz dugmesi bulunamadi)');
+    allTab.click(); await bekle(200);
+  }
+  step('gecmis-arama-favori tamam');
+  // Tema: değiştir, DOM'a yansıdı mı bak, geri al.
+  // Kullanıcının AYARI (select) okunup geri yazılıyor, çözümlenmiş data-theme değil:
+  // ayar "sistem"ken data-theme "dark" görünür ve geri yazmak ayarı "koyu"ya çevirirdi.
+  const html = document.documentElement;
+  const temaSel = document.getElementById('theme-select');
+  const ayarOnce = temaSel ? temaSel.value : 'system';
+  const domOnce = html.dataset.theme || '';
+  window.api.setTheme(domOnce === 'light' ? 'dark' : 'light'); await bekle(400);
+  const domSonra = html.dataset.theme || '';
+  window.api.setTheme(ayarOnce); await bekle(300);
+  if (temaSel) temaSel.value = ayarOnce;
+  const tema = domOnce + '->' + domSonra + (domOnce !== domSonra ? ' (degisti)' : ' (DEGISMEDI)') + ' ayar=' + ayarOnce;
+  step('tema tamam');
+  // NOT: burada bir satırı KOPYALAMA. `copy_item` ana pencereyi gizliyor ve
+  // WKWebView gizli penceredeki JS zamanlayıcılarını askıya alıyor — sonraki her
+  // `await bekle()` sonsuza dek bekliyor ve betik sessizce ölüyor. Bulundu:
+  // aşama izi "kopya tamam"da durup rapor hiç gelmiyordu. Toast Rust tarafından
+  // doğrudan tetiklenip doğrulanıyor.
+  const gecmis = 'satir=' + satirBasi + ' marker_yakalandi=' + markerVar
+               + ' arama=' + aramaSonuc + ' bos_arama=' + bosArama
+               + ' favori=' + favOnce + '->' + favSonra + ' tema=' + tema;
+
+  step('video sekmesine basiliyor');
   document.getElementById('videos-btn').click();  await bekle(400);
+  step('video sekmesi acildi');
   kayit('VIDEO');
   const kart = document.querySelectorAll('#videos-grid .video-item').length;
   const bos  = document.querySelector('#videos-grid .empty-state') ? 'evet' : 'hayir';
@@ -412,11 +484,15 @@ pub fn run() {
   const arac   = ['videos-layout-1','videos-layout-2','videos-play-btn','videos-folder-btn']
                   .filter(id => document.getElementById(id)).length;
   // Tek sütuna geç: kart YATAY olmalı (yazı sağda), sonra iki sütuna dön.
+  step('video olcumler alindi');
   let tekli = '(kart yok)';
   if (kartlar[0]) {
     // Test kullanıcının TERCİHİNİ bozmamalı: düğmelere basmak onu kalıcı yazıyor.
     // Önceki değer saklanıp sonunda geri konuyor (yoksa anahtar siliniyor).
     const LKEY = 'videosLayout.v2';
+    // Önceki test sürümleri düğmelere basıp tercihi "2" olarak kalıcılaştırmıştı;
+    // bayrak verilmişse o kirliliği temizle (anahtar silinir, varsayılan geri gelir).
+    if (window.__UI_TEST_RESET_LAYOUT) localStorage.removeItem(LKEY);
     const onceki = localStorage.getItem(LKEY);
     document.getElementById('videos-layout-1').click(); await bekle(250);
     const k = document.querySelector('#videos-grid .video-item');
@@ -425,16 +501,23 @@ pub fn run() {
     const meta  = k.querySelector('.video-meta').getBoundingClientRect();
     tekli = 'display=' + st.display + ' sutun=' + st.gridTemplateColumns
           + ' yazi_sagda=' + (meta.left > thumb.right - 2);
+    step('tek sutun olculdu');
     document.getElementById('videos-layout-2').click(); await bekle(250);
     if (onceki === null) localStorage.removeItem(LKEY); else localStorage.setItem(LKEY, onceki);
+    step('duzen geri kondu');
     tekli += ' tercih_geri_kondu=' + (onceki === null ? 'silindi' : onceki);
   }
   // Sil düğmesine bas: ONAY diyaloğu açılmalı, silme HEMEN olmamalı.
   let onay = 'test yok';
   if (kartlar[0]) {
     const before = kartlar.length;
+    step('sil tiklanacak | visibility=' + document.visibilityState + ' hidden=' + document.hidden
+         + ' hasFocus=' + document.hasFocus());
     kartlar[0].querySelector('[data-act="delete"]').click();
+    step('sil tiklandi | visibility=' + document.visibilityState + ' modalAcik='
+         + (document.getElementById('confirm-modal') && !document.getElementById('confirm-modal').classList.contains('hidden')));
     await bekle(300);
+    step('sil sonrasi bekleme bitti');
     const modal = document.getElementById('confirm-modal');
     const acik = modal && !modal.classList.contains('hidden');
     const kalan = document.querySelectorAll('#videos-grid .video-item').length;
@@ -451,11 +534,14 @@ pub fn run() {
       onay += ' (iptal edildi)';
     }
   }
+  step('video blogu tamam');
   document.getElementById('gallery-btn').click(); await bekle(300);
   kayit('RESIM');
   const shot = document.querySelectorAll('#gallery-grid .gallery-item').length;
+  step('resim tamam');
   document.getElementById('settings-btn').click(); await bekle(300);
   kayit('AYARLAR');
+  step('ayarlar acildi');
   // ── Ayarlar bölümü incelemesi ──
   const kartlar2 = [...document.querySelectorAll('.view-settings .card')];
   const acik = kartlar2.filter(c => c.querySelector('.card-head')?.getAttribute('aria-expanded') === 'true')
@@ -475,7 +561,7 @@ pub fn run() {
     q.dispatchEvent(new Event('input', {bubbles:true}));
     await bekle(350);
     arama += ' | eslesmeyen -> ' + gorunur() + ' satir'
-           + ' bos_mesaji=' + (document.querySelector('.view-settings .empty-state, #settings-empty') ? 'var' : 'YOK');
+           + ' bos_mesaji=' + ((() => { const e = document.getElementById('settings-no-match'); return e && !e.hidden ? 'var' : 'YOK'; })());
     q.value = '';
     q.dispatchEvent(new Event('input', {bubbles:true}));
     await bekle(300);
@@ -490,6 +576,7 @@ pub fn run() {
   const kal = [...(document.getElementById('video-quality')?.options || [])].map(o => o.textContent);
 
   window.api.sendDebugLog('UI_TEST ' + rapor.join(' | ')
+     + ' || GECMIS: ' + gecmis
      + ' || video_kart=' + kart + ' bos_durum=' + bos + ' dugmeler=' + dugme
      + ' izgara=' + izgara + ' kart_yon=' + dikey + ' arac_dugme=' + arac
      + ' || TEKLI: ' + tekli
@@ -503,13 +590,48 @@ pub fn run() {
  }
 })();
 "#;
-                    let script = script.replace("__SILME__", if silme_testi { "true" } else { "false" });
+                    // Pencere envanteri: hızlı yapıştır ve toast önceden kurulmuş olmalı,
+                    // widget ayarına göre var/yok, ana pencere görünür.
+                    let mut env: Vec<String> = Vec::new();
+                    for label in ["main", "quickpaste", "widget", "toast", "viewer", "update"] {
+                        env.push(match h.get_webview_window(label) {
+                            Some(w) => format!("{label}={}", if w.is_visible().unwrap_or(false) { "gorunur" } else { "gizli" }),
+                            None => format!("{label}=YOK"),
+                        });
+                    }
+                    println!("UI_TEST pencereler: {}", env.join(" "));
+                    let marker = std::env::var("COPYBOARD_UI_MARKER").unwrap_or_default();
+                    let script = script
+                        .replace("__SILME__", if silme_testi { "true" } else { "false" })
+                        .replace("window.__UI_TEST_RESET_LAYOUT", if std::env::var("COPYBOARD_RESET_LAYOUT").is_ok() { "true" } else { "false" })
+                        .replace("window.__UI_TEST_MARKER || ''", &format!("'{}'", marker.replace('\'', "")));
                     if let Err(e) = w.eval(&script) {
                         println!("UI_TEST: script çalıştırılamadı: {e}");
                     }
                     // Betik ayar bölümünü de yokluyor ve içinde beklemeler var; 2,5 sn yetmiyordu
                     // ve uygulama sonucu YAZMADAN kapanıyordu (çıktı hiç görünmedi).
-                    std::thread::sleep(std::time::Duration::from_millis(8000));
+                    // Betik büyüdü (geçmiş, tema, ayarlar, silme): 8 sn de yetmez oldu.
+                    std::thread::sleep(std::time::Duration::from_millis(40000));
+
+                    // Toast: doğrudan tetikle. Kopyalama bilerek toast GÖSTERMİYOR (satır
+                    // yanıp sönüyor, pencere gizleniyor), o yüzden oradan test edilemez.
+                    let inner = h.clone();
+                    let _ = h.run_on_main_thread(move || windows::toast::show(&inner, "UI test", "info"));
+                    std::thread::sleep(std::time::Duration::from_millis(900));
+                    let toast = match h.get_webview_window("toast") {
+                        Some(w) => if w.is_visible().unwrap_or(false) { "gorunur" } else { "kuruldu-gizli" },
+                        None => "YOK",
+                    };
+                    // Hızlı yapıştır: göster, görünür mü bak, gizle.
+                    let inner = h.clone();
+                    let _ = h.run_on_main_thread(move || windows::quickpaste::show(&inner));
+                    std::thread::sleep(std::time::Duration::from_millis(600));
+                    let qp = h.get_webview_window("quickpaste")
+                        .map(|w| if w.is_visible().unwrap_or(false) { "gorunur" } else { "GIZLI" })
+                        .unwrap_or("YOK");
+                    let inner = h.clone();
+                    let _ = h.run_on_main_thread(move || windows::quickpaste::hide(&inner));
+                    println!("UI_TEST pencere-davranis: toast={toast} hizli_yapistir_show={qp}");
                     h.exit(0);
                 });
             }

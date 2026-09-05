@@ -85,6 +85,14 @@ fn wire_focus_events(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
         if !rt.main_was_focused {
             return; // pencere hiç aktif olmadı — bu blur bir kapanma sebebi değil
         }
+        // Arayüz testi çalışırken blur'da GİZLENME. Test arka plandan başlatılıyor,
+        // uygulama ön planda değil ve ilk odak olayı pencereyi gizliyordu; WKWebView de
+        // gizli belgede zamanlayıcıları askıya aldığı için betik sessizce ölüyordu.
+        // Yalnız hata ayıklama derlemesinde ve yalnız bayrakla — üretim davranışı aynı.
+        #[cfg(debug_assertions)]
+        if UI_TEST_KEEP_VISIBLE.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         rt.main_hidden_at = Some(Instant::now());
         drop(rt);
 
@@ -163,6 +171,11 @@ pub fn toggle(app: &tauri::AppHandle) {
     }
     show(app);
 }
+
+/// `--ui-test` sırasında blur-gizlemeyi kapatır (bkz. odak işleyicisi).
+#[cfg(debug_assertions)]
+pub static UI_TEST_KEEP_VISIBLE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 pub fn hide(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window(LABEL) {

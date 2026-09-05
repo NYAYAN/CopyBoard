@@ -106,7 +106,7 @@ pub fn start(
     crop_w: f64,
     crop_h: f64,
     fps: u32,
-    exclude_window_title: Option<&str>,
+    exclude_window_ids: &[u32],
     channel: Channel<InvokeResponseBody>,
 ) -> Result<ScrollStream, String> {
     let content = SCShareableContent::get().map_err(|e| e.to_string())?;
@@ -126,14 +126,15 @@ pub fn start(
 
     // Overlay'imiz akışa GİRMEMELİ: seçim çerçevesi, araç çubuğu ve HUD birleştirilen
     // sayfaya film olurdu. Pencere `content_protected` ile de korunuyor; bu ikinci hat.
-    let excluded: Vec<_> = match exclude_window_title {
-        Some(title) => content
-            .windows()
-            .into_iter()
-            .filter(|w| w.title().map(|t| t.contains(title)).unwrap_or(false))
-            .collect(),
-        None => Vec::new(),
-    };
+    //
+    // Ayıklama KİMLİKLE, başlıkla değil (bkz. `capture::overlay_window_ids`):
+    // uygulamanın her penceresinin başlığı "CopyBoard" olduğu için başlığa bakan
+    // filtre CopyBoard'un KENDİ arayüzünü de akıştan siliyordu.
+    let excluded: Vec<_> = content
+        .windows()
+        .into_iter()
+        .filter(|w| exclude_window_ids.contains(&w.window_id()))
+        .collect();
 
     let filter = SCContentFilter::create()
         .with_display(display)

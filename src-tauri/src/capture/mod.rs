@@ -481,6 +481,25 @@ pub fn close_all(app: &tauri::AppHandle, keep: Option<&str>) {
     finish(app);
 }
 
+/// AÇIK yakalama overlay'lerinin ekran-yakalama kimlikleri.
+///
+/// Video kaydı ve kaydırmalı yakalama filtresinden YALNIZ bunlar çıkarılıyor:
+/// karartma, seçim çerçevesi, HUD ve araç çubuğu sonuca film olmasın.
+///
+/// Önceden ayıklama başlığa bakıyordu ("CopyBoard" geçen her pencere). Uygulamanın
+/// HER penceresinin başlığı bu (`windows::build`), yani filtre overlay'i değil
+/// uygulamanın tamamını siliyordu: kullanıcı CopyBoard'un kendi geçmiş listesini,
+/// galerisini ya da ayarlar panelini ne kaydedebiliyor ne de kaydırmalı
+/// yakalayabiliyordu. Kimlik başlıktan hem daha dar hem daha kesin — kullanıcının
+/// başlığında "CopyBoard" geçen kendi penceresi de artık akışa giriyor.
+pub fn overlay_window_ids(app: &tauri::AppHandle) -> Vec<u32> {
+    app.webview_windows()
+        .iter()
+        .filter(|(label, _)| label.starts_with(crate::windows::capture::PREFIX))
+        .filter_map(|(_, w)| crate::platform::capture_window_id(w))
+        .collect()
+}
+
 /// Bir pencere HARİÇ diğer overlay'leri kapatır — video/kaydırma tek monitörde
 /// sürerken diğerlerinin gitmesi gerekiyor. Oturumu BİTİRMEZ.
 pub fn close_all_except(app: &tauri::AppHandle, keep: &str) {

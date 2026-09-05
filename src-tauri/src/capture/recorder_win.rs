@@ -246,6 +246,10 @@ pub fn start(
     // Parametre burada durmasaydı Windows derlemesi kırılırdı (kırıldı da —
     // macOS tarafına eklenip burası unutulmuştu).
     _mic_device: &str,
+    // Aynı imza uyumu: macOS'ta yakalama overlay'leri ScreenCaptureKit filtresinden
+    // CGWindowID ile çıkarılıyor. Windows'ta overlay `WDA_EXCLUDEFROMCAPTURE` ile
+    // zaten karelere hiç girmiyor, bu yüzden liste UYGULANMIYOR.
+    _exclude_window_ids: &[u32],
     window_label: String,
     out_path: PathBuf,
 ) -> Result<Recording, String> {

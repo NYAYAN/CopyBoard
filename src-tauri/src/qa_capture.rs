@@ -245,7 +245,11 @@ fn card_js(kind: &str, band: f64) -> String {
     // hangi satırın yeni olduğunu ayırt edemez (128 sütuna indirgeyip karşılaştırıyor).
     const list = document.createElement('div');
     list.id = 'qa-scroll';
-    list.style.cssText = 'position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;background:#ffffff';
+    // Sol ve sağ kenarda KOYU şerit: kırpmanın en dış sütunları buraya düşüyor.
+    // Overlay'in beyaz seçim çerçevesi akışa sızarsa o sütunlar beyaz çıkar —
+    // sızıntının tek gözle görülür izi bu, çünkü karartma seçimin İÇİNDE zaten
+    // temizleniyor (`drawOverlay`: destination-out).
+    list.style.cssText = 'position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;background:#ffffff;border-left:14px solid #0d0d0d;border-right:14px solid #0d0d0d;box-sizing:border-box';
     let html = '';
     for (let i = 0; i < 400; i++) {
       const wpc = 12 + ((i * 37) % 83);
@@ -282,60 +286,6 @@ fn card_js(kind: &str, band: f64) -> String {
         .replace("__C_TR__", C_TR)
         .replace("__C_BL__", C_BL)
         .replace("__C_BR__", C_BR)
-}
-
-/// Kaydırma sınaması için AYRI bir pencere.
-///
-/// Neden ana pencere kullanılamıyor: `scroll_begin`, akıştan başlığında "CopyBoard"
-/// geçen TÜM pencereleri dışlıyor (`record.rs`, `Some("CopyBoard")`) ve uygulamanın
-/// her penceresinin başlığı "CopyBoard" — yani CopyBoard kendi arayüzünü kaydırmalı
-/// olarak yakalayamıyor. Bu bilinçli bir ürün kararı (overlay'in kendisi filme
-/// girmesin), ama sınama kartını da görünmez yapıyor.
-///
-/// Bu yüzden hedef, başlığı FARKLI olan gerçek bir pencere: ekranda gerçekten
-/// duruyor, gerçek WKWebView boyuyor ve akışa gerçek ScreenCaptureKit üzerinden
-/// giriyor. Kullanıcının senaryosundan tek farkı pencerenin sahibi.
-fn open_scroll_target(app: &tauri::AppHandle, m: &MonitorInfo) -> Option<Card> {
-    let w = 600.0_f64.min(m.work_width - 80.0);
-    let h = 600.0_f64.min(m.work_height - 80.0);
-    let gx = m.work_x + 40.0;
-    let gy = m.work_y + 40.0;
-    let band = (h * 0.2).round();
-
-    let built = on_main(app, move |h2| {
-        // Var olmayan bir varlık yolu: boş bir belge açılıyor ve içerik `eval` ile
-        // basılıyor. Böylece ne ürüne bir sayfa ekleniyor ne de sınama uygulamanın
-        // kendi scriptlerinden birini çalıştırıyor (`data:` URL'i Tauri'nin
-        // `webview-data-url` özelliğini gerektiriyordu — sürüm derlemesini sınama
-        // uğruna genişletmemek için o yol seçilmedi).
-        tauri::WebviewWindowBuilder::new(h2, "qa-scroll-target", tauri::WebviewUrl::App("qa-blank.html".into()))
-            .title("Kaydirma Sinama Penceresi")
-            .inner_size(w, h)
-            .position(gx, gy)
-            .decorations(false)
-            .resizable(false)
-            .skip_taskbar(true)
-            .always_on_top(true)
-            .visible(true)
-            .build()
-            .map_err(|e| log::error!("QAC kaydırma hedefi kurulamadı: {e}"))
-            .ok()
-            .map(|_| ())
-    })?;
-    built?;
-    sleep(700);
-    eval(app, "qa-scroll-target", card_js("scroll", band));
-    sleep(700);
-    Some(Card { x: gx - m.x, y: gy - m.y, w, h, band })
-}
-
-fn close_scroll_target(app: &tauri::AppHandle) {
-    on_main(app, |h| {
-        if let Some(w) = h.get_webview_window("qa-scroll-target") {
-            let _ = w.close();
-        }
-    });
-    sleep(300);
 }
 
 fn remove_card(app: &tauri::AppHandle) {
@@ -537,6 +487,20 @@ fn sample(img: &Img, rx: f64, ry: f64) -> (f64, f64, f64) {
         return (0.0, 0.0, 0.0);
     }
     (r as f64 / n as f64, g as f64 / n as f64, b as f64 / n as f64)
+}
+
+/// Bir sütunun ortalama parlaklığı.
+fn column_mean(img: &Img, x: usize) -> f64 {
+    let mut sum = 0f64;
+    let mut n = 0f64;
+    for y in 0..img.h {
+        let i = (y * img.w + x) * 4;
+        if i + 2 < img.rgba.len() {
+            sum += (img.rgba[i] as f64 + img.rgba[i + 1] as f64 + img.rgba[i + 2] as f64) / 3.0;
+            n += 1.0;
+        }
+    }
+    if n == 0.0 { 0.0 } else { sum / n }
 }
 
 fn hex_of(c: (f64, f64, f64)) -> String {
@@ -830,17 +794,26 @@ fn flow_ocr(app: &tauri::AppHandle, m: &MonitorInfo) {
 /// 4. Kaydırmalı yakalama: GERÇEKTEN kayan bir liste üzerinde birleştirme.
 fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
     note("— kaydırmalı yakalama —");
-    let Some(card) = open_scroll_target(app, m) else {
-        check(false, "kaydırma sınama penceresi açılamadı");
+    // Hedef artık CopyBoard'un KENDİ ana penceresi. Eskiden mümkün değildi:
+    // `scroll_begin` başlığında "CopyBoard" geçen her pencereyi akıştan siliyordu
+    // ve uygulamanın her penceresinin başlığı buydu. Bu koşunun 0 satır vermesi
+    // düzeltmenin geri alındığı anlamına gelir.
+    let Some(card) = install_card(app, m, "scroll") else {
+        check(false, "sınama kartı yerleştirilemedi");
         return;
     };
 
     let before = gallery_ids(app);
     on_main(app, |h| crate::capture::start(h, "scroll"));
     if !check(wait_overlay(app, "capture-0"), "kaydırma overlay'i açıldı") {
-        close_scroll_target(app);
+        remove_card(app);
         return;
     }
+
+    // Kartı overlay'in ALTINA indir. Üstte kalsaydı overlay'in karartması ve
+    // beyaz seçim çerçevesi kartın ARKASINDA kalırdı ve sızıntı ölçümü hiçbir şey
+    // kanıtlamazdı — ölçtüğü şey katman sırası olurdu.
+    lower_main(app);
 
     let (qx, qy, qw, qh) = card.quads_rect(6.0);
     eval(app, "capture-0", drag_js(qx, qy, qx + qw, qy + qh, 24));
@@ -868,7 +841,7 @@ fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
     for _ in 0..26 {
         eval(
             app,
-            "qa-scroll-target",
+            crate::windows::main_window::LABEL,
             "(function(){const e=document.getElementById('qa-scroll'); if(e) e.scrollTop += 44;})();".to_string(),
         );
         sleep(220);
@@ -939,6 +912,16 @@ fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
                 (img.h as f64 - stitched_h).abs() <= 4.0,
                 "panoya yazılan görüntü önizlemedeki boyutta",
             );
+            // Sızıntı ölçümü: kırpmanın en dış sütunları kartın KOYU şeridine
+            // düşüyor. Overlay'in 2 px beyaz seçim çerçevesi akışa girseydi burası
+            // beyaz olurdu.
+            let left = column_mean(&img, 0);
+            let right = column_mean(&img, img.w.saturating_sub(1));
+            note(&format!("kenar sütunları: sol={left:.0} sağ={right:.0} (koyu şerit ≈13)"));
+            check(
+                left < 90.0 && right < 90.0,
+                "overlay'in seçim çerçevesi birleştirilen görüntüye SIZMADI",
+            );
         }
         None => {
             check(false, "Kopyala sonrası panoda birleşik görüntü yok");
@@ -961,7 +944,7 @@ fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
         !app.state::<AppState>().runtime.lock().unwrap().is_capturing,
         "kaydırma sonrası oturum bayrağı düştü",
     );
-    close_scroll_target(app);
+    remove_card(app);
 }
 
 /// Ana pencereyi overlay'in ALTINA indirir.

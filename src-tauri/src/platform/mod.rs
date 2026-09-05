@@ -61,6 +61,27 @@ pub fn join_all_spaces(window: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Pencerenin EKRAN YAKALAMA kimliği (macOS'ta CGWindowID). Yalnız macOS'ta
+/// anlamlı; başka platformda `None` — Windows'ta overlay `WDA_EXCLUDEFROMCAPTURE`
+/// ile zaten karelere hiç girmiyor.
+pub fn capture_window_id(window: &tauri::WebviewWindow) -> Option<u32> {
+    #[cfg(target_os = "macos")]
+    {
+        match macos::window_id(window) {
+            Ok(id) => Some(id),
+            Err(e) => {
+                log::warn!("{}: CGWindowID okunamadı: {e}", window.label());
+                None
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        None
+    }
+}
+
 /// Pencereyi diğer (aynı seviyedeki) pencerelerin ÖNÜNE getirir.
 ///
 /// Electron her `setAlwaysOnTop(…, 'screen-saver', 1)` çağrısının ardından `moveTop()`

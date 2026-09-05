@@ -194,7 +194,8 @@ pub fn run(app: tauri::AppHandle) {
                         // Ses de açık: mikrofon + sistem sesi (WASAPI). Aygıt yoksa kayıt
                         // sessiz sürer ve log'a "ses açılamadı" düşer; adım yine geçer.
                         let started = crate::capture::recorder::start(
-                            &m, 100.0, 100.0, 640.0, 360.0, "high", true, true, "", "qa".into(), path.clone(),
+                            // Overlay açık değil; dışlanacak pencere yok.
+                            &m, 100.0, 100.0, 640.0, 360.0, "high", true, true, "", &[], "qa".into(), path.clone(),
                         );
                         match started {
                             Err(e) => check(false, &format!("video kaydı başlatılamadı: {e}")),
@@ -226,7 +227,7 @@ pub fn run(app: tauri::AppHandle) {
                             }
                             Ok(())
                         });
-                        match crate::capture::scroll_stream::start(&m, 100.0, 100.0, 400.0, 300.0, 15, Some("CopyBoard"), channel) {
+                        match crate::capture::scroll_stream::start(&m, 100.0, 100.0, 400.0, 300.0, 15, &[], channel) {
                             Err(e) => check(false, &format!("kaydırma akışı başlatılamadı: {e}")),
                             Ok(mut s) => {
                                 for _ in 0..3 {

@@ -160,7 +160,14 @@ pub fn start(
         .with_pixel_format(PixelFormat::YCbCr_420v)
         .with_fps(fps)
         .with_shows_cursor(true)
-        .with_captures_audio(capture_system_audio)
+        // ── Mikrofon, sistem sesi AÇIK değilken kilitleniyor ─────────────────
+        // `capturesMicrophone = true` ama `capturesAudio = false` olduğunda
+        // `start_capture()` tamamlanma geri çağrısını sonsuza dek bekliyor: yığın
+        // `SyncCompletion::wait → pthread_cond_wait`ta duruyor, izin diyaloğu da
+        // çıkmıyor. Kullanıcı için bu, "kaydı başlattım, hiçbir şey olmuyor" demek.
+        // Ses yakalama mikrofon için de açılıyor; sistem sesi İSTENMEDİYSE yalnız
+        // işleyicisi kaydedilmiyor, yani dosyaya girmiyor.
+        .with_captures_audio(capture_system_audio || capture_mic)
         .with_captures_microphone(capture_mic)
         // Kendi seslerimizi (toast vb.) kaydetme.
         .with_excludes_current_process_audio(true)
@@ -178,7 +185,8 @@ pub fn start(
         out_h,
         fps,
         bitrate,
-        capture_system_audio || capture_mic,
+        capture_system_audio,
+        capture_mic,
     )?);
 
     // ── Akış çıktısı ─────────────────────────────────────────────────────────
@@ -236,9 +244,8 @@ pub fn start(
                     unsafe { self.0.append_video(pb.as_ptr(), pts) };
                     drop(pb);
                 }
-                SCStreamOutputType::Audio | SCStreamOutputType::Microphone => {
-                    unsafe { self.0.append_audio(ptr) };
-                }
+                SCStreamOutputType::Audio => unsafe { self.0.append_audio(ptr, false) },
+                SCStreamOutputType::Microphone => unsafe { self.0.append_audio(ptr, true) },
             }
         }
     }

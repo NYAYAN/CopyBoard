@@ -171,12 +171,22 @@ pub struct AssetWriter {
     /// piksel tamponunu ve zaman damgasını alıyor — Apple'ın ekran kaydı için
     /// belgelediği yol da bu.
     adaptor: Mutex<Retained<AVAssetWriterInputPixelBufferAdaptor>>,
+    /// Sistem sesi izi.
     audio: Option<Mutex<Retained<AVAssetWriterInput>>>,
+    /// Mikrofon izi — AYRI.
+    ///
+    /// İkisini tek girdiye yazmak denendi ve kaydı komple bozdu: kaynakların biçimi
+    /// farklı, ekleme -12737 ile reddediliyor ve 1436 ses örneği düşerken video da
+    /// 1 karede kalıyordu. Karıştırmak (mixdown) zamanlama hizalaması ister; ayrı iz
+    /// hem doğru hem kayıpsız — QuickTime ikisini birlikte çalıyor.
+    mic: Option<Mutex<Retained<AVAssetWriterInput>>>,
     /// `startSessionAtSourceTime` ilk GÖRÜNTÜ karesiyle çağrılıyor; ondan önce gelen
     /// ses örnekleri atılmalı, yoksa yazıcı hata veriyor.
     session_started: AtomicBool,
     video_frames: AtomicU64,
     dropped: AtomicU64,
+    audio_samples: AtomicU64,
+    audio_dropped: AtomicU64,
 }
 
 // SAFETY: AVAssetWriter ve AVAssetWriterInput, Apple tarafından farklı input'lara
@@ -196,6 +206,7 @@ impl AssetWriter {
         fps: u32,
         bitrate: u32,
         with_audio: bool,
+        with_mic: bool,
     ) -> Result<Self, String> {
         unsafe {
             let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
@@ -309,7 +320,7 @@ impl AssetWriter {
             // Anahtarlar elle yazılıyor çünkü `objc2-av-foundation` bunları statik
             // olarak dışa açmıyor. AVFoundation'da bu sabitlerin DEĞERİ adlarıyla
             // birebir aynı ("AVFormatIDKey" == @"AVFormatIDKey"), o yüzden güvenli.
-            let audio = if with_audio {
+            let make_audio_input = |name: &str| -> Result<Option<Mutex<Retained<AVAssetWriterInput>>>, String> {
                 let media_audio = AVMediaTypeAudio.ok_or("AVMediaTypeAudio yok")?;
                 // kAudioFormatMPEG4AAC — CoreAudioTypes'ta 'aac ' dört harfli kodu.
                 const K_AUDIO_FORMAT_MPEG4_AAC: u32 = 0x6161_6320;
@@ -340,33 +351,37 @@ impl AssetWriter {
                 input.setExpectsMediaDataInRealTime(true);
                 if writer.canAddInput(&input) {
                     writer.addInput(&input);
-                    Some(Mutex::new(input))
+                    Ok(Some(Mutex::new(input)))
                 } else {
-                    log::warn!("ses girdisi eklenemedi — kayıt sessiz devam ediyor");
-                    None
+                    log::warn!("{name} ses girdisi eklenemedi — o kaynak sessiz kalacak");
+                    Ok(None)
                 }
-            } else {
-                None
             };
+            let audio = if with_audio { make_audio_input("sistem")? } else { None };
+            let mic = if with_mic { make_audio_input("mikrofon")? } else { None };
 
             if !writer.startWriting() {
                 return Err(format!("yazma başlatılamadı: {:?}", writer.error()));
             }
 
             log::info!(
-                "AVAssetWriter: {width}x{height} @{fps}fps, {:.1} Mbps, ses={}",
+                "AVAssetWriter: {width}x{height} @{fps}fps, {:.1} Mbps, sistem sesi={}, mikrofon={}",
                 f64::from(bitrate) / 1e6,
-                audio.is_some()
+                audio.is_some(),
+                mic.is_some()
             );
 
             Ok(Self {
                 writer,
                 video: Mutex::new(video),
                 adaptor: Mutex::new(adaptor),
+                mic,
                 audio,
                 session_started: AtomicBool::new(false),
                 video_frames: AtomicU64::new(0),
                 dropped: AtomicU64::new(0),
+                audio_samples: AtomicU64::new(0),
+                audio_dropped: AtomicU64::new(0),
             })
         }
     }
@@ -461,15 +476,30 @@ impl AssetWriter {
     ///
     /// # Safety
     /// `ptr` geçerli bir `CMSampleBufferRef` olmalı.
-    pub unsafe fn append_audio(&self, ptr: *mut std::ffi::c_void) {
+    pub unsafe fn append_audio(&self, ptr: *mut std::ffi::c_void, from_mic: bool) {
         if !self.session_started.load(Ordering::Acquire) {
             return; // ilk görüntü karesi henüz gelmedi
         }
-        let Some(audio) = &self.audio else { return };
+        let Some(audio) = (if from_mic { &self.mic } else { &self.audio }) else { return };
         let Some(sample) = (unsafe { Self::as_sample(ptr) }) else { return };
         let input = audio.lock().unwrap();
-        if input.isReadyForMoreMediaData() {
-            let _ = unsafe { input.appendSampleBuffer(sample) };
+        if !input.isReadyForMoreMediaData() {
+            self.audio_dropped.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        if unsafe { input.appendSampleBuffer(sample) } {
+            self.audio_samples.fetch_add(1, Ordering::Relaxed);
+        } else {
+            // İlk ses hatası sessiz kalmasın: biçim uyuşmazlığı tüm sesi düşürür.
+            if self.audio_dropped.fetch_add(1, Ordering::Relaxed) == 0 {
+                let err = unsafe { self.writer.error() };
+                let reason = err
+                    .as_ref()
+                    .and_then(|e| e.localizedFailureReason())
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
+                log::warn!("ilk ses örneği eklenemedi — sebep: {reason}");
+            }
         }
     }
 
@@ -483,7 +513,7 @@ impl AssetWriter {
             }
 
             self.video.lock().unwrap().markAsFinished();
-            if let Some(a) = &self.audio {
+            for a in [&self.audio, &self.mic].into_iter().flatten() {
                 a.lock().unwrap().markAsFinished();
             }
 
@@ -498,10 +528,14 @@ impl AssetWriter {
 
             let frames = self.video_frames.load(Ordering::Relaxed);
             let dropped = self.dropped.load(Ordering::Relaxed);
-            if dropped > 0 {
-                log::warn!("{frames} kare yazıldı, {dropped} kare düşürüldü (kodlayıcı geride kaldı)");
+            let a_ok = self.audio_samples.load(Ordering::Relaxed);
+            let a_drop = self.audio_dropped.load(Ordering::Relaxed);
+            if dropped > 0 || a_drop > 0 {
+                log::warn!(
+                    "{frames} kare yazıldı ({dropped} düşürüldü), {a_ok} ses örneği ({a_drop} düşürüldü)"
+                );
             } else {
-                log::info!("{frames} kare yazıldı");
+                log::info!("{frames} kare yazıldı, {a_ok} ses örneği");
             }
 
             if waited.is_err() {

@@ -340,5 +340,6 @@
   "\"{shortcut}\" kısayolu sistemin Kopyala/Yapıştır tuşlarıyla çakıştığı için varsayılana döndürüldü. Ayarlar'dan Alt veya Shift içeren bir kısayol seçebilirsiniz.": "The \"{shortcut}\" shortcut was reset to its default because it clashed with the system's Copy/Paste keys. Pick one that includes Alt or Shift in Settings.",
   "\"{shortcut}\" kısayolu bu sürümde tanınmadığı için varsayılana döndürüldü. Ayarlar'dan yeniden seçebilirsiniz.": "The \"{shortcut}\" shortcut was reset to its default because this version does not recognise it. You can pick it again in Settings.",
   "Daha fazla": "More",
-  "Video hazırlanıyor…": "Preparing video…"
+  "Video hazırlanıyor…": "Preparing video…",
+  "Kaydetme penceresi açılıyor…": "Opening save window…"
 }

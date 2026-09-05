@@ -321,7 +321,13 @@ fn open_save_dialog(
             "kaydetme paneli açılıyor: {default_name} (sahip pencere: {})",
             if overlay.is_some() { label } else { "yok" }
         );
-        // Kaydedicideki "Video hazırlanıyor…" yazısı kalksın — panel geliyor.
+        // Kaydedicideki yazı SİLİNMİYOR, değişiyor.
+        //
+        // Önce siliniyordu ve panel açılana kadar ekranda hiçbir şey kalmıyordu.
+        // Panelin belirmesi (NSSavePanel'in ilk açılışı) gözle görülür sürebiliyor;
+        // o boşlukta kullanıcı "durdura bastım, bir şey olmadı" deyip tekrar basıyor.
+        // Artık yazı "kaydetme penceresi açılıyor" olarak kalıyor ve overlay ancak
+        // panel sonuçlanınca kapanıyor — ekran hiçbir an boş kalmıyor.
         crate::windows::emit_to(&app, &label, "record-save-ready", ());
 
         // ── Panel AÇILAMAZSA kayıt kaybolmasın ───────────────────────────────────
@@ -370,7 +376,11 @@ fn open_save_dialog(
             });
         }
 
+        // Panelin istenmesiyle sonuçlanması arasındaki süre. Kullanıcının düşünme
+        // süresini de içeriyor ama "panel hiç açılmadı" ile "geç açıldı"yı ayırıyor.
+        let t_dialog = std::time::Instant::now();
         builder.save_file(move |chosen| {
+            log::info!("kaydetme paneli sonuçlandı ({:?})", t_dialog.elapsed());
             // Bekçi zaten devreye girdiyse (panel çok geç yanıt verdi) tekrar toast atma.
             let already = settled.swap(true, Ordering::AcqRel);
             if already {

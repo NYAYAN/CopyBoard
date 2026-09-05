@@ -915,3 +915,51 @@ hep 100 ms çıkıyordu. Adım 5 ms'ye indirildi (tavan yine 5 sn).
 
 > Windows'un durdurma yolu ayrı (`MfWriter`, Media Foundation) ve bu düzeltmeden
 > etkilenmiyor; orada ayrıca sınanması gerekir.
+
+### 🟠 BULGU R-17 — Kayıt her kademede 30 fps'ti, arayüz 60 vaat ediyordu
+
+Kullanıcı "görüntü kalitesi düşük gibi" dedi. Kaynak tek değil; Electron'un kalite
+kademesi ÜÇ şeyi birden ayarlıyordu, port yalnız birini:
+
+| Kademe | Electron fps | Electron bit hızı | Port (önce) | Port (şimdi) |
+|---|---|---|---|---|
+| ultra  | 60 | 50 Mbps | 30 fps, ölçek 1.0 | **60 fps**, ölçek 1.0 |
+| high   | 60 | 25 Mbps | 30 fps, ölçek 1.0 | **60 fps**, ölçek 1.0 |
+| medium | 30 | 10 Mbps | 30 fps, ölçek 0.75 | 30 fps, ölçek 0.75 |
+| low    | 30 |  5 Mbps | 30 fps, ölçek 0.5  | 30 fps, ölçek 0.5 |
+
+`with_fps(30)` sabitlenmişti; arayüz ise açıkça "Yüksek (60fps)" ve "Ultra (60fps)"
+yazıyor. Hareketli içerikte 30 ile 60 arasındaki fark bariz. **Düzeltildi.**
+
+Ayrıca `ultra` ile `high` portta BİRBİRİNİN AYNIYDI (ikisi de ölçek 1.0, 30 fps) —
+kullanıcı "Ultra" seçtiğinde hiçbir şey değişmiyordu. Artık ikisi de 60 fps; aradaki
+fark yine de bit hızı olmadan tam kurulamıyor (aşağıya bakın).
+
+### ⚠ AÇIK — Bit hızı ayarlanamıyor (`SCRecordingOutput` sınırı)
+
+Electron `videoBitsPerSecond` veriyordu (high = 25 Mbps). `SCRecordingOutputConfiguration`
+yalnız ÜÇ şey sunuyor — çıktı URL'i, kodek (H.264/HEVC) ve dosya türü. Bit hızı yok;
+Apple'ın varsayılanına kalıyoruz ve o 25 Mbps değil.
+
+Bunu düzeltmek `SCRecordingOutput`u bırakıp **`AVAssetWriter`** yoluna geçmeyi
+gerektiriyor: kareleri `SCStreamOutput` ile kendimiz alıp `AVVideoAverageBitRateKey`
+ile yazmak (plan §5.1). `objc2-av-foundation` 0.3.2 bunu sağlıyor — daha önce
+derlenemeyen `avassetwriter` crate'i (Swift köprüsü, macOS 26 SDK'sında düşüyordu)
+DEĞİL. Kapsam küçük değil: kare/ses zamanlaması, oturum yönetimi ve sonlandırma
+elle yazılacak.
+
+> Kare hızının dosyaya yansıdığı ÖLÇÜLEMEDİ: ölçüm sırasında makinenin ekranı
+> uykuya geçti ve `available_monitors()` boş dönüyor. Eşleme birim testiyle
+> korunuyor (`kalite_kademesi_kare_hizina_donusuyor`), ama gerçek kayıtta
+> doğrulanması gerekiyor.
+
+### 🟡 BULGU R-18 — Durdurmadan sonra ekran bir an tamamen boş kalıyordu
+
+"Video hazırlanıyor…" yazısı, kaydetme paneli İSTENMEDEN 48 satır önce siliniyordu.
+Panelin belirmesi gözle görülür sürebildiği için arada ekranda hiçbir şey kalmıyor ve
+kullanıcı "durdura bastım, bir şey olmadı" deyip tekrar basıyordu. Yazı artık
+silinmiyor, "Kaydetme penceresi açılıyor…" olarak kalıyor — panel başka monitörde
+açıldıysa nereye bakacağını da söylüyor.
+
+İkinci basış zaten zararsızdı (`RecorderState` `take()` ile boşaltılıyor), ama
+kullanıcı bunu bilemezdi.

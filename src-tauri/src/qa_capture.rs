@@ -136,10 +136,10 @@ fn visible(app: &tauri::AppHandle, label: &str) -> bool {
 }
 
 /// Overlay açılıp ekran görüntüsünü boyayana kadar bekler.
-fn wait_overlay(app: &tauri::AppHandle) -> bool {
+fn wait_overlay(app: &tauri::AppHandle, label: &str) -> bool {
     for _ in 0..60 {
         sleep(100);
-        if visible(app, "capture-0") {
+        if visible(app, label) {
             sleep(400); // boyama + `ready` sınıfı otursun
             return true;
         }
@@ -425,11 +425,36 @@ fn hex_of(c: (f64, f64, f64)) -> String {
     format!("#{:02x}{:02x}{:02x}", c.0 as u8, c.1 as u8, c.2 as u8)
 }
 
+/// Verilen dikdörtgende KIRMIZI sayılabilecek piksel sayısı. Açıklama kaleminin
+/// varsayılan rengi `#ff3b30`; ekranın renk uzayından geçtikten sonra da tek başına
+/// kırmızı kalıyor, o yüzden eşik gevşek tutuldu.
+fn count_red(img: &Img, x0: usize, y0: usize, x1: usize, y1: usize) -> usize {
+    let mut n = 0;
+    for y in y0..y1.min(img.h) {
+        for x in x0..x1.min(img.w) {
+            let i = (y * img.w + x) * 4;
+            if i + 2 >= img.rgba.len() {
+                continue;
+            }
+            let (r, g, b) = (img.rgba[i], img.rgba[i + 1], img.rgba[i + 2]);
+            if r > 150 && g < 110 && b < 110 {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
 // ── Akışlar ────────────────────────────────────────────────────────────────
 
 /// 1. Bölge seçimi: sürükle → Kopyala → panodaki piksellere bak.
-fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo) {
-    note("— 1/4 bölge seçimi (sürükle, kırp, kopyala) —");
+fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo, index: usize) {
+    if index == 0 {
+        note("— bölge seçimi (sürükle, kırp, kopyala) —");
+    } else {
+        note(&format!("— bölge seçimi, MONİTÖR {index} —"));
+    }
+    let label = format!("capture-{index}");
     let Some(card) = install_card(app, m, "colors") else {
         check(false, "sınama kartı yerleştirilemedi");
         return;
@@ -438,14 +463,14 @@ fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo) {
     let before: Vec<String> = gallery_ids(app);
 
     on_main(app, |h| crate::capture::start(h, "draw"));
-    if !check(wait_overlay(app), "seçim overlay'i açıldı") {
+    if !check(wait_overlay(app, &label), &format!("seçim overlay'i açıldı ({label})")) {
         remove_card(app);
         return;
     }
 
     let (qx, qy, qw, qh) = card.quads_rect(6.0);
     clear_probes();
-    eval(app, "capture-0", drag_js(qx, qy, qx + qw, qy + qh, 24));
+    eval(app, &label, drag_js(qx, qy, qx + qw, qy + qh, 24));
     sleep(400);
 
     // Seçim GERÇEKTEN istenen yere mi oturdu, ve sürükleme bir metin seçimi
@@ -459,7 +484,7 @@ fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo) {
   window.api.sendDebugLog('QAC snip.textsel=' + sel.length);
   window.api.sendDebugLog('QAC snip.toolbar=' + (getComputedStyle(document.getElementById('toolbar')).display));
 })();"#;
-    eval(app, "capture-0", READ.to_string());
+    eval(app, &label, READ.to_string());
 
     let rect = wait_probe("snip.rect", 3000).unwrap_or_default();
     let scale = wait_probe("snip.scale", 1500).unwrap_or_default();
@@ -477,7 +502,7 @@ fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo) {
     // Kopyala — düğme `mousedown` dinliyor.
     let sx: f64 = scale.split(',').next().and_then(|v| v.parse().ok()).unwrap_or(m.scale);
     let sy: f64 = scale.split(',').nth(1).and_then(|v| v.parse().ok()).unwrap_or(m.scale);
-    eval(app, "capture-0", press_js("btn-copy"));
+    eval(app, &label, press_js("btn-copy"));
     sleep(1800);
 
     let Some(img) = on_main(app, |_| clipboard_image()).flatten() else {
@@ -519,20 +544,94 @@ fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo) {
 
     on_main(app, |h| crate::capture::close_all(h, None));
     sleep(500);
-    check(!visible(app, "capture-0"), "kopyalama sonrası overlay kapandı");
+    check(!visible(app, &label), "kopyalama sonrası overlay kapandı");
+    remove_card(app);
+}
+
+/// Açıklama araçları: kalemle çiz → çizginin panodaki görüntüde OLDUĞUNU gör.
+///
+/// Araç düğmeleri `click` dinliyor (araç çubuğunun Kopyala/Kaydet düğmeleri ise
+/// `mousedown`) — ikisi aynı sanılıp yanlış olay gönderilseydi test sessizce
+/// yeşil verirdi.
+fn flow_tools(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— açıklama araçları (kalem) —");
+    let Some(card) = install_card(app, m, "colors") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+    let before = gallery_ids(app);
+
+    on_main(app, |h| crate::capture::start(h, "draw"));
+    if !check(wait_overlay(app, "capture-0"), "seçim overlay'i açıldı") {
+        remove_card(app);
+        return;
+    }
+
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    eval(app, "capture-0", drag_js(qx, qy, qx + qw, qy + qh, 20));
+    sleep(400);
+
+    // Kalemi seç ve etkin olduğunu doğrula.
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        r#"(function(){
+  document.querySelector('.tool-btn[data-tool="pen"]').click();
+  window.api.sendDebugLog('QAC tool.active=' + (state.activeTool || 'yok'));
+})();"#
+            .to_string(),
+    );
+    let active = wait_probe("tool.active", 2500).unwrap_or_default();
+    check(active == "pen", &format!("kalem aracı etkinleşti (okunan: {active})"));
+
+    // MAVİ çeyreğin ortasından yatay bir çizgi. Kırmızı orada olmalı; yeşil
+    // çeyrekte olmamalı — çizim seçime ve çizilen yere hapsedilmiş olmalı.
+    let sy_line = qy + qh * 0.75;
+    eval(
+        app,
+        "capture-0",
+        drag_js(qx + 24.0, sy_line, qx + qw * 0.5 - 24.0, sy_line, 20),
+    );
+    sleep(400);
+
+    eval(app, "capture-0", press_js("btn-copy"));
+    sleep(1800);
+
+    match on_main(app, |_| clipboard_image()).flatten() {
+        Some(img) => {
+            let (hw, hh) = (img.w / 2, img.h / 2);
+            let drawn = count_red(&img, 0, hh, hw, img.h);
+            let clean = count_red(&img, hw, 0, img.w, hh);
+            note(&format!("kırmızı piksel: çizilen çeyrek={drawn}, dokunulmayan çeyrek={clean}"));
+            check(drawn > 500, "kalem darbesi kopyalanan görüntüde duruyor");
+            check(clean < 50, "çizim dokunulmayan çeyreğe taşmadı");
+        }
+        None => {
+            check(false, "kalem sonrası panoda resim yok");
+        }
+    }
+
+    sleep(600);
+    for id in gallery_ids(app).iter().filter(|i| !before.contains(i)) {
+        let id = id.clone();
+        on_main(app, move |h| crate::gallery::delete(h, &id));
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(400);
     remove_card(app);
 }
 
 /// 2. Renk seçici: bilinen bir çeyreğe tıkla → panoya doğru hex düşsün.
 fn flow_color(app: &tauri::AppHandle, m: &MonitorInfo) {
-    note("— 2/4 renk seçici —");
+    note("— renk seçici —");
     let Some(card) = install_card(app, m, "colors") else {
         check(false, "sınama kartı yerleştirilemedi");
         return;
     };
 
     on_main(app, |h| crate::capture::start(h, "color"));
-    if !check(wait_overlay(app), "renk seçici overlay'i açıldı") {
+    if !check(wait_overlay(app, "capture-0"), "renk seçici overlay'i açıldı") {
         remove_card(app);
         return;
     }
@@ -563,7 +662,7 @@ fn flow_color(app: &tauri::AppHandle, m: &MonitorInfo) {
 
 /// 3. OCR: metin şeridini seç → panoya damga metni düşsün.
 fn flow_ocr(app: &tauri::AppHandle, m: &MonitorInfo) {
-    note("— 3/4 OCR (metin tanıma) —");
+    note("— OCR (metin tanıma) —");
     let Some(card) = install_card(app, m, "colors") else {
         check(false, "sınama kartı yerleştirilemedi");
         return;
@@ -574,7 +673,7 @@ fn flow_ocr(app: &tauri::AppHandle, m: &MonitorInfo) {
     sleep(300);
 
     on_main(app, |h| crate::capture::start(h, "ocr"));
-    if !check(wait_overlay(app), "OCR overlay'i açıldı") {
+    if !check(wait_overlay(app, "capture-0"), "OCR overlay'i açıldı") {
         remove_card(app);
         return;
     }
@@ -612,7 +711,7 @@ fn flow_ocr(app: &tauri::AppHandle, m: &MonitorInfo) {
 
 /// 4. Kaydırmalı yakalama: GERÇEKTEN kayan bir liste üzerinde birleştirme.
 fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
-    note("— 4/4 kaydırmalı yakalama —");
+    note("— kaydırmalı yakalama —");
     let Some(card) = open_scroll_target(app, m) else {
         check(false, "kaydırma sınama penceresi açılamadı");
         return;
@@ -620,7 +719,7 @@ fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
 
     let before = gallery_ids(app);
     on_main(app, |h| crate::capture::start(h, "scroll"));
-    if !check(wait_overlay(app), "kaydırma overlay'i açıldı") {
+    if !check(wait_overlay(app, "capture-0"), "kaydırma overlay'i açıldı") {
         close_scroll_target(app);
         return;
     }
@@ -783,7 +882,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
         .spawn(move || {
             sleep(2500); // açılış otursun
             let wanted: Vec<String> = if which.trim().is_empty() {
-                vec!["snip".into(), "color".into(), "ocr".into(), "scroll".into()]
+                vec!["snip".into(), "tools".into(), "color".into(), "ocr".into(), "scroll".into(), "multi".into()]
             } else {
                 which.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect()
             };
@@ -799,10 +898,26 @@ pub fn run(app: tauri::AppHandle, which: String) {
             ));
 
             let has = |k: &str| wanted.iter().any(|w| w == k);
-            if has("snip") { flow_snip(&app, &m); }
+            if has("snip") { flow_snip(&app, &m, 0); }
+            if has("tools") { flow_tools(&app, &m); }
             if has("color") { flow_color(&app, &m); }
             if has("ocr") { flow_ocr(&app, &m); }
             if has("scroll") { flow_scroll(&app, &m); }
+            // İkinci monitör: overlay'in DOĞRU ekrana, doğru ölçekle oturduğu ancak
+            // orada seçim yapılıp piksel okunarak kanıtlanabiliyor (bkz. A11).
+            if has("multi") {
+                match crate::geom::all_monitors(&app).get(1) {
+                    Some(m2) => {
+                        note(&format!(
+                            "monitör 1: ({:.0},{:.0}) {:.0}x{:.0} ×{:.2} {}",
+                            m2.x, m2.y, m2.width, m2.height, m2.scale,
+                            m2.name.as_deref().unwrap_or("?")
+                        ));
+                        flow_snip(&app, m2, 1);
+                    }
+                    None => note("ikinci monitör yok — çok monitör adımı atlandı"),
+                }
+            }
 
             // Panoyu sınamanın son çıktısıyla bırakma.
             on_main(&app, |_| crate::platform::clipboard_write_text(""));

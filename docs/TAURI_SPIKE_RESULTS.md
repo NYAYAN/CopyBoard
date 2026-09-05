@@ -1147,14 +1147,20 @@ gerçek `MouseEvent`ler gönderiyor ve sonucu PANODAN geri okuyor.
 Renklerde eşitlik değil İLİŞKİ sınanıyor: ekran yakalama ekranın renk uzayından
 geçiyor ve `#cc0000` panoya `#bb271a` olarak dönüyor. Kanıtlanan şey geometri.
 
-### Ölçüm (dört akış, 0 başarısız)
+### Ölçüm (altı akış, 0 başarısız)
 
 | Akış | Kanıt |
 |---|---|
 | Bölge seçimi | Seçim istenen dikdörtgene ±0 px oturdu; pano resmi 1176×936 (= 588×468 ×2); dört çeyrek doğru köşede |
+| Açıklama araçları | Kalem etkinleşti; çizilen çeyrekte 2976 kırmızı piksel, dokunulmayan çeyrekte 0 |
 | Renk seçici | Tıklanan pikselin hex'i `#bb271a` — bölge seçimindeki çeyrek örneğiyle birebir aynı |
 | OCR | Taranan metin `ZEBRA QUARTZ` — damganın iki kelimesi de |
 | Kaydırmalı yakalama | 26 birleşim, 3224 px satır; önizleme 1176×3224; panodaki görüntü aynı boyutta |
+| İkinci monitör | Harici ekranda (`capture-1`) seçim ±0 px; kırpma 588×468 — o monitörün KENDİ ×1.00 ölçeğiyle; dört çeyrek doğru |
+
+Araç düğmeleri `click` dinliyor, araç çubuğunun Kopyala/Kaydet düğmeleri `mousedown`.
+İkisi karıştırılsaydı test sessizce yeşil verirdi; harness her ikisini de gerçek
+olayıyla sürüyor.
 
 ### Testin ayırt ettiği kanıtlandı
 
@@ -1172,6 +1178,17 @@ QAC ✗ sağ alt çeyrek SARI
 
 Boyut denetimi hâlâ GEÇİYOR — tek başına ölçseydi hata görünmezdi. Videodaki yeşil
 yarımı üreten hata sınıfı tam olarak bu.
+
+### Çok monitör (A11) artık ölçülü
+
+Bu makinede iki ekran var ve düzen koordinat matematiği için en zor hâl: dahili
+Retina `(0,0) 1800×1169 ×2.00`, harici `(-822,-1440) 3440×1440 ×1.00` — yani
+NEGATİF köşeli ve FARKLI ölçekli. İkinci ekranda seçim yapıldı ve kırpma
+588×468 çıktı: overlay doğru monitöre, o monitörün kendi ölçeğiyle oturmuş.
+Karışık DPI'da yanlış ölçekle çarpma (`place_on_monitor` öncesindeki hata) burada
+görülürdü.
+
+Üç monitörlü kullanıcı düzeni hâlâ denenmedi.
 
 ### Yan bulgu: CopyBoard kendi penceresini kaydırmalı yakalayamıyor
 
@@ -1191,6 +1208,12 @@ kullanıcının senaryosundan tek farkı pencerenin sahibi.
 
 - **Gerçek işaretçi donanımı.** Olaylar sentetik: uygulamanın kendi dinleyicilerinden
   geçiyorlar ama işletim sisteminin isabet sınamasından geçmiyorlar. Tıklama
-  geçirgenliği (`set_ignore_mouse_events`) bu yolla ölçülemez.
-- **Çoklu monitörde ikinci ekran.** Kart her zaman `monitors[0]`a konuyor.
-- **Açıklama araçları** (kalem, ok, bulanıklaştırma, metin) ve kaydetme paneli.
+  geçirgenliği (`set_ignore_mouse_events`) bu yolla ölçülemez — CGEvent ile gerçek
+  imleç sürmek Erişilebilirlik izni ister.
+- **Yerel kaydetme paneli.** macOS'ta `NSSavePanel` içindeki dosya adı ve Kaydet
+  düğmesi ancak Erişilebilirlik iznine sahip bir süreçten sürülebilir. Panelin
+  AÇILDIĞI Windows tarafında `--qa` ile ölçülü.
+- **Üç veya daha fazla monitör.** Bu makinede iki ekran var.
+- **Kalan açıklama araçları** (ok, kare, yuvarlak, bulanıklaştırma, metin). Kalem
+  yolu ölçüldü; hepsi aynı `mousedown`/`mousemove` dalını ve aynı `drawCanvas`
+  bileşimini kullanıyor.

@@ -27,6 +27,7 @@ pub mod store;
 pub mod theme;
 pub mod tray;
 pub mod updater;
+mod videos;
 pub mod windows;
 
 use tauri::Manager;
@@ -160,6 +161,10 @@ pub fn run() {
             commands::record::set_audio_mic,
             commands::record::set_audio_mic_device,
             commands::record::list_audio_inputs,
+            commands::record::get_videos,
+            commands::record::delete_video,
+            commands::record::open_video,
+            commands::record::reveal_video,
             commands::record::set_audio_system,
             commands::record::get_audio_settings,
             commands::record::ensure_mic_permission,
@@ -331,6 +336,33 @@ pub fn run() {
                             }
                         }
                         Err(e) => println!("RECORD_TEST: başlatma hatası: {e}"),
+                    }
+                    h.exit(0);
+                });
+            }
+
+            // Geliştirme kolaylığı: `--index-video=<yol>` bir videoyu galeri indeksine
+            // ekler ve çıkarılan küçük resim/süre bilgisini yazar. Kaydetme paneline
+            // uğramadan indeksleme yolunu sınamak için.
+            #[cfg(debug_assertions)]
+            if let Some(path) = std::env::args().find_map(|a| a.strip_prefix("--index-video=").map(std::path::PathBuf::from)) {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    let t0 = std::time::Instant::now();
+                    videos::add(&h, &path);
+                    let list = videos::public_list(&h.state::<AppState>().store);
+                    match list.first() {
+                        Some(v) => println!(
+                            "INDEX_VIDEO: ad={} süre={:.2}sn {}x{} {:.1}MB küçükresim={} bayt ({:?})",
+                            v["name"].as_str().unwrap_or(""),
+                            v["duration"].as_f64().unwrap_or(0.0),
+                            v["w"].as_u64().unwrap_or(0),
+                            v["h"].as_u64().unwrap_or(0),
+                            v["bytes"].as_u64().unwrap_or(0) as f64 / 1048576.0,
+                            v["thumb"].as_str().unwrap_or("").len(),
+                            t0.elapsed()
+                        ),
+                        None => println!("INDEX_VIDEO: indekse girmedi"),
                     }
                     h.exit(0);
                 });

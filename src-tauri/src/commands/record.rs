@@ -19,6 +19,40 @@ pub fn set_video_quality(app: tauri::AppHandle, value: String) {
     app.state::<AppState>().settings().set_video_quality(value);
 }
 
+/// Galerideki videolar (dosyası silinmiş olanlar elenmiş).
+#[tauri::command]
+pub fn get_videos(app: tauri::AppHandle) -> Vec<serde_json::Value> {
+    crate::videos::public_list(&app.state::<AppState>().store)
+}
+
+/// Videoyu listeden düşürür; `with_file` ise dosyayı da siler.
+#[tauri::command]
+pub fn delete_video(app: tauri::AppHandle, id: String, with_file: bool) {
+    crate::videos::delete(&app, &id, with_file);
+}
+
+/// Videoyu varsayılan oynatıcıda açar.
+#[tauri::command]
+pub fn open_video(app: tauri::AppHandle, id: String) {
+    let Some(v) = crate::videos::by_id(&app.state::<AppState>().store, &id) else { return };
+    let Some(file) = v.get("file").and_then(|f| f.as_str()) else { return };
+    use tauri_plugin_opener::OpenerExt;
+    if let Err(e) = app.opener().open_path(file, None::<&str>) {
+        log::warn!("video açılamadı ({file}): {e}");
+    }
+}
+
+/// Videoyu Finder/Gezgin'de gösterir.
+#[tauri::command]
+pub fn reveal_video(app: tauri::AppHandle, id: String) {
+    let Some(v) = crate::videos::by_id(&app.state::<AppState>().store, &id) else { return };
+    let Some(file) = v.get("file").and_then(|f| f.as_str()) else { return };
+    use tauri_plugin_opener::OpenerExt;
+    if let Err(e) = app.opener().reveal_item_in_dir(file) {
+        log::warn!("video klasörde gösterilemedi ({file}): {e}");
+    }
+}
+
 /// Kullanılabilir ses giriş aygıtları.
 #[tauri::command]
 pub fn list_audio_inputs() -> Vec<serde_json::Value> {
@@ -285,12 +319,24 @@ fn save_without_dialog(app: &tauri::AppHandle, temp: std::path::PathBuf) {
     };
     let p = final_path.to_string_lossy().to_string();
     log::info!("video (panel olmadan) kaydedildi: {p}");
+    index_video(app, final_path.clone());
     crate::platform::clipboard_write_text(&p);
     let h = app.clone();
     let _ = app.run_on_main_thread(move || {
         crate::clipboard::history::add(&h, &p);
         crate::windows::toast::show(&h, "Video kaydedildi. Dosya yolu panoya kopyalandı.", "success");
     });
+}
+
+/// Videoyu galeri indeksine ekler.
+///
+/// ARKA PLANDA: küçük resim çıkarmak videoyu açıp bir kare çözmeyi gerektiriyor ve
+/// yüz milisaniyeleri buluyor. Kaydetme panelinin geri çağrısında yapılırsa toast
+/// gecikir ve kullanıcı kaydın bittiğini geç öğrenir.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn index_video(app: &tauri::AppHandle, path: std::path::PathBuf) {
+    let h = app.clone();
+    std::thread::spawn(move || crate::videos::add(&h, &path));
 }
 
 /// Kaydetme panelini açar ve sonucunu işler.
@@ -412,6 +458,7 @@ fn open_save_dialog(
                     Ok(_) => {
                         let _ = std::fs::remove_file(&temp);
                         log::info!("video kaydedildi: {}", dest.display());
+                        index_video(&handle, dest);
                         crate::windows::toast::show(&handle, "Video Kaydedildi.", "success");
                     }
                     Err(e) => {

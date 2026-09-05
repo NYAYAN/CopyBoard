@@ -267,6 +267,11 @@ fn card_js(kind: &str, band: f64) -> String {
     body.appendChild(grid);
   }
   d.appendChild(body);
+  // Tıklama geçirgenliği sınaması: overlay geçirgense gerçek tıklama BURAYA düşer.
+  d.dataset.clicks = '0';
+  d.addEventListener('mousedown', (e) => {
+    d.dataset.clicks = String(Number(d.dataset.clicks || 0) + 1);
+  });
   document.body.appendChild(d);
 })();"#;
     TPL.replace("__BAND__", &format!("{band:.0}"))
@@ -373,12 +378,125 @@ fn click_js(x: f64, y: f64) -> String {
     TPL.replace("__X__", &format!("{x:.1}")).replace("__Y__", &format!("{y:.1}"))
 }
 
-/// Araç çubuğu düğmeleri `click` DEĞİL `mousedown` dinliyor — `.click()` çağırmak
+/// Kaydedici ve kaydırma düğmeleri ise `click` dinliyor. Hangi düğmenin hangi
+/// olayı dinlediği koda bakılarak belirlenmeli: yanlışını göndermek testi sessizce
+/// yeşil yapar (`btn-record`a `mousedown` göndermek kaydı hiç başlatmıyordu).
+fn click_el_js(id: &str) -> String {
+    format!("document.getElementById('{id}')?.click();")
+}
+
+/// Snipper araç çubuğu düğmeleri `click` DEĞİL `mousedown` dinliyor — `.click()` çağırmak
 /// hiçbir şey yapmazdı ve test sahte bir yeşil verirdi.
 fn press_js(id: &str) -> String {
     format!(
         "document.getElementById('{id}')?.dispatchEvent(new MouseEvent('mousedown',{{bubbles:true,cancelable:true,button:0}}));"
     )
+}
+
+// ── Gerçek imleç (CGEvent) ────────────────────────────────────────────────
+//
+// Sentetik `MouseEvent` uygulamanın kendi dinleyicilerinden geçiyor ama işletim
+// sisteminin isabet sınamasından geçmiyor: overlay yanlış monitörde dursa, yanlış
+// katmanda olsa ya da tıklama geçirgen olsa sentetik olay bunu GÖRMEZ. Buradaki
+// olaylar pencere sunucusuna gidiyor, yani imleç gerçekten hareket ediyor ve
+// tıklama gerçekten isabet sınamasından geçiyor.
+//
+// Bedeli: Erişilebilirlik izni. Bu yüzden bu akışlar varsayılan listede DEĞİL.
+#[cfg(target_os = "macos")]
+mod mouse {
+    use std::ffi::c_void;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+
+    type Ref = *mut c_void;
+
+    const HID_TAP: u32 = 0;
+    const SOURCE_HID: u32 = 1;
+    const LEFT_DOWN: u32 = 1;
+    const LEFT_UP: u32 = 2;
+    const MOUSE_MOVED: u32 = 5;
+    const LEFT_DRAGGED: u32 = 6;
+    const BUTTON_LEFT: u32 = 0;
+    /// kVK_Return — kaydetme panelinde varsayılan düğme (Kaydet).
+    pub const KEY_RETURN: u16 = 0x24;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGEventSourceCreate(state: u32) -> Ref;
+        fn CGEventCreateMouseEvent(source: Ref, kind: u32, pos: CGPoint, button: u32) -> Ref;
+        fn CGEventCreateKeyboardEvent(source: Ref, key: u16, down: bool) -> Ref;
+        fn CGEventPost(tap: u32, event: Ref);
+        fn CFRelease(cf: Ref);
+    }
+
+    fn post(kind: u32, x: f64, y: f64) {
+        unsafe {
+            let src = CGEventSourceCreate(SOURCE_HID);
+            let ev = CGEventCreateMouseEvent(src, kind, CGPoint { x, y }, BUTTON_LEFT);
+            if !ev.is_null() {
+                CGEventPost(HID_TAP, ev);
+                CFRelease(ev);
+            }
+            if !src.is_null() {
+                CFRelease(src);
+            }
+        }
+    }
+
+    fn nap(ms: u64) {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
+
+    pub fn move_to(x: f64, y: f64) {
+        post(MOUSE_MOVED, x, y);
+        nap(60);
+    }
+
+    pub fn click(x: f64, y: f64) {
+        move_to(x, y);
+        post(LEFT_DOWN, x, y);
+        nap(90);
+        post(LEFT_UP, x, y);
+        nap(150);
+    }
+
+    /// Basılı tut, ara noktalardan geç, bırak. Ara `mousemove`ler şart: seçim
+    /// dikdörtgeni `mousemove` ile büyüyor, tek atlamada sıfır kalırdı.
+    pub fn drag(x1: f64, y1: f64, x2: f64, y2: f64, steps: u32) {
+        move_to(x1, y1);
+        post(LEFT_DOWN, x1, y1);
+        nap(120);
+        for i in 1..=steps {
+            let t = i as f64 / steps as f64;
+            post(LEFT_DRAGGED, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+            nap(25);
+        }
+        nap(120);
+        post(LEFT_UP, x2, y2);
+        nap(200);
+    }
+
+    pub fn key(code: u16) {
+        unsafe {
+            let src = CGEventSourceCreate(SOURCE_HID);
+            for down in [true, false] {
+                let ev = CGEventCreateKeyboardEvent(src, code, down);
+                if !ev.is_null() {
+                    CGEventPost(HID_TAP, ev);
+                    CFRelease(ev);
+                }
+                nap(60);
+            }
+            if !src.is_null() {
+                CFRelease(src);
+            }
+        }
+    }
 }
 
 // ── Pano ───────────────────────────────────────────────────────────────────
@@ -846,6 +964,411 @@ fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
     close_scroll_target(app);
 }
 
+/// Ana pencereyi overlay'in ALTINA indirir.
+///
+/// Ana pencere `ScreenSaver` (1000), yakalama overlay'i `PopUpMenu` (101)
+/// katmanında. Yani kart overlay'in ÜSTÜNDE duruyor ve gerçek bir tıklama
+/// overlay'e hiç ulaşmazdı. Ekran görüntüsü zaten alındığı için kartın üstte
+/// kalmasına gerek yok.
+#[cfg(target_os = "macos")]
+fn lower_main(app: &tauri::AppHandle) {
+    on_main(app, |h| {
+        if let Some(w) = h.get_webview_window(crate::windows::main_window::LABEL) {
+            let _ = w.set_always_on_top(false);
+        }
+    });
+    sleep(300);
+}
+
+/// Overlay'deki bir CSS noktasının EKRAN (global mantıksal) karşılığı.
+fn to_screen(m: &MonitorInfo, cx: f64, cy: f64) -> (f64, f64) {
+    (m.x + cx, m.y + cy)
+}
+
+/// Bir DOM ögesinin overlay içindeki merkezini okur.
+#[cfg(target_os = "macos")]
+fn element_center(app: &tauri::AppHandle, id: &str) -> Option<(f64, f64)> {
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        format!(
+            "(function(){{const r=document.getElementById('{id}').getBoundingClientRect();\
+             window.api.sendDebugLog('QAC el.center=' + (r.left+r.width/2) + ',' + (r.top+r.height/2));}})();"
+        ),
+    );
+    let v = wait_probe("el.center", 2500)?;
+    let mut it = v.split(',');
+    let x: f64 = it.next()?.parse().ok()?;
+    let y: f64 = it.next()?.parse().ok()?;
+    // Gizli bir öge `0,0` döndürüyor. Buna tıklamak ekranın SOL ÜST köşesine —
+    // yani menü çubuğuna — gerçek bir tıklama göndermek demek. Reddet.
+    if x < 1.0 || y < 1.0 {
+        log::error!("QAC {id}: öge görünmüyor (rect {x},{y}) — tıklama gönderilmedi");
+        return None;
+    }
+    Some((x, y))
+}
+
+/// Sürükleme sonrası seçimin gerçekten oluştuğunu okur: dikdörtgen ve araç
+/// çubuğunun görünürlüğü. Araç çubuğu gizliyse düğme konumu `0,0` çıkar.
+#[cfg(target_os = "macos")]
+fn read_selection(app: &tauri::AppHandle) -> (String, String) {
+    clear_probes();
+    const READ: &str = r#"(function(){
+  const r = state.selectionRect || {x:-1,y:-1,w:-1,h:-1};
+  window.api.sendDebugLog('QAC sel.rect=' + [r.x,r.y,r.w,r.h].map(v=>Math.round(v)).join(','));
+  window.api.sendDebugLog('QAC sel.toolbar=' + getComputedStyle(document.getElementById('toolbar')).display);
+})();"#;
+    eval(app, "capture-0", READ.to_string());
+    (
+        wait_probe("sel.rect", 3000).unwrap_or_default(),
+        wait_probe("sel.toolbar", 1500).unwrap_or_default(),
+    )
+}
+
+/// GERÇEK imleçle bölge seçimi: işletim sisteminin isabet sınamasından geçen tek sınama.
+#[cfg(target_os = "macos")]
+fn flow_pointer(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— GERÇEK imleç: bölge seçimi —");
+    let Some(card) = install_card(app, m, "colors") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+    let before = gallery_ids(app);
+
+    on_main(app, |h| crate::capture::start(h, "draw"));
+    if !check(wait_overlay(app, "capture-0"), "seçim overlay'i açıldı") {
+        remove_card(app);
+        return;
+    }
+    lower_main(app);
+
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    let (x1, y1) = to_screen(m, qx, qy);
+    let (x2, y2) = to_screen(m, qx + qw, qy + qh);
+    clear_probes();
+    mouse::drag(x1, y1, x2, y2, 22);
+    sleep(500);
+
+    let (rect, toolbar) = read_selection(app);
+    check(toolbar == "flex", &format!("araç çubuğu belirdi (display={toolbar})"));
+    let got: Vec<f64> = rect.split(',').filter_map(|v| v.parse().ok()).collect();
+    let want = [qx, qy, qw, qh];
+    note(&format!("gerçek imleçle seçim={rect} (istenen {want:?})"));
+    check(
+        got.len() == 4 && got.iter().zip(want.iter()).all(|(a, b)| (a - b).abs() <= 3.0),
+        "GERÇEK fare sürüklemesi overlay'e doğru ekran koordinatında ulaştı",
+    );
+
+    // Kopyala düğmesine GERÇEK tıklama.
+    let Some((bx, by)) = element_center(app, "btn-copy") else {
+        check(false, "Kopyala düğmesinin konumu okunamadı");
+        remove_card(app);
+        return;
+    };
+    let (sx, sy) = to_screen(m, bx, by);
+    mouse::click(sx, sy);
+    sleep(2000);
+
+    match on_main(app, |_| clipboard_image()).flatten() {
+        Some(img) => {
+            let tl = sample(&img, 0.25, 0.25);
+            let br = sample(&img, 0.75, 0.75);
+            note(&format!("çeyrekler: SolÜst={} SağAlt={}", hex_of(tl), hex_of(br)));
+            check(tl.0 > tl.1 + 40.0 && tl.0 > tl.2 + 40.0, "gerçek tıklamayla kopyalanan görüntü doğru bölge");
+            check(br.0 > br.2 + 60.0 && br.1 > br.2 + 60.0, "kopyalanan görüntünün sağ altı SARI");
+        }
+        None => {
+            check(false, "gerçek tıklamadan sonra panoda resim yok");
+        }
+    }
+
+    sleep(600);
+    for id in gallery_ids(app).iter().filter(|i| !before.contains(i)) {
+        let id = id.clone();
+        on_main(app, move |h| crate::gallery::delete(h, &id));
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(400);
+    remove_card(app);
+}
+
+/// Yerel kaydetme paneli: Kaydet'e GERÇEK tıklama, panelde Return, diske düşen
+/// dosyanın PİKSELLERİ.
+#[cfg(target_os = "macos")]
+fn flow_savepanel(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— yerel kaydetme paneli —");
+    let Some(dir) = on_main(app, |h| h.path().picture_dir().ok()).flatten() else {
+        check(false, "Resimler klasörü bulunamadı");
+        return;
+    };
+    let existing = snip_files(&dir);
+    let Some(card) = install_card(app, m, "colors") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+    let before = gallery_ids(app);
+
+    on_main(app, |h| crate::capture::start(h, "draw"));
+    if !check(wait_overlay(app, "capture-0"), "seçim overlay'i açıldı") {
+        remove_card(app);
+        return;
+    }
+    lower_main(app);
+
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    let (x1, y1) = to_screen(m, qx, qy);
+    let (x2, y2) = to_screen(m, qx + qw, qy + qh);
+    mouse::drag(x1, y1, x2, y2, 22);
+    sleep(700);
+    let (mut rect, mut toolbar) = read_selection(app);
+    if toolbar != "flex" {
+        // Overlay yeni odaklanmış olabiliyor: ilk gerçek basış bazen pencereyi
+        // etkinleştirmekle harcanıyor. Bir kez daha dene — kullanıcı da öyle yapar.
+        note(&format!("ilk sürükleme seçim üretmedi (rect={rect}) — yeniden deneniyor"));
+        mouse::click(x1, y1);
+        sleep(300);
+        mouse::drag(x1, y1, x2, y2, 22);
+        sleep(700);
+        (rect, toolbar) = read_selection(app);
+    }
+    note(&format!("seçim={rect} araçÇubuğu={toolbar}"));
+    if !check(toolbar == "flex", "Kaydet öncesi seçim oluştu") {
+        on_main(app, |h| crate::capture::close_all(h, None));
+        remove_card(app);
+        return;
+    }
+
+    let Some((bx, by)) = element_center(app, "btn-save") else {
+        check(false, "Kaydet düğmesinin konumu okunamadı");
+        remove_card(app);
+        return;
+    };
+    let (sx, sy) = to_screen(m, bx, by);
+    mouse::click(sx, sy);
+    // Panelin belirmesi: `save_png` overlay'i indirip rfd'yi açıyor.
+    sleep(2600);
+    // Varsayılan düğme Kaydet.
+    mouse::key(mouse::KEY_RETURN);
+
+    let mut saved = None;
+    for _ in 0..40 {
+        sleep(250);
+        if let Some(f) = snip_files(&dir).into_iter().find(|f| !existing.contains(f)) {
+            saved = Some(f);
+            break;
+        }
+    }
+    match saved {
+        Some(path) => {
+            note(&format!("panelden kaydedilen dosya: {}", path.display()));
+            check(true, "kaydetme paneli açıldı ve Return ile onaylandı");
+            match std::fs::read(&path).ok().and_then(|b| image::load_from_memory(&b).ok()) {
+                Some(im) => {
+                    let rgba = im.to_rgba8();
+                    let img = Img { w: rgba.width() as usize, h: rgba.height() as usize, rgba: rgba.into_raw() };
+                    let want_w = (qw * m.scale).round() as usize;
+                    check(
+                        img.w.abs_diff(want_w) <= 2,
+                        &format!("kaydedilen dosya seçimin boyutunda ({}x{}, beklenen genişlik {want_w})", img.w, img.h),
+                    );
+                    let tl = sample(&img, 0.25, 0.25);
+                    let tr = sample(&img, 0.75, 0.25);
+                    note(&format!("dosyadaki çeyrekler: SolÜst={} SağÜst={}", hex_of(tl), hex_of(tr)));
+                    check(tl.0 > tl.1 + 40.0 && tl.0 > tl.2 + 40.0, "kaydedilen dosyanın sol üstü KIRMIZI");
+                    check(tr.1 > tr.0 + 40.0 && tr.1 > tr.2 + 40.0, "kaydedilen dosyanın sağ üstü YEŞİL");
+                }
+                None => {
+                    check(false, "kaydedilen dosya çözümlenemedi");
+                }
+            }
+            // Sınamanın kullanıcının Resimler klasöründe bıraktığı dosyayı KALDIR.
+            if let Err(e) = std::fs::remove_file(&path) {
+                log::warn!("QAC sınama dosyası silinemedi: {e}");
+            } else {
+                note("sınama dosyası Resimler klasöründen silindi");
+            }
+        }
+        None => {
+            check(false, "kaydetme panelinden dosya çıkmadı");
+        }
+    }
+
+    sleep(600);
+    for id in gallery_ids(app).iter().filter(|i| !before.contains(i)) {
+        let id = id.clone();
+        on_main(app, move |h| crate::gallery::delete(h, &id));
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(400);
+    remove_card(app);
+}
+
+/// Tıklama geçirgenliği: kayıt sürerken overlay'in ÜSTÜNDEN yapılan gerçek bir
+/// tıklama ALTTAKİ pencereye ulaşmalı. Sentetik olayla ölçülemeyen tek şey buydu.
+#[cfg(target_os = "macos")]
+fn flow_clickthrough(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— tıklama geçirgenliği (kayıt sürerken) —");
+    if !crate::capture::recorder::is_supported() {
+        note("video kaydı bu macOS sürümünde yok — adım atlandı");
+        return;
+    }
+    let Some(card) = install_card(app, m, "colors") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+    let before_vids = video_ids(app);
+
+    on_main(app, |h| crate::capture::start(h, "video"));
+    if !check(wait_overlay(app, "capture-0"), "kaydedici overlay'i açıldı") {
+        remove_card(app);
+        return;
+    }
+    lower_main(app);
+    sleep(600);
+
+    // ── Olumsuz durum ÖNCE ────────────────────────────────────────────────
+    // Kayıt başlamadan overlay TAMAMEN etkileşimli (`setHitAreas([{everything}])`).
+    // Buradaki gerçek tıklama alttaki pencereye ULAŞMAMALI. Bu adım olmasa test
+    // "hiç tıklama gitmiyor" ile "geçirgenlik çalışıyor"u ayırt edemezdi.
+    let (cx, cy) = card.tl_center();
+    let (sx, sy) = to_screen(m, cx, cy);
+    mouse::move_to(sx, sy);
+    sleep(700);
+    mouse::click(sx, sy);
+    sleep(500);
+
+    // Kayıt bir SEÇİM olmadan başlamıyor (`startRecording`: `if (!state.selectionRect) return;`).
+    // Gerçek sürüklemeyle seç — kullanıcının yaptığının aynısı.
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    let (dx1, dy1) = to_screen(m, qx, qy);
+    let (dx2, dy2) = to_screen(m, qx + qw, qy + qh);
+    mouse::drag(dx1, dy1, dx2, dy2, 22);
+    sleep(700);
+
+    // Sayfa gerçekten hazır mı? Kayıt düğmesi bir seçim oluşmadan iş görmüyor.
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        r#"(function(){
+  const b = document.getElementById('btn-record');
+  let r = null; try { r = state.selectionRect; } catch (e) { }
+  window.api.sendDebugLog('QAC rec.state=[' + document.body.className + ']'
+    + ' btn=' + (b ? getComputedStyle(b).display : 'yok')
+    + ' secim=' + (r ? Math.round(r.w) + 'x' + Math.round(r.h) : 'yok'));
+})();"#
+            .to_string(),
+    );
+    note(&format!("kaydedici durumu: {}", wait_probe("rec.state", 2500).unwrap_or_default()));
+
+    eval(app, "capture-0", click_el_js("btn-record"));
+    let mut rec = false;
+    for _ in 0..50 {
+        sleep(100);
+        if app.state::<crate::capture::recorder::RecorderState>().0.lock().unwrap().is_some() {
+            rec = true;
+            break;
+        }
+    }
+    check(rec, "kayıt başladı");
+    sleep(1500);
+
+    // ── Olumlu durum ──────────────────────────────────────────────────────
+    // Kayıt sürerken overlay yalnız araç çubuğunun dikdörtgeninde tıklanabilir;
+    // gerisi geçirgen. Geçirgenlik ANLIK DEĞİL: ana süreç imleci 30 ms'de bir
+    // yokluyor ve konuma göre pencereyi geçirgen yapıyor (`windows/hit_test.rs`).
+    //
+    // Overlay'e de bir sayaç takılıyor: tıklama ORAYA düşerse geçirgenlik hiç
+    // çalışmamış demektir. İki sayaç, üç durumu ayırt ediyor (overlay yedi /
+    // kart aldı / ikisi de almadı) — tek sayaçla "çalışmıyor" ile "tıklama başka
+    // yere gitti" ayırt edilemezdi.
+    eval(
+        app,
+        "capture-0",
+        "window.__qacHits = 0; document.addEventListener('mousedown', () => { window.__qacHits++; }, true);".to_string(),
+    );
+    sleep(200);
+
+    // İKİ tıklama: macOS'ta etkin OLMAYAN bir pencereye ilk tıklama pencereyi
+    // etkinleştirmekle harcanıyor ve içeriğe hiç ulaşmıyor (AppKit "first mouse").
+    // Kullanıcı da farkında olmadan bunu yapıyor; ölçülen şey ikincisinin ulaşması.
+    mouse::move_to(sx, sy);
+    sleep(900);
+    mouse::click(sx, sy);
+    sleep(500);
+    mouse::click(sx, sy);
+    sleep(600);
+
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        "window.api.sendDebugLog('QAC ov.hits=' + (window.__qacHits ?? -1));".to_string(),
+    );
+    let overlay_hits = wait_probe("ov.hits", 2500).unwrap_or_default();
+    note(&format!("overlay'in yediği tıklama: {overlay_hits} (0 olmalı — geçirgen)"));
+    check(overlay_hits == "0", "kayıt sırasında overlay tıklamayı YEMEDİ");
+
+    eval(app, "capture-0", click_el_js("btn-stop"));
+    sleep(9000);
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(800);
+
+    // Sayaç ANCAK ŞİMDİ okunuyor: overlay pencereyi örterken WKWebView belgeyi
+    // gizli sayıp zamanlayıcıları donduruyor ve günlük geç geliyor. Ölçülen şey
+    // tıklamanın ULAŞIP ULAŞMADIĞI, ne zaman raporlandığı değil.
+    on_main(app, crate::windows::main_window::show);
+    sleep(700);
+    clear_probes();
+    eval(
+        app,
+        crate::windows::main_window::LABEL,
+        "window.api.sendDebugLog('QAC card.clicks=' + (document.getElementById('qa-card')?.dataset.clicks ?? 'kart-yok'));".to_string(),
+    );
+    let clicks = wait_probe("card.clicks", 3000).unwrap_or_default();
+    note(&format!("kartın saydığı tıklama: {clicks:?} (beklenen 1: kayıt öncesi geçmemeli, kayıt sırasında geçmeli)"));
+    // Kayıt ÖNCESİ tek tıklama geçmemeli (overlay o an tamamen etkileşimli),
+    // kayıt SIRASINDA iki tıklamadan en az biri geçmeli.
+    let n: u32 = clicks.parse().unwrap_or(0);
+    check(
+        n >= 1,
+        &format!("tıklama geçirgenliği: kayıt sırasında tıklama ALTTAKİ pencereye ulaştı ({n})"),
+    );
+
+    for id in video_ids(app).iter().filter(|i| !before_vids.contains(i)) {
+        let id = id.clone();
+        on_main(app, move |h| crate::videos::delete(h, &id, true));
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(600);
+    remove_card(app);
+}
+
+#[cfg(target_os = "macos")]
+fn snip_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with("snip_") && n.ends_with(".png"))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn video_ids(app: &tauri::AppHandle) -> Vec<String> {
+    let state = app.state::<AppState>();
+    crate::videos::public_list(&state.store)
+        .iter()
+        .filter_map(|v| v.get("id").and_then(|i| i.as_str()).map(str::to_string))
+        .collect()
+}
+
 // ── Temizlik ───────────────────────────────────────────────────────────────
 
 fn gallery_ids(app: &tauri::AppHandle) -> Vec<String> {
@@ -905,6 +1428,22 @@ pub fn run(app: tauri::AppHandle, which: String) {
             if has("scroll") { flow_scroll(&app, &m); }
             // İkinci monitör: overlay'in DOĞRU ekrana, doğru ölçekle oturduğu ancak
             // orada seçim yapılıp piksel okunarak kanıtlanabiliyor (bkz. A11).
+            // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
+            // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
+            #[cfg(target_os = "macos")]
+            if has("pointer") || has("save") || has("through") {
+                let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
+                if !trusted {
+                    crate::platform::macos::permissions::is_trusted_accessibility(true);
+                    check(false, "Erişilebilirlik izni YOK — sistem diyaloğu açıldı, izni verip UYGULAMAYI YENİDEN BAŞLATIN");
+                } else {
+                    note("Erişilebilirlik izni var — gerçek imleç kullanılıyor");
+                    if has("pointer") { flow_pointer(&app, &m); }
+                    if has("save") { flow_savepanel(&app, &m); }
+                    if has("through") { flow_clickthrough(&app, &m); }
+                }
+            }
+
             if has("multi") {
                 match crate::geom::all_monitors(&app).get(1) {
                     Some(m2) => {
@@ -926,6 +1465,12 @@ pub fn run(app: tauri::AppHandle, which: String) {
             let fails = *FAILS.lock().unwrap();
             note(&format!("bitti: {fails} başarısız adım"));
             println!("QAC SONUC: {fails} başarısız");
+            // Kendiliğinden ÇIK. Harness bittiğinde süreç ayakta kalırsa tek-örnek
+            // eklentisi bir sonraki başlatmayı sessizce düşürüyor: ikinci koşu hiçbir
+            // şey yazmadan biter ve "test takıldı" gibi görünür. `--shot-save` de
+            // aynı şeyi yapıyor. Çıkış store'u da diske indiriyor.
+            sleep(400);
+            app.exit(0);
         })
         .ok();
 }

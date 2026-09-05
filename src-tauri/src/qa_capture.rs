@@ -1352,6 +1352,112 @@ fn video_ids(app: &tauri::AppHandle) -> Vec<String> {
         .collect()
 }
 
+/// Akıştan TEK kare alır. `exclude` boş verilirse ayıklama yapılmaz — iki koşuyu
+/// karşılaştırmak, ayıklamanın gerçekten iş yapıp yapmadığını söyleyen tek ölçüm.
+///
+/// (İskeleti `claude/overlay-exclusion` dalındaki ölçümden alındı.)
+#[cfg(target_os = "macos")]
+fn grab_frame(m: &MonitorInfo, x: f64, y: f64, w: f64, h: f64, exclude: &[u32]) -> Option<Img> {
+    use std::sync::Arc;
+    // SON kare tutuluyor: ScreenCaptureKit'in ilk kareleri boş/bayat gelebiliyor.
+    let slot: Arc<Mutex<Option<Img>>> = Arc::new(Mutex::new(None));
+    let sink = slot.clone();
+    let channel = tauri::ipc::Channel::<tauri::ipc::InvokeResponseBody>::new(move |body| {
+        if let tauri::ipc::InvokeResponseBody::Raw(b) = body {
+            // Başlık: `u32 seq | u32 w | u32 h`, ardından RGBA (scroll_stream::HEADER).
+            if b.len() >= 12 {
+                let fw = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
+                let fh = u32::from_le_bytes(b[8..12].try_into().unwrap()) as usize;
+                if fw > 0 && fh > 0 && b.len() >= 12 + fw * fh * 4 {
+                    *sink.lock().unwrap() =
+                        Some(Img { w: fw, h: fh, rgba: b[12..12 + fw * fh * 4].to_vec() });
+                }
+            }
+        }
+        Ok(())
+    });
+
+    let sc = m.scale;
+    let mut stream = match crate::capture::scroll_stream::start(
+        m, x * sc, y * sc, w * sc, h * sc, 15, exclude, channel,
+    ) {
+        Ok(st) => st,
+        Err(e) => {
+            log::error!("QAC ölçüm akışı kurulamadı: {e}");
+            return None;
+        }
+    };
+    sleep(1400);
+    stream.stop();
+    sleep(200);
+    let img = slot.lock().unwrap().take();
+    img
+}
+
+/// Ayıklama listesi GERÇEKTEN iş yapıyor mu, yoksa `content_protected` tek başına
+/// mı yetiyor?
+///
+/// Overlay seçim yokken TÜM ekranı %50 siyahla karartıyor ve altında yakalama anının
+/// DONMUŞ görüntüsünü tutuyor. Overlay akışa girerse kart kararmış görünür. Aynı
+/// bölge iki kez okunuyor: bir kez overlay'in kimlikleri dışlanarak, bir kez BOŞ
+/// listeyle. İkisi de parlaksa ayıklama gereksiz (ikinci hat), ikincisi karanlıksa
+/// ayıklama yük taşıyor.
+#[cfg(target_os = "macos")]
+fn flow_exclusion(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— ayıklama gerçekten iş yapıyor mu —");
+    let Some(card) = install_card(app, m, "colors") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+
+    on_main(app, |h| crate::capture::start(h, "draw"));
+    if !check(wait_overlay(app, "capture-0"), "overlay açıldı (karartma ve donmuş arkalık ekranda)") {
+        remove_card(app);
+        return;
+    }
+    lower_main(app);
+    sleep(400);
+
+    let ids = crate::capture::overlay_window_ids(app);
+    note(&format!("overlay CGWindowID'leri: {ids:?}"));
+    if !check(!ids.is_empty(), "overlay'in CGWindowID'si okunabildi") {
+        on_main(app, |h| crate::capture::close_all(h, None));
+        remove_card(app);
+        return;
+    }
+
+    // Sol üst çeyrek: bilinen KIRMIZI. Karartma altında kırmızı yarıya iner.
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    let (rx, ry, rw, rh) = (qx, qy, qw / 2.0, qh / 2.0);
+
+    let with = grab_frame(m, rx, ry, rw, rh, &ids);
+    let without = grab_frame(m, rx, ry, rw, rh, &[]);
+    on_main(app, |h| crate::capture::close_all(h, None));
+
+    match (with, without) {
+        (Some(a), Some(b)) => {
+            let ca = sample(&a, 0.5, 0.5);
+            let cb = sample(&b, 0.5, 0.5);
+            note(&format!("ayıklamalı kare: {} | ayıklamasız kare: {}", hex_of(ca), hex_of(cb)));
+            check(ca.0 > 140.0, "ayıklamalı kare kartın gerçek rengini gösteriyor (overlay yok)");
+            if cb.0 > 140.0 {
+                note(
+                    "BULGU: ayıklama listesi BOŞKEN de kare temiz. Overlay `content_protected`                      (NSWindowSharingNone) ile zaten akışa girmiyor; kimlik listesi İKİNCİ HAT.",
+                );
+            } else {
+                note(&format!(
+                    "BULGU: ayıklama listesi boşken kare KARARIYOR ({} → {}). Kimlik listesi                      yük taşıyor, tek koruma content_protected değil.",
+                    hex_of(ca), hex_of(cb)
+                ));
+            }
+        }
+        _ => {
+            check(false, "ölçüm: akıştan kare alınamadı");
+        }
+    }
+    remove_card(app);
+}
+
 // ── Temizlik ───────────────────────────────────────────────────────────────
 
 fn gallery_ids(app: &tauri::AppHandle) -> Vec<String> {
@@ -1426,6 +1532,9 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     if has("through") { flow_clickthrough(&app, &m); }
                 }
             }
+
+            #[cfg(target_os = "macos")]
+            if has("exclusion") { flow_exclusion(&app, &m); }
 
             if has("multi") {
                 match crate::geom::all_monitors(&app).get(1) {

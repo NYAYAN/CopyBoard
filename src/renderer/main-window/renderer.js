@@ -1,6 +1,7 @@
 import { initState, setupEventListeners, updateHistoryState, resetSearchState, applyShortcutEnabled } from './modules/events.js';
 import { renderHistory } from './modules/history-renderer.js';
 import { initGallery } from './modules/gallery.js';
+import { initVideos } from './modules/videos.js';
 import { initTooltips } from './modules/tooltip.js';
 import { initKeyboard } from './modules/keyboard.js';
 import { initColorPicker } from './modules/color-picker.js';
@@ -94,6 +95,7 @@ async function fillMicDevices(selected) {
     initKeyboard();
     setupEventListeners();
     initGallery();
+    initVideos();
     initTooltips(); // native title tooltips are invisible in an always-on-top window
 
     // 5. Render Initial History

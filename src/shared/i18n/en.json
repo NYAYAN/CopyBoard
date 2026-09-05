@@ -347,5 +347,7 @@
   "video": "videos",
   "Oynat": "Play",
   "Mikrofon": "Microphone",
-  "Sistem varsayılanı": "System default"
+  "Sistem varsayılanı": "System default",
+  "Videoyu sil": "Delete video",
+  "Bu kayıt diskten silinecek.": "This recording will be deleted from disk."
 }

@@ -291,11 +291,17 @@ pub fn run() {
                 let h = handle.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1200));
-                    // Üçüncü parça `noaudio` ise sistem sesi kapalı (bellek/CPU ayrıştırması için).
+                    // Üçüncü parça ses kipi: `noaudio` | `sys` (varsayılan) | `mic` | `both`.
                     let mut parts = spec.split(',');
                     let quality = parts.next().filter(|q| !q.is_empty()).unwrap_or("high").to_string();
                     let secs: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(5);
-                    let with_audio = parts.next() != Some("noaudio");
+                    let mode = parts.next().unwrap_or("sys");
+                    let (with_mic, with_audio) = match mode {
+                        "noaudio" => (false, false),
+                        "mic" => (true, false),
+                        "both" => (true, true),
+                        _ => (false, true), // sys
+                    };
                     let monitors = geom::all_monitors(&h);
                     let Some(m) = monitors.first().cloned() else {
                         // Ekran uykudayken monitör listesi BOŞ dönüyor. `exit` olmadan
@@ -305,14 +311,14 @@ pub fn run() {
                         h.exit(0);
                         return;
                     };
-                    let path = std::env::temp_dir().join(format!("copyboard-record-test-{quality}.mp4"));
+                    let path = std::env::temp_dir().join(format!("copyboard-record-test-{quality}-{mode}.mp4"));
                     let started = capture::recorder::start(
                         &m, 200.0, 200.0, 1280.0, 720.0, &quality,
-                        false, with_audio, "test".into(), path.clone(),
+                        with_mic, with_audio, "test".into(), path.clone(),
                     );
                     match started {
                         Ok(mut rec) => {
-                            println!("RECORD_TEST: başladı ({quality}, {secs} sn, ses={})", if with_audio { "sistem" } else { "yok" });
+                            println!("RECORD_TEST: başladı ({quality}, {secs} sn, ses={mode})");
                             std::thread::sleep(std::time::Duration::from_secs(secs));
                             match rec.stop() {
                                 Ok(p) => {

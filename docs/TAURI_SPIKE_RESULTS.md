@@ -1018,3 +1018,60 @@ durdurma: 36 ms
 > koruyucu seviyesindeki penceresi yakalamayı bastırdığı için AVAssetWriter yolunda
 > kare üretmedi; imleç hareketi ise fazla sıkıştırılabilir olduğundan bit hızını
 > doyurmuyor. Gerçek kullanımda ölçülmesi gerekiyor.
+
+### 🔴 BULGU R-20 — Mikrofon kaydı uygulamayı kilitliyordu
+
+Ses yollarının tam testinde iki ayrı hata çıktı; ikisi de kullanıcıya "kayıt çalışmıyor"
+olarak yansıyacaktı.
+
+**1. Mikrofon tek başına açıldığında `start_capture()` DÖNMÜYORDU.** Yığın:
+
+```
+SCStream::start_capture → SyncCompletion::wait → pthread_cond_wait
+```
+
+Tamamlanma geri çağrısı hiç gelmiyor, izin diyaloğu da çıkmıyor — süreç sonsuza dek
+asılı kalıyor. Sebep: `capturesMicrophone = true` iken `capturesAudio = false` olması
+geçersiz. Artık ses yakalama mikrofon için de açılıyor; sistem sesi istenmediyse
+yalnız o kaynağın İŞLEYİCİSİ kaydedilmiyor, yani dosyaya girmiyor.
+
+> Ayrı bir tuzak: çıplak `target/debug/copyboard` binary'sinin `Info.plist`i yok, bu
+> yüzden mikrofon izni hiç istenemiyor. Ses testleri **paketten** yapılmalı
+> (`npm run build -- --debug --bundles app`).
+
+**2. İki kaynak açıkken kayıt komple bozuluyordu.** Mikrofon ve sistem sesi aynı
+`AVAssetWriterInput`a yazılıyordu; biçimleri farklı olduğu için ekleme -12737 ile
+reddediliyor, **1436 ses örneği düşüyor ve video da 1 karede kalıyordu**. Her kaynak
+artık KENDİ izine yazıyor.
+
+### Ses yollarının tam test matrisi
+
+Ölçüm: 8 sn, imleç hareketiyle, sistem sesi için `afplay` döngüsü. Ses içeriği
+çözülüp RMS ile doğrulandı (sessizlik değil, gerçek dalga formu).
+
+| Kip | Video | Sistem sesi izi | Mikrofon izi | Ses içeriği (RMS) |
+|---|---|---|---|---|
+| `noaudio` | 407 kare, 53,1 fps | — | — | — |
+| `sys` | 387 kare, 48,0 fps | 378 örnek, 47 kbps | — | 815 (tepe 11748) |
+| `mic` | 384 kare, 47,5 fps | — | 378 örnek, 93 kbps | 449 (tepe 3705) |
+| `both` | 385 kare, 47,7 fps | 379 örnek, 47,4 kbps | 378 örnek, 95,6 kbps | 814 |
+
+`both` dosyasında `afinfo` iki ses izi görüyor ve her ikisi de tek başına
+ölçüldüklerindeki hızlarda — yani hiçbir kaynak kaybolmuyor.
+
+### Kalite kademelerinin tam taraması
+
+| Kademe | Çözünürlük | Kare hızı | Hedef bit hızı |
+|---|---|---|---|
+| low    | 640×360   | 30 fps | 5 Mbps |
+| medium | 960×540   | 30 fps | 10 Mbps |
+| high   | 1280×720  | 60 fps | 25 Mbps |
+| ultra  | 1280×720  | 60 fps | 50 Mbps |
+
+Ölçülen kare hızları tavanın altında (low/medium ~24, high/ultra ~48): imleç hareketi
+her karede değişiklik üretmiyor, `with_fps` bir TAVAN. Kademeler arası oran doğru.
+
+> **Bilinen sınır:** iki ses kaynağı açıkken dosya İKİ ses izi taşıyor, karıştırılmış
+> tek iz değil. QuickTime ikisini birlikte çalıyor; bazı oynatıcılar (ör. VLC)
+> varsayılan olarak yalnız ilkini çalar. Tek ize indirmek PCM karıştırma ve zamanlama
+> hizalaması ister.

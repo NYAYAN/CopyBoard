@@ -46,13 +46,20 @@ unsafe extern "C" {
     fn CVPixelBufferGetBaseAddressOfPlane(pb: *mut std::ffi::c_void, plane: usize) -> *mut u8;
     fn CVPixelBufferGetBytesPerRowOfPlane(pb: *mut std::ffi::c_void, plane: usize) -> usize;
     fn CVPixelBufferGetHeightOfPlane(pb: *mut std::ffi::c_void, plane: usize) -> usize;
-    fn CVPixelBufferGetWidthOfPlane(pb: *mut std::ffi::c_void, plane: usize) -> usize;
     fn CVPixelBufferGetBaseAddress(pb: *mut std::ffi::c_void) -> *mut u8;
     fn CVPixelBufferGetBytesPerRow(pb: *mut std::ffi::c_void) -> usize;
     fn CVPixelBufferGetHeight(pb: *mut std::ffi::c_void) -> usize;
-    fn CVPixelBufferGetWidth(pb: *mut std::ffi::c_void) -> usize;
     fn CVPixelBufferLockBaseAddress(pb: *mut std::ffi::c_void, flags: u64) -> i32;
     fn CVPixelBufferUnlockBaseAddress(pb: *mut std::ffi::c_void, flags: u64) -> i32;
+    #[cfg(test)]
+    fn CVPixelBufferCreate(
+        allocator: *const std::ffi::c_void,
+        width: usize,
+        height: usize,
+        pixel_format: u32,
+        attrs: *const std::ffi::c_void,
+        out: *mut *mut std::ffi::c_void,
+    ) -> i32;
     fn CVPixelBufferPoolCreatePixelBuffer(
         allocator: *const std::ffi::c_void,
         pool: *mut std::ffi::c_void,
@@ -94,7 +101,6 @@ unsafe fn copy_pixel_buffer(src: *mut std::ffi::c_void, dst: *mut std::ffi::c_vo
                 CVPixelBufferGetBaseAddress(dst),
                 CVPixelBufferGetBytesPerRow(dst),
                 CVPixelBufferGetHeight(src).min(CVPixelBufferGetHeight(dst)),
-                CVPixelBufferGetWidth(src).min(CVPixelBufferGetWidth(dst)) * 4,
             )
         } else {
             // Düzlemli biçim (420v: Y + CbCr). Satır uzunlukları farklı olabilir,
@@ -106,7 +112,6 @@ unsafe fn copy_pixel_buffer(src: *mut std::ffi::c_void, dst: *mut std::ffi::c_vo
                     CVPixelBufferGetBaseAddressOfPlane(dst, i),
                     CVPixelBufferGetBytesPerRowOfPlane(dst, i),
                     CVPixelBufferGetHeightOfPlane(src, i).min(CVPixelBufferGetHeightOfPlane(dst, i)),
-                    CVPixelBufferGetWidthOfPlane(src, i).min(CVPixelBufferGetWidthOfPlane(dst, i)),
                 )
             })
         };
@@ -117,6 +122,19 @@ unsafe fn copy_pixel_buffer(src: *mut std::ffi::c_void, dst: *mut std::ffi::c_vo
     }
 }
 
+/// Satır uzunluğu STRIDE'dan alınıyor, piksel genişliğinden DEĞİL.
+///
+/// İlk hâli satır uzunluğunu `CVPixelBufferGetWidthOfPlane` ile hesaplıyordu ve bu
+/// 420v'nin kroma düzleminde YANLIŞ: orada her piksel 2 bayt (Cb ve Cr iç içe), yani
+/// bayt cinsinden satır, piksel genişliğinin İKİ KATI. Sonuç, kroma satırlarının
+/// yalnız ilk yarısının kopyalanmasıydı; kalan yarı hedef tamponun sıfırlarıyla
+/// kalıyor ve sıfır kroma = YEŞİL. Kullanıcı bunu "ekranın yarısı yeşil" olarak
+/// gördü — luma (parlaklık) düzlemi doğru kopyalandığı için görüntünün şekli
+/// duruyor, yalnız rengi gidiyordu.
+///
+/// Stride zaten "bir satır kaç bayt" sorusunun tanımı; dolgu da dahil kopyalamak
+/// hem doğru hem düzlem biçiminden bağımsız.
+///
 /// # Safety
 /// İşaretçiler geçerli ve verilen ölçülere uygun olmalı.
 unsafe fn copy_plane(
@@ -125,12 +143,11 @@ unsafe fn copy_plane(
     dst: *mut u8,
     dst_stride: usize,
     rows: usize,
-    row_bytes: usize,
 ) -> bool {
     if src.is_null() || dst.is_null() {
         return false;
     }
-    let n = row_bytes.min(src_stride).min(dst_stride);
+    let n = src_stride.min(dst_stride);
     for r in 0..rows {
         unsafe {
             std::ptr::copy_nonoverlapping(src.add(r * src_stride), dst.add(r * dst_stride), n);
@@ -548,6 +565,68 @@ impl AssetWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Kroma düzlemi TAM kopyalanıyor mu?
+    ///
+    /// Üretimde çıkan hata buydu: satır uzunluğu düzlemin PİKSEL genişliğinden
+    /// hesaplanıyordu, oysa 420v'nin kroma düzleminde her piksel 2 bayt (Cb+Cr iç
+    /// içe). Satırların yalnız ilk yarısı kopyalanıyor, kalanı sıfır kalıyordu —
+    /// sıfır kroma yeşil demek, kullanıcı da "ekranın yarısı yeşil" olarak gördü.
+    ///
+    /// Test hedefi bilerek dolgu (0xAA) ile başlatıyor: eksik kopyalanan her bayt
+    /// bu değerle yakalanır.
+    #[test]
+    fn kroma_duzlemi_satirlarin_tamamini_kopyaliyor() {
+        const W: usize = 64;
+        const H: usize = 32;
+        const K_420V: u32 = 0x3432_3076; // '420v'
+
+        unsafe fn make(fill: u8) -> *mut std::ffi::c_void {
+            let mut pb: *mut std::ffi::c_void = std::ptr::null_mut();
+            let rc = unsafe {
+                CVPixelBufferCreate(std::ptr::null(), W, H, K_420V, std::ptr::null(), &mut pb)
+            };
+            assert_eq!(rc, 0, "CVPixelBufferCreate başarısız");
+            unsafe {
+                CVPixelBufferLockBaseAddress(pb, 0);
+                for i in 0..CVPixelBufferGetPlaneCount(pb) {
+                    let base = CVPixelBufferGetBaseAddressOfPlane(pb, i);
+                    let stride = CVPixelBufferGetBytesPerRowOfPlane(pb, i);
+                    let rows = CVPixelBufferGetHeightOfPlane(pb, i);
+                    std::ptr::write_bytes(base, fill, stride * rows);
+                }
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+            }
+            pb
+        }
+
+        unsafe {
+            // Kaynak: her bayt 0x5A. Hedef: her bayt 0xAA (kopyalanmayan yer belli olsun).
+            let src = make(0x5A);
+            let dst = make(0xAA);
+            assert!(copy_pixel_buffer(src, dst), "kopyalama başarısız");
+
+            CVPixelBufferLockBaseAddress(dst, K_CV_READ_ONLY);
+            let planes = CVPixelBufferGetPlaneCount(dst);
+            assert_eq!(planes, 2, "420v iki düzlemli olmalı (Y + CbCr)");
+
+            for i in 0..planes {
+                let base = CVPixelBufferGetBaseAddressOfPlane(dst, i);
+                let stride = CVPixelBufferGetBytesPerRowOfPlane(dst, i);
+                let rows = CVPixelBufferGetHeightOfPlane(dst, i);
+                let bytes = std::slice::from_raw_parts(base, stride * rows);
+                let kalan = bytes.iter().filter(|&&b| b == 0xAA).count();
+                assert_eq!(
+                    kalan, 0,
+                    "düzlem {i}: {kalan} bayt kopyalanmadı ({} baytın)                       — kroma yarısı eksik kalırsa görüntü yeşile döner",
+                    bytes.len()
+                );
+            }
+            CVPixelBufferUnlockBaseAddress(dst, K_CV_READ_ONLY);
+            CFRelease(src);
+            CFRelease(dst);
+        }
+    }
 
     #[test]
     fn kalite_kademesi_bit_hizina_donusuyor() {

@@ -1075,3 +1075,55 @@ her karede değişiklik üretmiyor, `with_fps` bir TAVAN. Kademeler arası oran 
 > tek iz değil. QuickTime ikisini birlikte çalıyor; bazı oynatıcılar (ör. VLC)
 > varsayılan olarak yalnız ilkini çalar. Tek ize indirmek PCM karıştırma ve zamanlama
 > hizalaması ister.
+
+### 🔴 BULGU R-21 — Kaydın sağ yarısı yeşil çıkıyordu
+
+Kullanıcı bildirdi: "video çektiğimde ekranın yarısı yeşil görünüyor."
+
+`copy_pixel_buffer` satır uzunluğunu düzlemin PİKSEL genişliğinden hesaplıyordu.
+420v'nin kroma düzleminde her piksel **2 bayt** (Cb ve Cr iç içe), yani bayt cinsinden
+satır piksel genişliğinin iki katı. Sonuç: kroma satırlarının yalnız ilk yarısı
+kopyalanıyor, kalan yarı hedef tamponun sıfırlarıyla kalıyordu — ve **sıfır kroma =
+yeşil**. Luma düzlemi doğru kopyalandığı için görüntünün şekli duruyor, yalnız rengi
+gidiyordu; bu yüzden "yarısı yeşil" olarak görünüyordu.
+
+Düzeltme: satır uzunluğu artık STRIDE'dan alınıyor. Stride zaten "bir satır kaç bayt"
+sorusunun tanımı, dolayısıyla düzlem biçiminden bağımsız olarak doğru.
+
+### Test yöntemi düzeltildi: artık GÖRÜNTÜYE bakılıyor
+
+Bu hatanın kaçmasının sebebi test yönteminin kendisiydi. Kayıtların kare sayısı, bit
+hızı, süresi, iz yapısı ölçülüyordu — **görüntünün kendisi hariç her şey**. Renk
+bozulması bu ölçümlerin hiçbirini değiştirmiyor.
+
+İki katman eklendi:
+
+**1. Bayt düzeyinde birim testi.** Sentetik 420v tamponlar üretiliyor, hedef 0xAA ile
+dolduruluyor, kopyalama sonrası kalan tek bir 0xAA baytı bile hata sayılıyor. Hata
+geri konduğunda testin çıktısı:
+
+```
+düzlem 1: 512 bayt kopyalanmadı (1024 baytın)
+```
+
+Tam yarısı — belirtinin birebir karşılığı.
+
+**2. Uçtan uca renk karşılaştırması.** Aynı ekran bölgesi hem videoya alınıyor hem de
+uygulamanın kendi still yakalamasıyla (`--shot-save`) PNG'ye yazılıyor; iki kaynağın
+çeyrek ortalamaları karşılaştırılıyor. Ölçüm:
+
+| Çeyrek | Video (düzeltilmiş) | Still (referans) | Video (HATALI) |
+|---|---|---|---|
+| sol üst | 61,62,62 | 58,59,59 | 61,62,62 |
+| sağ üst | 47,49,49 | 45,45,46 | **1,145,0** |
+| sol alt | 50,50,38 | 46,46,35 | 50,50,38 |
+| sağ alt | 41,41,35 | 38,37,32 | **0,142,0** |
+
+Düzeltilmiş kayıt referansı ~%1,5 içinde izliyor (YUV 4:2:0 + JPEG yuvarlaması) ve
+renk İLİŞKİLERİ korunuyor — "sol alt"taki mavi eksikliği iki kaynakta da aynı. Hatalı
+derlemede sağ yarı saf yeşil.
+
+> Yöntem notu: `screencapture` bu kabuktan siyah dönüyor (sürecin ekran kaydı izni
+> yok), o yüzden referans görüntü uygulamanın KENDİ yakalama yolundan alınıyor. Ayrıca
+> ölçüm ekranı `monitors[0]` — bu makinede dahili Retina (0,0 1800×1169 @2x), harici
+> monitör değil.

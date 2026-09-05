@@ -318,6 +318,7 @@ pub fn run() {
                         h.exit(0);
                         return;
                     };
+                    println!("RECORD_TEST: monitör[0] = {},{} {}x{} ölçek={}", m.x, m.y, m.width, m.height, m.scale);
                     let path = std::env::temp_dir().join(format!("copyboard-record-test-{quality}-{mode}.mp4"));
                     let started = capture::recorder::start(
                         &m, 200.0, 200.0, 1280.0, 720.0, &quality,
@@ -337,6 +338,81 @@ pub fn run() {
                         }
                         Err(e) => println!("RECORD_TEST: başlatma hatası: {e}"),
                     }
+                    h.exit(0);
+                });
+            }
+
+            // Geliştirme kolaylığı: `--shot-save=<yol>` monitör[0]'ı PNG olarak yazar.
+            // Videodaki rengi, AYNI bölgenin bilinen-doğru still görüntüsüyle
+            // karşılaştırmak için: renk bozulması varsa iki kaynak ayrışır.
+            #[cfg(debug_assertions)]
+            if let Some(out) = std::env::args().find_map(|a| a.strip_prefix("--shot-save=").map(std::path::PathBuf::from)) {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(1200));
+                    let monitors = geom::all_monitors(&h);
+                    match monitors.first().and_then(|m| capture::screenshot::capture_monitor(m, 0)) {
+                        Some(f) => {
+                            let _ = std::fs::write(&out, &f.png);
+                            println!("SHOT_SAVE: {}x{} -> {}", f.width, f.height, out.display());
+                        }
+                        None => println!("SHOT_SAVE: yakalanamadı"),
+                    }
+                    h.exit(0);
+                });
+            }
+
+            // Geliştirme kolaylığı: `--ui-test` ana pencerede sekme geçişlerini GERÇEK
+            // webview içinde sınar ve sonucu günlüğe yazar. Taklit köprüyle yapılan
+            // test renderer'ı doğruluyor ama Tauri katmanını atlıyor; bu onu kapatıyor.
+            #[cfg(debug_assertions)]
+            if std::env::args().any(|a| a == "--ui-test") {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(2500));
+                    let inner = h.clone();
+                    let _ = h.run_on_main_thread(move || {
+                        windows::main_window::show(&inner);
+                    });
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    let Some(w) = h.get_webview_window(windows::main_window::LABEL) else {
+                        println!("UI_TEST: ana pencere yok");
+                        h.exit(0);
+                        return;
+                    };
+                    let script = r#"
+(async () => {
+  const rapor = [];
+  const app = document.querySelector('.app');
+  const vis = (id) => { const e = document.getElementById(id); return e ? getComputedStyle(e).display : 'yok'; };
+  const bekle = (ms) => new Promise(r => setTimeout(r, ms));
+  const kayit = (ad) => rapor.push(ad + ': view=' + app.dataset.view
+      + ' galeri=' + vis('gallery-panel') + ' video=' + vis('videos-panel'));
+
+  kayit('baslangic');
+  document.getElementById('videos-btn').click();  await bekle(400);
+  kayit('VIDEO');
+  const kart = document.querySelectorAll('#videos-grid .video-item').length;
+  const bos  = document.querySelector('#videos-grid .empty-state') ? 'evet' : 'hayir';
+  document.getElementById('gallery-btn').click(); await bekle(300);
+  kayit('RESIM');
+  const shot = document.querySelectorAll('#gallery-grid .gallery-item').length;
+  document.getElementById('settings-btn').click(); await bekle(300);
+  kayit('AYARLAR');
+  const mik = [...(document.getElementById('audio-mic-device')?.options || [])].map(o => o.textContent);
+  const kal = [...(document.getElementById('video-quality')?.options || [])].map(o => o.textContent);
+
+  window.api.sendDebugLog('UI_TEST ' + rapor.join(' | ')
+     + ' || video_kart=' + kart + ' bos_durum=' + bos
+     + ' ekran_goruntusu=' + shot
+     + ' || mikrofon=' + JSON.stringify(mik)
+     + ' || kalite=' + JSON.stringify(kal));
+})();
+"#;
+                    if let Err(e) = w.eval(script) {
+                        println!("UI_TEST: script çalıştırılamadı: {e}");
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(2500));
                     h.exit(0);
                 });
             }

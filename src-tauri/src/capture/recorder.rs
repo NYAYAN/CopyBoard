@@ -108,6 +108,9 @@ pub fn start(
     // kullanılıyor — kulaklık takılıp çıkarıldığında seçim kendiliğinden takip etsin
     // diye varsayılan bilerek boş bırakıldı.
     mic_device: &str,
+    // Kayda GİRMEYECEK pencerelerin CGWindowID'leri — yakalama overlay'leri
+    // (bkz. `capture::overlay_window_ids`).
+    exclude_window_ids: &[u32],
     window_label: String,
     out_path: PathBuf,
 ) -> Result<Recording, String> {
@@ -126,10 +129,14 @@ pub fn start(
         .ok_or("monitör bulunamadı")?;
 
     // Overlay'imiz (seçim çerçevesi, araç çubuğu, sayaç) kayda GİRMEMELİ.
+    //
+    // Ayıklama KİMLİKLE, başlıkla değil (bkz. `capture::overlay_window_ids`):
+    // uygulamanın her penceresinin başlığı "CopyBoard" olduğu için başlığa bakan
+    // filtre CopyBoard'un KENDİ arayüzünü de kayıttan siliyordu.
     let excluded: Vec<_> = content
         .windows()
         .into_iter()
-        .filter(|w| w.title().map(|t| t.contains("CopyBoard")).unwrap_or(false))
+        .filter(|w| exclude_window_ids.contains(&w.window_id()))
         .collect();
 
     let filter = SCContentFilter::create()

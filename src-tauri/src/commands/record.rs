@@ -146,6 +146,9 @@ pub async fn record_start(
             mic,
             system,
             &mic_device,
+            // Kayıt tek monitörde sürecek ama `close_all_except` HENÜZ çağrılmadı;
+            // o an açık olan HER overlay dışlanıyor.
+            &crate::capture::overlay_window_ids(&app),
             label.clone(),
             path,
         )
@@ -350,8 +353,12 @@ pub async fn scroll_begin(
         // overlay'leri yalnızca yolda duran karartılmış camlar olurdu.
         crate::capture::close_all_except(&app, &label);
 
+        // Ayıklama listesi AKIŞTAN HEMEN ÖNCE toplanıyor: `close_all_except` diğer
+        // monitörlerin overlay'lerini yeni kapattı, yani listede yalnız ekranda
+        // gerçekten duran pencere kalıyor.
+        let exclude = crate::capture::overlay_window_ids(&app);
         let stream = crate::capture::scroll_stream::start(
-            &monitor, x, y, width, height, 15, Some("CopyBoard"), channel,
+            &monitor, x, y, width, height, 15, &exclude, channel,
         )
         .map_err(|e| {
             crate::windows::toast::show(&app, &format!("Ekran akışı başlatılamadı: {e}"), "error");

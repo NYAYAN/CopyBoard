@@ -8,7 +8,7 @@
 //! Kareler Windows.Graphics.Capture'dan (`windows-capture`). WGC içerik değişince kare
 //! veriyor — kaydırmada tam istediğimiz şey; `fps` üst sınırı burada uygulanıyor
 //! (Spike-5: 15 fps, sıkıştırma YOK). Overlay `WDA_EXCLUDEFROMCAPTURE` ile kurulu,
-//! karelere girmiyor; bu yüzden `exclude_window_title` Windows'ta kullanılmıyor.
+//! karelere girmiyor; bu yüzden `exclude_window_ids` Windows'ta kullanılmıyor.
 
 #![cfg(target_os = "windows")]
 
@@ -130,7 +130,7 @@ fn wgc_monitor(monitor: &crate::geom::MonitorInfo) -> Result<Monitor, String> {
     Ok(Monitor::from_raw_hmonitor(h.0))
 }
 
-/// Akışı başlatır. `crop_*` FİZİKSEL piksel, monitöre göreli. `exclude_window_title`
+/// Akışı başlatır. `crop_*` FİZİKSEL piksel, monitöre göreli. `exclude_window_ids`
 /// macOS imzasıyla uyum için alınıyor; Windows'ta overlay zaten yakalamadan dışlanmış.
 #[allow(clippy::too_many_arguments)]
 pub fn start(
@@ -140,7 +140,7 @@ pub fn start(
     crop_w: f64,
     crop_h: f64,
     fps: u32,
-    _exclude_window_title: Option<&str>,
+    _exclude_window_ids: &[u32],
     channel: Channel<InvokeResponseBody>,
 ) -> Result<ScrollStream, String> {
     let wgc = wgc_monitor(monitor)?;

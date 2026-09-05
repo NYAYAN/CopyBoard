@@ -1190,19 +1190,34 @@ görülürdü.
 
 Üç monitörlü kullanıcı düzeni hâlâ denenmedi.
 
-### Yan bulgu: CopyBoard kendi penceresini kaydırmalı yakalayamıyor
+### Yan bulgu, sonradan DÜZELTİLDİ: CopyBoard kendi penceresini yakalayamıyordu
 
-İlk kaydırma denemesi 0 satırla döndü. Sebep bir hata değil, bilinçli bir karar:
-`scroll_begin` akıştan başlığında **"CopyBoard" geçen tüm pencereleri** dışlıyor
-(`commands/record.rs`, `Some("CopyBoard")`) ki overlay'in karartması ve HUD'ı filme
-girmesin. Uygulamanın her penceresinin başlığı "CopyBoard" (`windows/mod.rs`), yani
-dışlama uygulamanın TAMAMINI kapsıyor.
+İlk kaydırma denemesi 0 satırla döndü. Sebep bir hata değil, gereğinden geniş bir
+karardı: `scroll_begin` (ve `record_start`) akıştan başlığında **"CopyBoard" geçen
+tüm pencereleri** çıkarıyordu ki overlay'in karartması ve HUD'ı sonuca film olmasın.
+Uygulamanın HER penceresinin başlığı "CopyBoard" (`windows/mod.rs`), yani ayıklama
+uygulamanın TAMAMINI kapsıyordu: kullanıcı CopyBoard'un kendi geçmiş listesini,
+galerisini ya da ayarlar panelini ne kaydedebiliyor ne de kaydırmalı
+yakalayabiliyordu.
 
-Sonuç: kullanıcı CopyBoard'ın kendi geçmiş listesini kaydırmalı olarak yakalayamıyor.
-Gerçek kullanımda önemsiz; ama sınama kartı da görünmez olduğu için harness kaydırma
-hedefini başlığı farklı, ayrı bir pencerede açıyor. Ekranda gerçekten duran, gerçek
-WKWebView'ın boyadığı ve akışa gerçek ScreenCaptureKit üzerinden giren bir pencere —
-kullanıcının senaryosundan tek farkı pencerenin sahibi.
+Ayıklama başlıktan **CGWindowID**'ye çevrildi (`capture::overlay_window_ids`,
+`platform::capture_window_id` → `NSWindow.windowNumber`): filtreye yalnız o an açık
+olan yakalama overlay'lerinin kimlikleri veriliyor. Başlık serbest kaldı.
+
+Ölçüm — aynı harness, aynı kurulum, iki kod hâli:
+
+| | Başlıkla ayıklama | Kimlikle ayıklama |
+|---|---|---|
+| Hedef: CopyBoard'un ana penceresi | **0 satır**, 4 kontrol düştü | **2420 px / 25 birleşim** |
+| Kırpmanın kenar sütunları | ölçülemedi (görüntü yok) | **13** (kartın koyu şeridi) |
+
+Sızıntı ölçümü şöyle kuruldu: kaydırma kartının sol ve sağ kenarına koyu şerit
+konuyor ve kart overlay'in ALTINA indiriliyor. Overlay'in 2 px beyaz seçim çerçevesi
+tam o sınıra çiziliyor; akışa girseydi kenar sütunları ~255 okunurdu, 13 okundu.
+
+Kartı indirmek şart: ana pencere `ScreenSaver` (1000), overlay `PopUpMenu` (101)
+seviyesinde, yani kart normalde overlay'in ÜSTÜNDE duruyor. İndirmeden yapılan bir
+sızıntı ölçümü ayıklamayı değil katman sırasını ölçerdi ve her hâlde geçerdi.
 
 ## GERÇEK imleç — `--qa-capture=pointer,save,through`
 

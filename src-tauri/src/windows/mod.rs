@@ -120,10 +120,15 @@ pub fn build(app: &tauri::AppHandle, spec: WindowSpec) -> Result<WebviewWindow, 
     // açık temalı bir OS'ta Sistem modu her pencereyi koyu açıyordu.
     let os_is_dark = crate::commands::core::os_prefers_dark(app);
     let mut b = WebviewWindowBuilder::new(app, spec.label, WebviewUrl::App(spec.url.into()))
-        // Başlık çerçevesiz pencerede görünmüyor ama BOŞ DEĞİL: kaydedici ve kaydırma
-        // akışı, kendi overlay'lerini kayıttan dışlamak için ScreenCaptureKit'e
-        // "başlığı CopyBoard içeren pencereler" filtresi veriyor. Başlık verilmezse
-        // wry "Tauri App" yazıyor ve o filtre hiçbir pencereyi yakalamıyordu.
+        // Başlık çerçevesiz pencerede görünmüyor ama BOŞ DEĞİL: ekran paylaşım
+        // seçicileri, Görev Yöneticisi ve erişilebilirlik ağacı bunu gösteriyor —
+        // verilmezse wry "Tauri App" yazıyor.
+        //
+        // Yakalama filtresi buna BAKMIYOR. Bir zamanlar bakıyordu ("başlığı CopyBoard
+        // içeren pencereler") ve her pencerenin başlığı bu olduğu için filtre
+        // overlay'i değil uygulamanın TAMAMINI siliyordu: CopyBoard kendi geçmişini
+        // ya da galerisini kaydedemiyordu. Ayıklama artık overlay'in CGWindowID'siyle
+        // yapılıyor (bkz. `capture::overlay_window_ids`) — başlık serbest.
         .title("CopyBoard")
         .initialization_script(boot_script(app, os_is_dark))
         .inner_size(spec.width, spec.height)

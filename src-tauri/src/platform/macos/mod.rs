@@ -64,6 +64,24 @@ where
     })?
 }
 
+/// Pencerenin CGWindowID'si.
+///
+/// macOS'ta `NSWindow.windowNumber` ile CGWindowID AYNI sayıdır, yani
+/// ScreenCaptureKit'in `SCWindow.window_id`'siyle doğrudan karşılaştırılabilir.
+/// Yakalama filtresi overlay'i BAŞLIKLA değil bununla ayıklıyor: uygulamanın her
+/// penceresinin başlığı "CopyBoard" (bkz. `windows::build`) ve başlığa bakan bir
+/// filtre CopyBoard'un kendi arayüzünü de akıştan siliyordu.
+pub fn window_id(window: &tauri::WebviewWindow) -> Result<u32, String> {
+    let number = with_ns_window(window, |ns| ns.windowNumber())?;
+    // AppKit ekran aygıtı olmayan pencereye 0 ya da negatif veriyor. 0'ı sessizce
+    // `0u32`ye çevirmek en kötü sonucu doğururdu: liste dolu görünür ama hiçbir
+    // SCWindow'la eşleşmez, yani overlay dışlanmadan akışa girer.
+    if number <= 0 {
+        return Err(format!("pencerenin ekran aygıtı yok (windowNumber={number})"));
+    }
+    u32::try_from(number).map_err(|_| format!("pencere numarası CGWindowID değil: {number}"))
+}
+
 /// `NSWindow.level` — Electron'un `'screen-saver'` / `'pop-up-menu'` seviyeleri.
 pub fn set_ns_level(window: &tauri::WebviewWindow, level: isize) -> Result<(), String> {
     with_ns_window(window, move |ns| ns.setLevel(level))

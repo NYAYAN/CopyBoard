@@ -63,6 +63,27 @@ fn quality_scale(quality: &str) -> f64 {
     }
 }
 
+/// Kalite kademesi → kare hızı. Electron'daki eşleme birebir korunuyor.
+///
+/// Arayüz bu sayıları KULLANICIYA VAAT EDİYOR ("Yüksek (60fps)", "Ultra (60fps)"),
+/// ama port `with_fps(30)` ile sabitlenmişti: her kademe 30 fps kaydediyordu. Hareketli
+/// içerikte fark bariz — kullanıcı bunu "görüntü kalitesi düştü" olarak görüyor.
+///
+/// | Kademe | Electron | Port (önce) | Şimdi |
+/// |---|---|---|---|
+/// | ultra  | 60 | 30 | 60 |
+/// | high   | 60 | 30 | 60 |
+/// | medium | 30 | 30 | 30 |
+/// | low    | 30 | 30 | 30 |
+///
+/// SCStream için bu bir TAVAN: ekran daha seyrek güncelleniyorsa o kadar kare üretilir.
+fn quality_fps(quality: &str) -> u32 {
+    match quality {
+        "low" | "medium" => 30,
+        _ => 60, // high / ultra
+    }
+}
+
 /// Kayıt için gereken macOS sürümü var mı? `SCRecordingOutput` 15.0+ ister.
 ///
 /// `capture::start` bunu overlay açılmadan ÖNCE soruyor: paket 12.3'e kadar iniyor ve
@@ -114,6 +135,7 @@ pub fn start(
 
     let s = monitor.scale;
     let k = quality_scale(quality);
+    let fps = quality_fps(quality);
     // Çift sayıya yuvarla: H.264 tek boyutlu kareleri sevmiyor.
     let out_w = ((crop_w * k / 2.0).round() * 2.0).max(2.0) as u32;
     let out_h = ((crop_h * k / 2.0).round() * 2.0).max(2.0) as u32;
@@ -126,7 +148,7 @@ pub fn start(
         .with_width(out_w)
         .with_height(out_h)
         .with_pixel_format(PixelFormat::BGRA)
-        .with_fps(30)
+        .with_fps(fps)
         .with_shows_cursor(true)
         .with_captures_audio(capture_system_audio)
         .with_captures_microphone(capture_mic)
@@ -166,7 +188,7 @@ pub fn start(
     stream.start_capture().map_err(|e| e.to_string())?;
 
     log::info!(
-        "kayıt: {out_w}x{out_h} @30fps, kalite={quality}, mikrofon={capture_mic}, sistem sesi={capture_system_audio}"
+        "kayıt: {out_w}x{out_h} @{fps}fps, kalite={quality}, mikrofon={capture_mic}, sistem sesi={capture_system_audio}"
     );
     Ok(Recording { stream, recording, path: out_path, finished, failed, window_label })
 }
@@ -232,6 +254,17 @@ impl Recording {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kalite_kademesi_kare_hizina_donusuyor() {
+        // Arayüz "Yüksek (60fps)" ve "Ultra (60fps)" yazıyor; kod bunu tutmalı.
+        assert_eq!(quality_fps("ultra"), 60);
+        assert_eq!(quality_fps("high"), 60);
+        assert_eq!(quality_fps("medium"), 30);
+        assert_eq!(quality_fps("low"), 30);
+        // Bilinmeyen değer en iyi kademeye düşer — quality_scale ile aynı politika.
+        assert_eq!(quality_fps("bilinmeyen"), 60);
+    }
 
     #[test]
     fn kalite_cozunurluk_carpanina_donusuyor() {

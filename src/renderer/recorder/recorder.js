@@ -449,7 +449,10 @@ function stopRecording() {
 }
 
 window.api.onRecordSaveReady(() => {
-    if (instruction) instruction.style.display = 'none';
+    // Yazıyı GİZLEME. Panel açılana kadar ekran boş kalırsa kullanıcı durdurmanın
+    // işe yaramadığını sanıp tekrar basıyor. Panel başka bir monitörde açılmışsa da
+    // bu yazı nereye bakacağını söylüyor.
+    if (instruction) instruction.textContent = t('Kaydetme penceresi açılıyor…');
 });
 
 btnRecord.addEventListener('click', startRecording);

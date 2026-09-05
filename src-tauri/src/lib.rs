@@ -298,7 +298,11 @@ pub fn run() {
                     let with_audio = parts.next() != Some("noaudio");
                     let monitors = geom::all_monitors(&h);
                     let Some(m) = monitors.first().cloned() else {
-                        println!("RECORD_TEST: monitör yok");
+                        // Ekran uykudayken monitör listesi BOŞ dönüyor. `exit` olmadan
+                        // süreç sonsuza dek asılı kalıyordu — bir sonraki testte
+                        // "takıldı" gibi görünen şey buydu.
+                        println!("RECORD_TEST: monitör yok (ekran uykuda olabilir)");
+                        h.exit(0);
                         return;
                     };
                     let path = std::env::temp_dir().join(format!("copyboard-record-test-{quality}.mp4"));

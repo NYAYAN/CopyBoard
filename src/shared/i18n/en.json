@@ -341,5 +341,11 @@
   "\"{shortcut}\" kısayolu bu sürümde tanınmadığı için varsayılana döndürüldü. Ayarlar'dan yeniden seçebilirsiniz.": "The \"{shortcut}\" shortcut was reset to its default because this version does not recognise it. You can pick it again in Settings.",
   "Daha fazla": "More",
   "Video hazırlanıyor…": "Preparing video…",
-  "Kaydetme penceresi açılıyor…": "Opening save window…"
+  "Kaydetme penceresi açılıyor…": "Opening save window…",
+  "Videolar": "Videos",
+  "Henüz video kaydı yok.": "No video recordings yet.",
+  "video": "videos",
+  "Oynat": "Play",
+  "Mikrofon": "Microphone",
+  "Sistem varsayılanı": "System default"
 }

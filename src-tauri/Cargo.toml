@@ -37,9 +37,11 @@ log = "0.4"
 # (GitHub Actions imajlarında hazır gelir). eng+tur verisi binary'ye gömülür,
 # yani 9,9 MB'lık .traineddata dosyaları paketten çıkar.
 tesseract-rs = { version = "0.4", features = ["build-tesseract", "embed-tessdata"] }
-objc2-av-foundation = { version = "0.3.2", features = ["AVAssetWriter", "AVAssetWriterInput", "AVMediaFormat", "AVVideoSettings", "AVError", "objc2-core-media", "AVAudioSettings"] }
+objc2-av-foundation = { version = "0.3.2", features = ["AVAssetWriter", "AVAssetWriterInput", "AVMediaFormat", "AVVideoSettings", "AVError", "objc2-core-media", "AVAudioSettings", "AVAssetTrack"] }
 objc2-core-media = { version = "0.3.2", features = ["CMSampleBuffer", "CMTime"] }
 objc2-core-video = "0.3.2"
+objc2-core-graphics = "0.3.2"
+objc2-core-foundation = "0.3.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Video kaydı ve kaydırmalı yakalama kare akışı. macOS 12.3+ (Spike-4/S4-d kararı).

@@ -80,6 +80,14 @@ window.api.onUpdateHistory((history) => {
     updateHistoryState(history);
 });
 
+// Yeni bir kayıt yapıldığında liste kendiliğinden tazelensin — kullanıcı paneli
+// kapatıp açmak zorunda kalmasın.
+if (window.api.onUpdateVideos) {
+    window.api.onUpdateVideos((list) => {
+        import('./modules/videos.js').then((m) => m.setVideos(list));
+    });
+}
+
 window.api.onResetView(() => {
     import('./modules/modals.js').then(({ resetView }) => {
         resetView();

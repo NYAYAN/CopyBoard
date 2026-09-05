@@ -1,4 +1,5 @@
 import { elements } from './dom.js';
+import * as videos from './videos.js';
 import { hideModal, confirmAction, settleConfirm } from './modals.js';
 import { renderHistory } from './history-renderer.js';
 import { resetSelection } from './keyboard.js';
@@ -69,7 +70,7 @@ export function applyShortcutEnabled(key, enabled) {
 }
 
 // ── Views ────────────────────────────────────────────────────────────────────────
-const VIEW_TITLES = { gallery: 'Ekran Görüntüleri', settings: 'Ayarlar' };
+const VIEW_TITLES = { gallery: 'Ekran Görüntüleri', videos: 'Videolar', settings: 'Ayarlar' };
 
 function showView(view) {
     elements.app.dataset.view = view;
@@ -77,6 +78,9 @@ function showView(view) {
         elements.viewTitle.textContent = t(VIEW_TITLES[view] || '');
     }
     if (view === 'settings') onSettingsShown();
+    // Liste her açılışta tazeleniyor: video kaydı bu pencere kapalıyken yapılmış
+    // olabilir ve dosyalar kullanıcının klasöründe, Finder'dan silinmiş olabilir.
+    if (view === 'videos') videos.refresh();
     if (view === 'history') focusSearch();
 }
 
@@ -157,6 +161,7 @@ export function setupEventListeners() {
 
     // Navigation
     elements.galleryBtn.addEventListener('click', () => showView('gallery'));
+    if (elements.videosBtn) elements.videosBtn.addEventListener('click', () => showView('videos'));
     elements.settingsBtn.addEventListener('click', () => showView('settings'));
     elements.backBtn.addEventListener('click', () => showView('history'));
 
@@ -287,6 +292,13 @@ export function setupEventListeners() {
             else if (currentView() !== 'history') showView('history');
             else if (elements.searchInput.value) clearSearch();
             else window.api.closeWindow();
+            return;
+        }
+
+        // Video paneli kendi klavyesini yönetiyor (gezinme, oynat, klasörde göster,
+        // sil). Escape yukarıda ele alındı, o yüzden buraya gelen her şey panelin.
+        if (currentView() === 'videos' && videos.handleKey(e)) {
+            e.preventDefault();
             return;
         }
 

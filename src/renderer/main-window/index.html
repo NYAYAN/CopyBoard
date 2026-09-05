@@ -53,6 +53,14 @@
                         <path d="m21 15-5-5L5 21" />
                     </svg>
                 </button>
+                <button id="videos-btn" class="icon-btn" data-when="history" title="Videolar"
+                    aria-label="Videolar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2.5" y="5" width="13" height="14" rx="2.5" />
+                        <path d="M15.5 10.5 21 7.5v9l-5.5-3z" />
+                    </svg>
+                </button>
                 <button id="settings-btn" class="icon-btn" data-when="history" title="Ayarlar" aria-label="Ayarlar">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
@@ -112,6 +120,22 @@
                 <div class="hints">
                     <span class="hint"><kbd>↑↓</kbd>Seç</span>
                     <span class="hint"><kbd>↵</kbd>Kopyala</span>
+                    <span class="hint"><kbd class="kbd-mod">Ctrl</kbd><kbd>⌫</kbd>Sil</span>
+                </div>
+            </footer>
+        </section>
+
+        <!-- ══ Video gallery view ════════════════════════════════════════════════ -->
+        <section class="view view-videos" id="videos-panel" data-view-name="videos">
+            <div id="videos-grid" class="gallery-grid single" role="listbox" aria-label="Videolar"
+                tabindex="-1">
+                <!-- Kartlar modules/videos.js tarafından basılıyor -->
+            </div>
+            <footer class="statusbar">
+                <span id="videos-count" class="status-count"></span>
+                <div class="hints">
+                    <span class="hint"><kbd>↵</kbd>Oynat</span>
+                    <span class="hint"><kbd>F</kbd>Klasörde Göster</span>
                     <span class="hint"><kbd class="kbd-mod">Ctrl</kbd><kbd>⌫</kbd>Sil</span>
                 </div>
             </footer>

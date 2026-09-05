@@ -21,6 +21,8 @@
 #[cfg(target_os = "macos")]
 pub mod recorder;
 #[cfg(target_os = "macos")]
+pub mod mixer;
+#[cfg(target_os = "macos")]
 pub mod writer;
 #[cfg(target_os = "windows")]
 #[path = "recorder_win.rs"]

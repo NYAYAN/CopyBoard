@@ -37,6 +37,7 @@ use screencapturekit::prelude::*;
 use screencapturekit::stream::output_trait::SCStreamOutputTrait;
 use screencapturekit::stream::output_type::SCStreamOutputType;
 
+use super::mixer::{self, Mixer};
 use super::writer::AssetWriter;
 
 pub struct Recording {
@@ -185,14 +186,24 @@ pub fn start(
         out_h,
         fps,
         bitrate,
-        capture_system_audio,
-        capture_mic,
+        capture_system_audio || capture_mic,
     )?);
+
+    // Mikrofon VE sistem sesi birlikte isteniyorsa karıştırma devrede: mikrofon
+    // örnekleri kuyruğa alınıp sistem sesi tamponunun İÇİNE ekleniyor, tek iz çıkıyor.
+    // Yalnız biri açıksa karıştıracak bir şey yok, o kaynak doğrudan yazılıyor.
+    let mixing = capture_system_audio && capture_mic;
+    let mixer = Arc::new(Mixer::default());
 
     // ── Akış çıktısı ─────────────────────────────────────────────────────────
     // Görüntü ve ses AYRI işleyiciler ve AYRI kuyruklardan geliyor; ikisi de aynı
     // `AssetWriter`a yazıyor. Eş zamanlılık orada input başına `Mutex` ile çözülü.
-    struct Sink(Arc<AssetWriter>);
+    struct Sink {
+        writer: Arc<AssetWriter>,
+        mixer: Arc<Mixer>,
+        /// Mikrofon, sistem sesine karıştırılacak mı? (İkisi de açıksa evet.)
+        mixing: bool,
+    }
     impl SCStreamOutputTrait for Sink {
         fn did_output_sample_buffer(&self, sample: CMSampleBuffer, of_type: SCStreamOutputType) {
             // Hazır olmayan tamponu eklemek yazıcıyı hata durumuna düşürür.
@@ -241,11 +252,38 @@ pub fn start(
                     // `image_buffer()` +1'i sahipleniyor ve `Drop` ile bırakıyor.
                     // Sarmalayıcı ekleme bitene kadar CANLI tutulmalı.
                     let Some(pb) = sample.image_buffer() else { return };
-                    unsafe { self.0.append_video(pb.as_ptr(), pts) };
+                    unsafe { self.writer.append_video(pb.as_ptr(), pts) };
                     drop(pb);
                 }
-                SCStreamOutputType::Audio => unsafe { self.0.append_audio(ptr, false) },
-                SCStreamOutputType::Microphone => unsafe { self.0.append_audio(ptr, true) },
+                SCStreamOutputType::Microphone if self.mixing => {
+                    // Mikrofon YAZILMIYOR, kuyruğa alınıyor: taşıyıcı sistem sesi
+                    // tamponu. Mikrofon mono geliyor (ölçüldü: 1 tampon, 512 kare),
+                    // stereo'ya açma işi karıştırma anında yapılıyor.
+                    if let Some(abl) = sample.audio_buffer_list() {
+                        if let Some(b) = abl.iter().next() {
+                            self.mixer.push_mic(mixer::as_f32(b.data()));
+                        }
+                    }
+                }
+                SCStreamOutputType::Audio if self.mixing => {
+                    // Bekleyen mikrofon örneklerini bu tamponun İÇİNE ekle, sonra yaz.
+                    // Aynı mono örnekler her iki stereo düzlemine de gidiyor; kuyruk
+                    // yalnız SON düzlemde tüketiliyor.
+                    if let Some(mut abl) = sample.audio_buffer_list() {
+                        let n = abl.num_buffers();
+                        for i in 0..n {
+                            if let Some(b) = abl.get_mut(i) {
+                                let last = i + 1 == n;
+                                let plane = unsafe { mixer::as_f32_mut(b.data_mut()) };
+                                self.mixer.mix_into(plane, last);
+                            }
+                        }
+                    }
+                    unsafe { self.writer.append_audio(ptr) };
+                }
+                SCStreamOutputType::Audio | SCStreamOutputType::Microphone => {
+                    unsafe { self.writer.append_audio(ptr) };
+                }
             }
         }
     }
@@ -260,24 +298,19 @@ pub fn start(
     let aq = DispatchQueue::new("com.copyboard.record.audio", DispatchQoS::UserInitiated);
 
     let mut stream = SCStream::new(&filter, &config);
-    stream.add_output_handler_with_queue(
-        Sink(writer.clone()),
-        SCStreamOutputType::Screen,
-        Some(&vq),
-    );
+    let sink = |w: &Arc<AssetWriter>, m: &Arc<Mixer>| Sink {
+        writer: w.clone(),
+        mixer: m.clone(),
+        mixing,
+    };
+    stream.add_output_handler_with_queue(sink(&writer, &mixer), SCStreamOutputType::Screen, Some(&vq));
     if capture_system_audio {
-        stream.add_output_handler_with_queue(
-            Sink(writer.clone()),
-            SCStreamOutputType::Audio,
-            Some(&aq),
-        );
+        stream.add_output_handler_with_queue(sink(&writer, &mixer), SCStreamOutputType::Audio, Some(&aq));
     }
     if capture_mic {
-        stream.add_output_handler_with_queue(
-            Sink(writer.clone()),
-            SCStreamOutputType::Microphone,
-            Some(&aq),
-        );
+        // Mikrofon ve sistem sesi AYNI kuyrukta: karıştırma sırasında ikisi aynı
+        // FIFO'ya dokunuyor ve tek kuyruk, kilit çekişmesini baştan siliyor.
+        stream.add_output_handler_with_queue(sink(&writer, &mixer), SCStreamOutputType::Microphone, Some(&aq));
     }
     stream.start_capture().map_err(|e| e.to_string())?;
 

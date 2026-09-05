@@ -158,6 +158,8 @@ pub fn run() {
             commands::ready::window_ready,
             commands::record::set_video_quality,
             commands::record::set_audio_mic,
+            commands::record::set_audio_mic_device,
+            commands::record::list_audio_inputs,
             commands::record::set_audio_system,
             commands::record::get_audio_settings,
             commands::record::ensure_mic_permission,
@@ -314,7 +316,7 @@ pub fn run() {
                     let path = std::env::temp_dir().join(format!("copyboard-record-test-{quality}-{mode}.mp4"));
                     let started = capture::recorder::start(
                         &m, 200.0, 200.0, 1280.0, 720.0, &quality,
-                        with_mic, with_audio, "test".into(), path.clone(),
+                        with_mic, with_audio, "", "test".into(), path.clone(),
                     );
                     match started {
                         Ok(mut rec) => {

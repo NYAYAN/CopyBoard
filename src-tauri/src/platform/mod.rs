@@ -227,3 +227,16 @@ pub fn install_power_observers(app: &tauri::AppHandle) {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = app;
 }
+
+/// Ses giriş aygıtları. macOS dışında boş — orada seçim henüz yazılmadı.
+pub fn audio_inputs() -> Vec<serde_json::Value> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::audio_devices::list()
+            .into_iter()
+            .filter_map(|d| serde_json::to_value(d).ok())
+            .collect()
+    }
+    #[cfg(not(target_os = "macos"))]
+    { Vec::new() }
+}

@@ -315,6 +315,8 @@
         onRecordSaveReady: (cb) => on('record-save-ready', cb),
         recordStop: () => send('record_stop'),
         setVideoQuality: (v) => send('set_video_quality', { value: String(v) }),
+        setAudioMicDevice: (v) => send('set_audio_mic_device', { value: String(v) }),
+        listAudioInputs: () => invoke('list_audio_inputs').catch(() => []),
         setAudioMic: (v) => send('set_audio_mic', { value: !!v }),
         setAudioSystem: (v) => send('set_audio_system', { value: !!v }),
         getAudioSettings: () => ask('get_audio_settings', {}, { mic: false, system: false }),

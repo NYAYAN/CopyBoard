@@ -35,6 +35,7 @@ export const elements = {
     quickPasteCountInput: $('quickpaste-count'),
     incognitoCheck: $('incognito-check'),
     videoQualitySelect: $('video-quality'),
+    micDeviceSelect: $('audio-mic-device'),
     autostartCheck: $('autostart-check'),
     updateBtn: $('update-btn'),
     aboutVersion: $('about-version'),

@@ -19,6 +19,18 @@ pub fn set_video_quality(app: tauri::AppHandle, value: String) {
     app.state::<AppState>().settings().set_video_quality(value);
 }
 
+/// Kullanılabilir ses giriş aygıtları.
+#[tauri::command]
+pub fn list_audio_inputs() -> Vec<serde_json::Value> {
+    crate::platform::audio_inputs()
+}
+
+/// Mikrofon aygıtını seçer. Boş dizge = sistem varsayılanını izle.
+#[tauri::command]
+pub fn set_audio_mic_device(app: tauri::AppHandle, value: String) {
+    app.state::<AppState>().settings().set_audio_mic_device(value);
+}
+
 #[tauri::command]
 pub fn set_audio_mic(app: tauri::AppHandle, value: bool) {
     app.state::<AppState>().settings().set_audio_mic(value);
@@ -83,6 +95,7 @@ pub async fn record_start(
         let state = app.state::<AppState>();
         let settings = state.settings();
         let (quality, mic, system) = (settings.video_quality(), settings.audio_mic(), settings.audio_system());
+        let mic_device = settings.audio_mic_device();
         let path = std::env::temp_dir().join(format!(
             "copyboard_kayit_{}.mp4",
             std::time::SystemTime::now()
@@ -99,6 +112,7 @@ pub async fn record_start(
             &quality,
             mic,
             system,
+            &mic_device,
             label.clone(),
             path,
         )

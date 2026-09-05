@@ -19,6 +19,7 @@
 pub mod hotkey_carbon;
 pub mod paste;
 pub mod permissions;
+pub mod audio_devices;
 pub mod pasteboard;
 pub mod power;
 

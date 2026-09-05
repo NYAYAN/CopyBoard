@@ -194,7 +194,7 @@ pub fn run(app: tauri::AppHandle) {
                         // Ses de açık: mikrofon + sistem sesi (WASAPI). Aygıt yoksa kayıt
                         // sessiz sürer ve log'a "ses açılamadı" düşer; adım yine geçer.
                         let started = crate::capture::recorder::start(
-                            &m, 100.0, 100.0, 640.0, 360.0, "high", true, true, "qa".into(), path.clone(),
+                            &m, 100.0, 100.0, 640.0, 360.0, "high", true, true, "", "qa".into(), path.clone(),
                         );
                         match started {
                             Err(e) => check(false, &format!("video kaydı başlatılamadı: {e}")),

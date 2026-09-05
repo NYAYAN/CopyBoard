@@ -13,6 +13,10 @@ body {
     background: transparent;
     font-family: var(--font-ui);
     user-select: none;
+    /* `-webkit-` öneki ŞART: öndeksiz kuralı WebKit ancak Safari 17'de tanıdı, taban
+       sürümümüz (macOS 12.3 / Safari 15) tanımıyor — yani bu kural WKWebView'de
+       fiilen ETKİSİZDİ ve sürüklerken mavi seçim vurgusu çıkıyordu. */
+    -webkit-user-select: none;
     /* Hidden until the capture is painted, so the cursor is never baked into it. */
     cursor: none;
 }

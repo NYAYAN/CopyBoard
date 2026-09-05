@@ -12,6 +12,15 @@ body {
     overflow: hidden;
     background: transparent;
     font-family: var(--font-ui);
+    /* Sürükleyerek çalışan bir overlay'de metin seçimi ANLAMSIZ ama sessizce oluyor:
+       hızlı sürüklerken tarayıcı altındaki DOM'u seçiyor ve WKWebView bunu mavi,
+       sönümlenen bir vurguyla boyuyor — kullanıcıya "ekranın diğer yerleri mavi olup
+       sönüyor" diye görünüyor. Chromium'da sönme animasyonu olmadığı için Electron'da
+       göze çarpmıyordu; Tauri'ye geçince ortaya çıktı.
+       `-webkit-` öneki ŞART: öndeksiz `user-select`i WebKit ancak Safari 17'de
+       tanıdı, bizim taban sürümümüz (macOS 12.3 / Safari 15) tanımıyor. */
+    user-select: none;
+    -webkit-user-select: none;
     /* Hidden until the screenshot lands, so the pointer is never baked into the capture. */
     cursor: none;
 }

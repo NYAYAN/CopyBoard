@@ -39,6 +39,9 @@ use screencapturekit::recording_output::{
 
 pub struct Recording {
     stream: SCStream,
+    /// Kayıt çıktısı DURDURMADA gerekiyor: `stop_capture()` tek başına mux'u
+    /// sonlandırmıyor — bkz. [`Recording::stop`].
+    recording: SCRecordingOutput,
     /// Kaydın yazıldığı geçici dosya. Kullanıcı kaydetmeyi iptal ederse yolu
     /// panoya gidiyor — kayıt kaybolmuyor.
     pub path: PathBuf,
@@ -165,23 +168,55 @@ pub fn start(
     log::info!(
         "kayıt: {out_w}x{out_h} @30fps, kalite={quality}, mikrofon={capture_mic}, sistem sesi={capture_system_audio}"
     );
-    Ok(Recording { stream, path: out_path, finished, failed, window_label })
+    Ok(Recording { stream, recording, path: out_path, finished, failed, window_label })
 }
 
 impl Recording {
     /// Akışı durdurur ve mux'un kapanmasını bekler. Dosya yolunu döner.
     pub fn stop(&mut self) -> Result<PathBuf, String> {
+        let t0 = std::time::Instant::now();
         self.stream.stop_capture().map_err(|e| e.to_string())?;
+        let t_capture = t0.elapsed();
 
-        // Mux'un dosyayı kapatması birkaç yüz milisaniye sürüyor. Beklemeden okumak
-        // yarım bir mp4 verir.
-        for _ in 0..50 {
+        // ── Mux'u SONLANDIR ──────────────────────────────────────────────────────
+        //
+        // `stop_capture()` yalnız kare akışını kesiyor; kayıt çıktısını kapatmıyor ve
+        // `on_finish` delegate'ini TETİKLEMİYOR. Kütüphanenin belgelediği sıra
+        // `stop_capture()` + `remove_recording_output()`; ikincisi kendi tamamlanma
+        // geri çağrısını BEKLİYOR, yani mux'un gerçekten kapandığı an burası.
+        //
+        // Bu çağrı eksikken `finished` bayrağı hiç `true` olmuyordu ve aşağıdaki
+        // döngü her seferinde 5 sn'lik zaman aşımını sonuna kadar bekliyordu —
+        // ölçüldü: yakalama 18 ms, "mux" 5,19 s, bayrak `false`. Yani kullanıcının
+        // "video hazırlanıyor, uzun sürüyor" dediği bekleme tamamen boşa geçiyordu;
+        // dosya çoktan hazırdı.
+        let t1 = std::time::Instant::now();
+        let removed = self.stream.remove_recording_output(&self.recording);
+        if let Err(e) = &removed {
+            // Sonlandırma başarısızsa aşağıdaki bekleme yine de denenir: dosya
+            // yarım da olsa elde kalsın, hata `failed` üzerinden raporlansın.
+            log::warn!("kayıt çıktısı kaldırılamadı: {e}");
+        }
+
+        // Emniyet: `remove_recording_output` döndükten sonra bayrağın oturması için
+        // kısa bir pencere. Tavan yine 5 sn ama adım 5 ms — bekleme gerçekte ne
+        // kadarsa o kadar sürsün. 100 ms'lik adımda ölçüm hep 100 ms çıkıyordu:
+        // bayrak zaten oturmuştu, sadece uykunun bitmesi bekleniyordu.
+        for _ in 0..1000 {
             if self.finished.load(Ordering::Acquire) {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        let t_mux = t1.elapsed();
+
+        log::info!(
+            "durdurma süreleri: yakalama={:?} mux={:?} toplam={:?} (mux bitti bayrağı: {})",
+            t_capture,
+            t_mux,
+            t0.elapsed(),
+            self.finished.load(Ordering::Acquire)
+        );
 
         if let Some(err) = self.failed.lock().unwrap().clone() {
             return Err(err);

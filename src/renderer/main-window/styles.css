@@ -1288,7 +1288,10 @@ kbd+kbd {
     transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.gallery-item:hover .shot-actions {
+.gallery-item:hover .shot-actions,
+.video-item:hover .shot-actions,
+/* Klavyeyle gezinirken de erişilebilsin: seçili kartın düğmeleri görünür. */
+.video-item.selected .shot-actions {
     opacity: 1;
     pointer-events: auto;
 }
@@ -1485,6 +1488,7 @@ kbd+kbd {
    taşıması: bir videonun küçük resmi tek başına hangi kayıt olduğunu söylemiyor,
    süre ve tarih söylüyor. */
 .video-item {
+    position: relative;
     display: grid;
     grid-template-columns: 128px 1fr;
     gap: var(--sp-3);
@@ -1553,4 +1557,18 @@ kbd+kbd {
     color: var(--text-subtle);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
+}
+
+/* Video kartı yatay yerleşimli (küçük resim + metin); dikey bir düğme sütunu
+   metnin üstüne binerdi. Düğmeler sağda, yatay ve dikeyde ortalı. */
+.video-item .shot-actions {
+    top: 50%;
+    right: var(--sp-2);
+    transform: translateY(-50%);
+    flex-direction: row;
+}
+
+/* Metin düğmelerin altına akmasın. */
+.video-item .video-meta {
+    padding-right: 84px;
 }

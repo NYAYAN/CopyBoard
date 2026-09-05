@@ -438,22 +438,15 @@ function stopRecording() {
     document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'none');
     // Görünmez ama hâlâ orada: her tıklama altındaki uygulamaya geçsin.
     window.api.setHitAreas([]);
-    // Mux'un dosyayı kapatması bir dakikalık kayıtta ~1,3 sn sürüyor; o boşlukta hiçbir
-    // şey olmaması "durdurunca takılıyor" olarak görülüyordu. Panel açılmak üzereyken
-    // ana süreç `record-save-ready` yolluyor ve bu yazı kalkıyor.
+    // Kayıt artık kendi klasörüne yazılıyor, kaydetme paneli yok. Yazı, mux
+    // sonlanıp overlay kapanana kadar duruyor — o aralık ölçüldüğünde ~15 ms, ama
+    // uzun bir kayıtta uzayabiliyor ve boş ekran "takıldı" gibi görünüyordu.
     if (instruction) {
         instruction.textContent = t('Video hazırlanıyor…');
         instruction.classList.remove('hidden');
         instruction.style.display = '';
     }
 }
-
-window.api.onRecordSaveReady(() => {
-    // Yazıyı GİZLEME. Panel açılana kadar ekran boş kalırsa kullanıcı durdurmanın
-    // işe yaramadığını sanıp tekrar basıyor. Panel başka bir monitörde açılmışsa da
-    // bu yazı nereye bakacağını söylüyor.
-    if (instruction) instruction.textContent = t('Kaydetme penceresi açılıyor…');
-});
 
 btnRecord.addEventListener('click', startRecording);
 function applyDefaultSize() {

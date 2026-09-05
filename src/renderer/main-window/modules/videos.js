@@ -12,6 +12,14 @@ import { elements } from './dom.js';
 
 const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 
+// Kart düğmelerinin simgeleri. Galeri modülündeki setle aynı çizgide (2px kontur,
+// yuvarlak uç) — iki ızgara yan yana durduğu için ayrışmaları göze batardı.
+const ICONS = {
+    play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5v15l12-7.5z"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+};
+
 let items = [];
 let selected = 0;
 
@@ -90,7 +98,26 @@ export function render() {
             .join(' · ');
         meta.append(name, sub);
 
-        card.append(thumb, meta);
+        // ── Kart üstü düğmeler ────────────────────────────────────────────
+        // Ekran görüntüsü galerisiyle aynı desen: normalde gizli, kartın üstüne
+        // gelince beliriyor. Kalıcı olsalar küçük resmin üstünü kapatırlardı.
+        const actions = document.createElement('div');
+        actions.className = 'shot-actions';
+        const mkBtn = (act, label, svg, onClick) => {
+            const b = document.createElement('button');
+            b.dataset.act = act;
+            b.title = label;
+            b.setAttribute('aria-label', label);
+            b.innerHTML = svg;
+            b.tabIndex = -1;
+            b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+            actions.appendChild(b);
+        };
+        mkBtn('play', t('Oynat'), ICONS.play, () => window.api.openVideo(v.id));
+        mkBtn('folder', t('Klasörde Göster'), ICONS.folder, () => window.api.revealVideo(v.id));
+        mkBtn('delete', t('Sil'), ICONS.trash, () => window.api.deleteVideo(v.id, true));
+
+        card.append(thumb, meta, actions);
         card.addEventListener('click', () => {
             selected = i;
             render();

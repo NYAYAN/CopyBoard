@@ -311,8 +311,6 @@
             x: rect.x, y: rect.y, width: rect.w, height: rect.h,
         }),
         recordChunk: () => {},
-        // Kaydetme paneli açılmak üzere — kaydedici "Video hazırlanıyor…" yazısını kaldırır.
-        onRecordSaveReady: (cb) => on('record-save-ready', cb),
         recordStop: () => send('record_stop'),
         setVideoQuality: (v) => send('set_video_quality', { value: String(v) }),
         setAudioMicDevice: (v) => send('set_audio_mic_device', { value: String(v) }),

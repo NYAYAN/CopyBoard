@@ -193,6 +193,28 @@ güncelleyici yapıtını (`.app.tar.gz`) imzalamaya çalışıyor. Paket üreti
 yalnız çıkışta bu hata basılıyor. §1'deki anahtar üretilip `TAURI_SIGNING_PRIVATE_KEY`
 verilince geçiyor.
 
+### Bekçi: imzasız derleme sessizce geçmiyor
+
+`APPLE_SIGNING_IDENTITY` tanımlı değilse Tauri paketi **sessizce** ad-hoc imzalar —
+hata yok, uyarı yok, sadece çıktıdan `Signing with identity` satırları eksilir. Bu tam
+olarak başımıza geldi: değişken `~/.zshrc`'ye eklendi ama derleme, o düzenlemeden ÖNCE
+açılmış bir terminalde çalıştırıldığı için imzasız çıktı ve fark edilmedi.
+
+`scripts/check-signing-identity.sh`, `beforeBundleCommand` olarak paketleme öncesi
+çalışıyor ve üç durumu ayırıyor:
+
+| Durum | Sonuç |
+|---|---|
+| Değişken yok | Derleme **durur**, ne yapılacağını yazar |
+| Değişken var ama anahtarlıkta yok | Derleme **durur**, mevcut kimlikleri listeler |
+| Kimlik geçerli | `İmzalama kimliği doğrulandı: …` yazıp devam eder |
+
+Bilerek imzasız derlemek için `COPYBOARD_ALLOW_UNSIGNED=1`. CI bu muafiyeti
+`release.yml` içinde **açıkça** kullanıyor: geliştirme makinesindeki kendinden imzalı
+sertifika CI'a taşınamaz (ve taşınmamalı). Developer ID alındığında o satır silinip
+yerine `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` / `APPLE_SIGNING_IDENTITY`
+secret'ları eklenir.
+
 Notlar:
 
 * `npm run dev` / `cargo run` ile çalışan **çıplak binary** için durum farklı: macOS

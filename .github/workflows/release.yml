@@ -67,6 +67,15 @@ jobs:
           # güncelleyicinin çalışması için ikisi de gerekli (bkz. SIGNING.md).
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS kod imzası (Apple Developer ID) HENÜZ YOK — CI ad-hoc imzalı yapı
+          # üretiyor. `scripts/check-signing-identity.sh` bunu normalde derlemeyi
+          # durdurarak engelliyor; burada bilerek muaf tutuluyor, çünkü geliştirme
+          # makinesindeki kendinden imzalı sertifika CI'a taşınamaz (ve taşınmamalı).
+          #
+          # Developer ID alındığında: bu satırı SİL, yerine APPLE_CERTIFICATE,
+          # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY secret'larını ekle
+          # (notarization için ayrıca APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID).
+          COPYBOARD_ALLOW_UNSIGNED: '1' 
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'CopyBoard ${{ github.ref_name }}'

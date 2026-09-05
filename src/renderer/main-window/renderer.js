@@ -7,6 +7,31 @@ import { initColorPicker } from './modules/color-picker.js';
 import { elements } from './modules/dom.js';
 import { keycapFor, applyLayoutMap } from './modules/accelerator.js';
 
+// Ses giriş aygıtlarını doldurur. Liste her yüklemede tazeleniyor: kulaklık takılıp
+// çıkarıldığında aygıtlar gelip gidiyor ve kalıcı bir liste yanıltıcı olurdu.
+async function fillMicDevices(selected) {
+    const sel = elements.micDeviceSelect;
+    if (!sel || !window.api.listAudioInputs) return;
+    const devices = await window.api.listAudioInputs();
+    // "Sistem varsayılanı" KALICI ve ilk sırada: seçilirse kimlik saklanmıyor,
+    // böylece seçim kulaklığı kendiliğinden takip ediyor.
+    sel.innerHTML = '';
+    const def = document.createElement('option');
+    def.value = '';
+    const current = devices.find((d) => d.is_default);
+    def.textContent = current ? `Sistem varsayılanı (${current.name})` : 'Sistem varsayılanı';
+    sel.appendChild(def);
+    for (const d of devices) {
+        const o = document.createElement('option');
+        o.value = d.id;
+        o.textContent = d.name;
+        sel.appendChild(o);
+    }
+    // Kayıtlı aygıt artık takılı değilse varsayılana düşülüyor — boş bir seçim
+    // göstermek yerine gerçekte ne kullanılacağını göstermek doğru.
+    sel.value = devices.some((d) => d.id === selected) ? selected : '';
+}
+
 (async () => {
     // 1. Load Initial Data
     const history = await window.api.getHistory();

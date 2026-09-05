@@ -4,7 +4,8 @@
   "version": "3.0.0",
   "identifier": "com.nurullahyayan.copyboard",
   "build": {
-    "frontendDist": "../src/renderer"
+    "frontendDist": "../src/renderer",
+    "beforeBundleCommand": "bash scripts/check-signing-identity.sh"
   },
   "app": {
     "macOSPrivateApi": true,

@@ -36,6 +36,7 @@ pub fn get_settings(app: tauri::AppHandle, state: tauri::State<'_, AppState>) ->
         "shortcutsEnabled": Value::Object(enabled),
         "autoStart": s.auto_start(),
         "videoQuality": s.video_quality(),
+        "audioMicDevice": s.audio_mic_device(),
         "clipboardPaused": s.clipboard_paused(),
         "showWidget": s.show_widget(),
         "widgetTransparent": s.widget_transparent(),

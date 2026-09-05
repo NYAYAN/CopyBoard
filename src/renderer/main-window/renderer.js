@@ -55,6 +55,7 @@ import { keycapFor, applyLayoutMap } from './modules/accelerator.js';
     elements.videoShortcutInput.value = format(settings.globalShortcutVideo);
     elements.pasteShortcutInput.value = format(settings.globalShortcutPaste);
     if (settings.videoQuality) elements.videoQualitySelect.value = settings.videoQuality;
+    fillMicDevices(settings.audioMicDevice || '');
 
     const enabled = settings.shortcutsEnabled || {};
     ['list', 'draw', 'ocr', 'color', 'scroll', 'video', 'paste'].forEach(k => applyShortcutEnabled(k, enabled[k] !== false));

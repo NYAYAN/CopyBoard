@@ -217,6 +217,9 @@ export function setupEventListeners() {
     elements.autostartCheck.addEventListener('change', (e) => window.api.setAutoStart(e.target.checked));
     elements.incognitoCheck.addEventListener('change', (e) => window.api.setClipboardPaused(e.target.checked));
     elements.videoQualitySelect.addEventListener('change', (e) => window.api.setVideoQuality(e.target.value));
+    if (elements.micDeviceSelect) {
+        elements.micDeviceSelect.addEventListener('change', (e) => window.api.setAudioMicDevice(e.target.value));
+    }
 
     elements.widgetCheck.addEventListener('change', (e) => {
         window.api.setShowWidget(e.target.checked);

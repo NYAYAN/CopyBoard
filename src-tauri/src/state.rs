@@ -91,6 +91,9 @@ impl<'a> Settings<'a> {
     setting!(video_quality, set_video_quality, "videoQuality", String, "high".into());
     setting!(audio_mic, set_audio_mic, "audioMic", bool, false);
     setting!(audio_system, set_audio_system, "audioSystem", bool, false);
+    // Mikrofon aygıtının CoreAudio UID'si. BOŞ = sistem varsayılanı — kulaklık
+    // takılınca seçimin otomatik takip etmesi için varsayılan bilerek boş.
+    setting!(audio_mic_device, set_audio_mic_device, "audioMicDevice", String, String::new());
     setting!(show_widget, set_show_widget, "showWidget", bool, false);
     setting!(widget_transparent, set_widget_transparent, "widgetTransparent", bool, false);
     setting!(widget_color, set_widget_color, "widgetColor", String, "#8957e5".into());

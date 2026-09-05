@@ -104,6 +104,10 @@ pub fn start(
     quality: &str,
     capture_mic: bool,
     capture_system_audio: bool,
+    // `mic_device`: mikrofon aygıtının CoreAudio UID'si. BOŞSA sistem varsayılanı
+    // kullanılıyor — kulaklık takılıp çıkarıldığında seçim kendiliğinden takip etsin
+    // diye varsayılan bilerek boş bırakıldı.
+    mic_device: &str,
     window_label: String,
     out_path: PathBuf,
 ) -> Result<Recording, String> {
@@ -175,6 +179,15 @@ pub fn start(
         .with_sample_rate(48_000)
         .with_channel_count(2)
         .with_queue_depth(8);
+
+    // Aygıt kimliği ancak SEÇİLDİYSE veriliyor. Boş dizge geçmek "varsayılanı izle"
+    // demek değil; ScreenCaptureKit'te geçersiz bir kimlik.
+    let config = if capture_mic && !mic_device.is_empty() {
+        log::info!("mikrofon aygıtı: {mic_device}");
+        config.with_microphone_capture_device_id(mic_device)
+    } else {
+        config
+    };
 
     // AVAssetWriter var olan dosyayı reddediyor.
     let _ = std::fs::remove_file(&out_path);

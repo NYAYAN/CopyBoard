@@ -240,6 +240,12 @@ pub fn start(
     quality: &str,
     capture_mic: bool,
     capture_system_audio: bool,
+    // Ortak çağıranla (`commands/record.rs`) imza uyumu için alınıyor. macOS'ta
+    // mikrofon aygıtı ScreenCaptureKit'e UID ile veriliyor; Windows'ta WASAPI
+    // yakalama henüz varsayılan aygıtı kullanıyor ve bu değer UYGULANMIYOR.
+    // Parametre burada durmasaydı Windows derlemesi kırılırdı (kırıldı da —
+    // macOS tarafına eklenip burası unutulmuştu).
+    _mic_device: &str,
     window_label: String,
     out_path: PathBuf,
 ) -> Result<Recording, String> {

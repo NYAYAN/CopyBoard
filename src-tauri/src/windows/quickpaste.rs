@@ -113,7 +113,7 @@ pub fn show(app: &tauri::AppHandle) {
     let handle = app.clone();
     let _ = app.global_shortcut().on_shortcut(escape_shortcut(), move |_a, _s, e| {
         if e.state == ShortcutState::Pressed {
-            crate::shortcuts::defer_to_main(&handle, |h| hide(h));
+            crate::shortcuts::defer_to_main(&handle, hide);
         }
     });
 
@@ -148,7 +148,7 @@ pub fn rearm_escape_if_visible(app: &tauri::AppHandle) {
     let handle = app.clone();
     let _ = app.global_shortcut().on_shortcut(escape_shortcut(), move |_a, _s, e| {
         if e.state == ShortcutState::Pressed {
-            crate::shortcuts::defer_to_main(&handle, |h| hide(h));
+            crate::shortcuts::defer_to_main(&handle, hide);
         }
     });
 }

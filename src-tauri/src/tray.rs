@@ -67,16 +67,16 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     };
 
     MenuBuilder::new(app)
-        .item(&item(id::SHOW, t(store, "Göster"), accel_for(&handle, ShortcutKey::List))?)
+        .item(&item(id::SHOW, t(store, "Göster"), accel_for(handle, ShortcutKey::List))?)
         // Global kısayolu kapılmış/engellenmişse (başka bir pano uygulaması, RDP
         // politikası, rezerve kombinasyon) picker'ı açmanın her zaman çalışan yolu.
-        .item(&item(id::QUICK_PASTE, t(store, "Hızlı Yapıştır"), accel_for(&handle, ShortcutKey::Paste))?)
+        .item(&item(id::QUICK_PASTE, t(store, "Hızlı Yapıştır"), accel_for(handle, ShortcutKey::Paste))?)
         .separator()
-        .item(&item(id::CAPTURE_DRAW, t(store, "Ekran Görüntüsü Al"), accel_for(&handle, ShortcutKey::Draw))?)
-        .item(&item(id::CAPTURE_OCR, t(store, "Metin Oku (OCR)"), accel_for(&handle, ShortcutKey::Ocr))?)
-        .item(&item(id::CAPTURE_COLOR, t(store, "Renk Kodu Al"), accel_for(&handle, ShortcutKey::Color))?)
-        .item(&item(id::CAPTURE_SCROLL, t(store, "Kaydırmalı Yakalama"), accel_for(&handle, ShortcutKey::Scroll))?)
-        .item(&item(id::CAPTURE_VIDEO, t(store, "Video Kaydet"), accel_for(&handle, ShortcutKey::Video))?)
+        .item(&item(id::CAPTURE_DRAW, t(store, "Ekran Görüntüsü Al"), accel_for(handle, ShortcutKey::Draw))?)
+        .item(&item(id::CAPTURE_OCR, t(store, "Metin Oku (OCR)"), accel_for(handle, ShortcutKey::Ocr))?)
+        .item(&item(id::CAPTURE_COLOR, t(store, "Renk Kodu Al"), accel_for(handle, ShortcutKey::Color))?)
+        .item(&item(id::CAPTURE_SCROLL, t(store, "Kaydırmalı Yakalama"), accel_for(handle, ShortcutKey::Scroll))?)
+        .item(&item(id::CAPTURE_VIDEO, t(store, "Video Kaydet"), accel_for(handle, ShortcutKey::Video))?)
         .separator()
         .item(&item(id::QUIT, t(store, "Çıkış"), None)?)
         .build()

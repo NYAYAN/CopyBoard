@@ -12,6 +12,20 @@
 //! olmayanları eliyor) — uygulama, kendi kopyasını saklayıp diskte iki katı yer
 //! kaplamıyor.
 
+/// Kayıtların yazıldığı dizin — ekran görüntülerinin `screenshots` klasörünün
+/// karşılığı.
+///
+/// Uygulama verisinin yanında, kullanıcının Filmler klasöründe DEĞİL: video burada
+/// uygulamanın yönettiği bir varlık (galeriden listeleniyor, siliniyor). Kullanıcının
+/// kendi klasörüne karışmak, sildiğimizde onun dosyasını silmek anlamına gelirdi.
+/// Dışarı almak isteyen "Klasörde Göster" ile taşıyabiliyor.
+pub fn videos_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join("videos")
+}
+
 use serde_json::{json, Value};
 use tauri::Manager;
 

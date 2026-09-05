@@ -332,6 +332,13 @@ pub fn run() {
                                 Ok(p) => {
                                     let size = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
                                     println!("RECORD_TEST: bitti {} ({:.2} MB)", p.display(), size as f64 / 1_048_576.0);
+                                    // Dördüncü parça `save` ise GERÇEK kaydetme yolundan
+                                    // geçir: dizine taşıma + galeriye ekleme.
+                                    if parts.next() == Some("save") {
+                                        commands::record::store_recording(&h, &p);
+                                        let n = videos::public_list(&h.state::<AppState>().store).len();
+                                        println!("RECORD_TEST: galeride {n} video");
+                                    }
                                 }
                                 Err(e) => println!("RECORD_TEST: durdurma hatası: {e}"),
                             }
@@ -394,6 +401,8 @@ pub fn run() {
   kayit('VIDEO');
   const kart = document.querySelectorAll('#videos-grid .video-item').length;
   const bos  = document.querySelector('#videos-grid .empty-state') ? 'evet' : 'hayir';
+  const dugme = [...document.querySelectorAll('#videos-grid .video-item .shot-actions button')]
+                  .map(b => b.dataset.act).join(',') || '(yok)';
   document.getElementById('gallery-btn').click(); await bekle(300);
   kayit('RESIM');
   const shot = document.querySelectorAll('#gallery-grid .gallery-item').length;
@@ -403,7 +412,7 @@ pub fn run() {
   const kal = [...(document.getElementById('video-quality')?.options || [])].map(o => o.textContent);
 
   window.api.sendDebugLog('UI_TEST ' + rapor.join(' | ')
-     + ' || video_kart=' + kart + ' bos_durum=' + bos
+     + ' || video_kart=' + kart + ' bos_durum=' + bos + ' dugmeler=' + dugme
      + ' ekran_goruntusu=' + shot
      + ' || mikrofon=' + JSON.stringify(mik)
      + ' || kalite=' + JSON.stringify(kal));

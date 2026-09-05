@@ -96,7 +96,7 @@
   "Bu sürümde güncelleme kontrolü yapılamıyor (paketlenmemiş uygulama).": "Update checks are unavailable in this build (app is not packaged).",
   "Tema:": "Theme:",
   "Koyu": "Dark",
-  "Açık": "Light",
+  "Açık": "On",
   "Sistem": "System",
   "Metin okumak için alanı seçin...": "Select an area to read text...",
   "Metni veya resmi seçmek için alanı tarayın.": "Drag over the area to select text or an image.",
@@ -349,5 +349,10 @@
   "Mikrofon": "Microphone",
   "Sistem varsayılanı": "System default",
   "Videoyu sil": "Delete video",
-  "Bu kayıt diskten silinecek.": "This recording will be deleted from disk."
+  "Bu kayıt diskten silinecek.": "This recording will be deleted from disk.",
+  "kayıt": "items",
+  "etkin": "enabled",
+  "Kapalı": "Off",
+  "Başlangıçta açılır": "Starts at login",
+  "Elle açılır": "Manual"
 }

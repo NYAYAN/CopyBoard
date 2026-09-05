@@ -76,6 +76,71 @@ export function revealWidgetSection(isOn) {
     if (isOn) setOpen(elements.widgetToggle, true);
 }
 
+// ── Başlık özetleri ──────────────────────────────────────────────────────────
+// Bölümlerin hepsi kapalı açılıyor (bilinçli: bir tık, üstelik arama asıl yolu
+// karşılıyor). Ama o hâlde ekranda GÖRÜNEN AYAR SAYISI SIFIR — 7 kapalı başlıktan
+// başka bir şey yok ve sayfa hiçbir şey anlatmıyor. Başlık artık o bölümün mevcut
+// değerlerini taşıyor: açmadan yapılandırmanızı okuyabiliyorsunuz.
+//
+// Özetler DOM'dan okunuyor, ayar deposundan değil: kontroller zaten güncel değeri
+// gösteriyor ve tek kaynak kullanmak ikisinin ayrışma ihtimalini siliyor.
+const val = (id) => document.getElementById(id);
+const selText = (id) => {
+    const el = val(id);
+    return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].textContent.trim() : '';
+};
+// Uzun seçenek etiketleri ("Yüksek (tam çözünürlük - 60fps - 25 Mbps)") başlığa
+// sığmıyor; ilk parantezden öncesi yeterince ayırt edici.
+const shortLabel = (s) => s.split('(')[0].trim();
+
+const SUMMARY = {
+    appearance: () => [shortLabel(selText('theme-select')), shortLabel(selText('language-select'))],
+    clipboard: () => {
+        const n = val('max-items')?.value;
+        const gizli = val('incognito-check')?.checked;
+        return [n ? `${n} ${t('kayıt')}` : '', gizli ? t('Gizli mod') : ''];
+    },
+    shortcuts: () => {
+        const boxes = [...document.querySelectorAll('#sec-shortcuts input[type="checkbox"]')];
+        const acik = boxes.filter((b) => b.checked).length;
+        return [`${acik}/${boxes.length} ${t('etkin')}`];
+    },
+    widget: () => {
+        if (!val('widget-check')?.checked) return [t('Kapalı')];
+        const scale = val('widget-scale-input')?.value;
+        return [t('Açık'), scale ? `%${scale}` : ''];
+    },
+    video: () => [shortLabel(selText('video-quality')), shortLabel(selText('audio-mic-device'))],
+    general: () => [val('autostart-check')?.checked ? t('Başlangıçta açılır') : t('Elle açılır')],
+};
+
+// Panelde herhangi bir kontrol değişince özetler tazelensin. Tek dinleyici yeterli:
+// olaylar köpürüyor ve her kontrolü tek tek bağlamak, sonradan eklenen bir ayarın
+// özete yansımamasına yol açardı.
+export function initSummaries() {
+    const panel = elements.settingsPanel;
+    if (!panel) return;
+    panel.addEventListener('change', refreshSummaries);
+    panel.addEventListener('input', refreshSummaries);
+    refreshSummaries();
+}
+
+export function refreshSummaries() {
+    heads().forEach((head) => {
+        const name = cardOf(head).dataset.section;
+        const fn = SUMMARY[name];
+        if (!fn) return;
+        let sum = head.querySelector('.card-sum');
+        if (!sum) {
+            sum = document.createElement('span');
+            sum.className = 'card-sum';
+            head.appendChild(sum);
+        }
+        // Boş parçalar eleniyor: "Yüksek · " gibi sarkan ayraç kalmasın.
+        sum.textContent = fn().filter(Boolean).join(' · ');
+    });
+}
+
 function clearFilter() {
     const panel = elements.settingsPanel;
     panel.querySelectorAll('.card, .set-row, .set-note, .danger-zone')
@@ -136,4 +201,5 @@ export function onSettingsShown() {
     elements.settingsSearch.value = '';
     closeColorPopover();
     clearFilter();
+    refreshSummaries();
 }

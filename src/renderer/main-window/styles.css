@@ -1600,3 +1600,25 @@ kbd+kbd {
     transform: translateY(-50%);
     flex-direction: row;
 }
+
+/* ── Bölüm başlığı özeti ───────────────────────────────────────────────────────
+   Kapalı bir akordeonda başlıktan başka bilgi yok; özet o boşluğu dolduruyor.
+   Sağa yaslı ve soluk: başlığın kendisiyle yarışmıyor, göz önce bölüm adını
+   okuyor. Sığmazsa kırpılıyor — özet, tam metni değil fikri vermek için var. */
+.card-sum {
+    margin-left: auto;
+    padding-left: var(--sp-2);
+    color: var(--text-subtle);
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 55%;
+}
+
+/* Bölüm açıkken özet gereksiz — değerler zaten aşağıda duruyor ve iki kez
+   göstermek başlığı gürültüye çeviriyor. */
+.card-head[aria-expanded="true"] .card-sum {
+    opacity: 0;
+}

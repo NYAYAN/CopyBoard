@@ -171,15 +171,15 @@ pub struct AssetWriter {
     /// piksel tamponunu ve zaman damgasını alıyor — Apple'ın ekran kaydı için
     /// belgelediği yol da bu.
     adaptor: Mutex<Retained<AVAssetWriterInputPixelBufferAdaptor>>,
-    /// Sistem sesi izi.
-    audio: Option<Mutex<Retained<AVAssetWriterInput>>>,
-    /// Mikrofon izi — AYRI.
+    /// TEK ses izi.
     ///
-    /// İkisini tek girdiye yazmak denendi ve kaydı komple bozdu: kaynakların biçimi
-    /// farklı, ekleme -12737 ile reddediliyor ve 1436 ses örneği düşerken video da
-    /// 1 karede kalıyordu. Karıştırmak (mixdown) zamanlama hizalaması ister; ayrı iz
-    /// hem doğru hem kayıpsız — QuickTime ikisini birlikte çalıyor.
-    mic: Option<Mutex<Retained<AVAssetWriterInput>>>,
+    /// Mikrofon ve sistem sesi ayrı izlere yazmak denendi: dosya bozulmuyordu ama
+    /// VLC gibi oynatıcılar yalnız ilk izi çaldığı için paylaşılan kayıtta mikrofon
+    /// duyulmuyordu. İki kaynağı AYNI girdiye ham hâlde yazmak ise (biçimleri farklı
+    /// olduğu için) -12737 ile kaydı komple bozuyordu. Şimdi kaynaklar
+    /// [`crate::capture::mixer`] ile PCM düzeyinde karıştırılıp tek iz olarak
+    /// yazılıyor.
+    audio: Option<Mutex<Retained<AVAssetWriterInput>>>,
     /// `startSessionAtSourceTime` ilk GÖRÜNTÜ karesiyle çağrılıyor; ondan önce gelen
     /// ses örnekleri atılmalı, yoksa yazıcı hata veriyor.
     session_started: AtomicBool,
@@ -206,7 +206,6 @@ impl AssetWriter {
         fps: u32,
         bitrate: u32,
         with_audio: bool,
-        with_mic: bool,
     ) -> Result<Self, String> {
         unsafe {
             let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
@@ -357,25 +356,22 @@ impl AssetWriter {
                     Ok(None)
                 }
             };
-            let audio = if with_audio { make_audio_input("sistem")? } else { None };
-            let mic = if with_mic { make_audio_input("mikrofon")? } else { None };
+            let audio = if with_audio { make_audio_input("ses")? } else { None };
 
             if !writer.startWriting() {
                 return Err(format!("yazma başlatılamadı: {:?}", writer.error()));
             }
 
             log::info!(
-                "AVAssetWriter: {width}x{height} @{fps}fps, {:.1} Mbps, sistem sesi={}, mikrofon={}",
+                "AVAssetWriter: {width}x{height} @{fps}fps, {:.1} Mbps, ses={}",
                 f64::from(bitrate) / 1e6,
-                audio.is_some(),
-                mic.is_some()
+                audio.is_some()
             );
 
             Ok(Self {
                 writer,
                 video: Mutex::new(video),
                 adaptor: Mutex::new(adaptor),
-                mic,
                 audio,
                 session_started: AtomicBool::new(false),
                 video_frames: AtomicU64::new(0),
@@ -476,11 +472,11 @@ impl AssetWriter {
     ///
     /// # Safety
     /// `ptr` geçerli bir `CMSampleBufferRef` olmalı.
-    pub unsafe fn append_audio(&self, ptr: *mut std::ffi::c_void, from_mic: bool) {
+    pub unsafe fn append_audio(&self, ptr: *mut std::ffi::c_void) {
         if !self.session_started.load(Ordering::Acquire) {
             return; // ilk görüntü karesi henüz gelmedi
         }
-        let Some(audio) = (if from_mic { &self.mic } else { &self.audio }) else { return };
+        let Some(audio) = &self.audio else { return };
         let Some(sample) = (unsafe { Self::as_sample(ptr) }) else { return };
         let input = audio.lock().unwrap();
         if !input.isReadyForMoreMediaData() {
@@ -513,7 +509,7 @@ impl AssetWriter {
             }
 
             self.video.lock().unwrap().markAsFinished();
-            for a in [&self.audio, &self.mic].into_iter().flatten() {
+            if let Some(a) = &self.audio {
                 a.lock().unwrap().markAsFinished();
             }
 

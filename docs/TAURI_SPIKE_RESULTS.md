@@ -1127,3 +1127,70 @@ derlemede sağ yarı saf yeşil.
 > yok), o yüzden referans görüntü uygulamanın KENDİ yakalama yolundan alınıyor. Ayrıca
 > ölçüm ekranı `monitors[0]` — bu makinede dahili Retina (0,0 1800×1169 @2x), harici
 > monitör değil.
+
+---
+
+## Fare gerektiren akışların doğrulanması — `--qa-capture`
+
+Gözden geçirmenin sonunda dört akış "doğrulanamadı" diye bırakılmıştı: bölge seçimi,
+renk seçici, OCR ve kaydırmalı yakalama. Hepsi kullanıcının ekranda bir dikdörtgen
+SÜRÜKLEMESİYLE başlıyor ve o yüzden pencere durumundan okunamıyor.
+
+`qa_capture.rs` bu boşluğu kapatıyor. Yöntem, video kaydında öğrenilen dersin
+uygulaması: **çıktının pikselleri okunuyor, üstverisi değil.**
+
+Ekranda bilinen bir "sınama kartı" duruyor — üstte OCR için büyük bir metin şeridi
+(`ZEBRA QUARTZ`), altında dört çeyrek (kırmızı, yeşil, mavi, sarı). Kart monitörün
+bilinen bir noktasına konduğu için overlay'deki CSS koordinatı da biliniyor. Harness
+gerçek `MouseEvent`ler gönderiyor ve sonucu PANODAN geri okuyor.
+
+Renklerde eşitlik değil İLİŞKİ sınanıyor: ekran yakalama ekranın renk uzayından
+geçiyor ve `#cc0000` panoya `#bb271a` olarak dönüyor. Kanıtlanan şey geometri.
+
+### Ölçüm (dört akış, 0 başarısız)
+
+| Akış | Kanıt |
+|---|---|
+| Bölge seçimi | Seçim istenen dikdörtgene ±0 px oturdu; pano resmi 1176×936 (= 588×468 ×2); dört çeyrek doğru köşede |
+| Renk seçici | Tıklanan pikselin hex'i `#bb271a` — bölge seçimindeki çeyrek örneğiyle birebir aynı |
+| OCR | Taranan metin `ZEBRA QUARTZ` — damganın iki kelimesi de |
+| Kaydırmalı yakalama | 26 birleşim, 3224 px satır; önizleme 1176×3224; panodaki görüntü aynı boyutta |
+
+### Testin ayırt ettiği kanıtlandı
+
+Kırpma başlangıcı bilerek yarım genişlik kaydırıldı (`getFinalImage`,
+`r.x * sx + cropW / 2`). Sonuç:
+
+```
+QAC ✓ pano resmi seçimin fiziksel boyutunda (1176x936, beklenen 1176x936)
+QAC · çeyrekler: SolÜst=#4ca751 SağÜst=#fbfbfb SolAlt=#d5ac39 SağAlt=#f8f8f9
+QAC ✗ sol üst çeyrek KIRMIZI
+QAC ✗ sağ üst çeyrek YEŞİL
+QAC ✗ sol alt çeyrek MAVİ
+QAC ✗ sağ alt çeyrek SARI
+```
+
+Boyut denetimi hâlâ GEÇİYOR — tek başına ölçseydi hata görünmezdi. Videodaki yeşil
+yarımı üreten hata sınıfı tam olarak bu.
+
+### Yan bulgu: CopyBoard kendi penceresini kaydırmalı yakalayamıyor
+
+İlk kaydırma denemesi 0 satırla döndü. Sebep bir hata değil, bilinçli bir karar:
+`scroll_begin` akıştan başlığında **"CopyBoard" geçen tüm pencereleri** dışlıyor
+(`commands/record.rs`, `Some("CopyBoard")`) ki overlay'in karartması ve HUD'ı filme
+girmesin. Uygulamanın her penceresinin başlığı "CopyBoard" (`windows/mod.rs`), yani
+dışlama uygulamanın TAMAMINI kapsıyor.
+
+Sonuç: kullanıcı CopyBoard'ın kendi geçmiş listesini kaydırmalı olarak yakalayamıyor.
+Gerçek kullanımda önemsiz; ama sınama kartı da görünmez olduğu için harness kaydırma
+hedefini başlığı farklı, ayrı bir pencerede açıyor. Ekranda gerçekten duran, gerçek
+WKWebView'ın boyadığı ve akışa gerçek ScreenCaptureKit üzerinden giren bir pencere —
+kullanıcının senaryosundan tek farkı pencerenin sahibi.
+
+### Hâlâ doğrulanmayan
+
+- **Gerçek işaretçi donanımı.** Olaylar sentetik: uygulamanın kendi dinleyicilerinden
+  geçiyorlar ama işletim sisteminin isabet sınamasından geçmiyorlar. Tıklama
+  geçirgenliği (`set_ignore_mouse_events`) bu yolla ölçülemez.
+- **Çoklu monitörde ikinci ekran.** Kart her zaman `monitors[0]`a konuyor.
+- **Açıklama araçları** (kalem, ok, bulanıklaştırma, metin) ve kaydetme paneli.

@@ -122,6 +122,13 @@ pub fn debug_log(message: String) {
             log::info!("PERF snip-painted +{ms} ms");
         }
     }
+    // Yakalama harness'ı (`--qa-capture`) renderer'dan Rust'a değer geçirmek için
+    // bu yolu kullanıyor: Tauri'de `eval` bir değer DÖNDÜRMÜYOR ve yalnız sınama
+    // için ayrı bir komut açmak, sürüm derlemesinde de duran bir yüzey bırakırdı.
+    #[cfg(debug_assertions)]
+    if let Some(rest) = message.strip_prefix("QAC ") {
+        crate::qa_capture::probe(rest);
+    }
     log::info!("[renderer] {message}");
 }
 

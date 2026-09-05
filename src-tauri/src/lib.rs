@@ -21,6 +21,8 @@ pub mod ocr;
 pub mod platform;
 #[cfg(debug_assertions)]
 pub mod qa;
+#[cfg(debug_assertions)]
+pub mod qa_capture;
 pub mod shortcuts;
 pub mod state;
 pub mod store;
@@ -721,6 +723,17 @@ pub fn run() {
             #[cfg(debug_assertions)]
             if std::env::args().any(|a| a == "--qa") {
                 qa::run(handle.clone());
+            }
+
+            // Geliştirme kolaylığı: `--qa-capture[=snip,color,ocr,scroll]` — FARE
+            // gerektiren yakalama akışlarını (bölge seçimi, renk seçici, OCR,
+            // kaydırmalı yakalama) ekrana bilinen bir desen basıp sürükleyerek ve
+            // çıktının PİKSELLERİNİ okuyarak sınar (bkz. `qa_capture.rs`).
+            #[cfg(debug_assertions)]
+            if let Some(which) = std::env::args().find_map(|a| {
+                if a == "--qa-capture" { Some(String::new()) } else { a.strip_prefix("--qa-capture=").map(str::to_string) }
+            }) {
+                qa_capture::run(handle.clone(), which);
             }
 
             // Geliştirme kolaylığı: `--copy-test=metin` — listeden kopyalamanın

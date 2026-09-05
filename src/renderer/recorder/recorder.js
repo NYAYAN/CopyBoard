@@ -234,6 +234,13 @@ window.addEventListener('mousedown', (e) => {
     if (state.isRecording) return;
     if (e.target.closest('.toolbar')) return;
 
+    // Overlay üzerinde sürükleme: yeni seçim, seçimi taşıma, köşeden boyutlandırma.
+    // Varsayılan davranış üçünde de metin seçimi başlatmak; hızlı sürüklerken WebKit
+    // bunu mavi, sönümlenen bir vurguyla boyuyor. CSS'teki `user-select: none` zaten
+    // engelliyor ama burada da kesiliyor — `preventDefault()` motordan bağımsız.
+    // Araç çubuğu yukarıda elendiği için düğme odaklanması bozulmuyor.
+    e.preventDefault();
+
     if (state.selectionRect) {
         if (e.target.classList.contains('resize-handle')) {
             state.isResizing = true; state.activeHandle = e.target.dataset.handle;

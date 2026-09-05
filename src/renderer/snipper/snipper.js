@@ -309,12 +309,28 @@ window.addEventListener('mousedown', (e) => {
     if (e.target.closest('.toolbar')) return;
     if (e.target.closest('#text-input-container')) {
         if (e.target === textDragHandle) {
+            // Tutamağı sürüklemek bir metin seçimi başlatmasın. Textarea'nın KENDİSİ
+            // için çağrılmıyor — orada varsayılan davranış odaklanma ve imleç yerleşimi.
+            e.preventDefault();
             state.isDraggingText = true;
             const r = textInputContainer.getBoundingClientRect();
             state.dragOffX = e.clientX - r.left; state.dragOffY = e.clientY - r.top;
         }
         return;
     }
+
+    // Buradan sonrası overlay üzerinde sürükleme: yeni seçim çizme, seçimi taşıma,
+    // köşe tutamağından yeniden boyutlandırma. Varsayılan davranış bu üçünde de
+    // METİN SEÇİMİ başlatmak; hızlı sürüklerken WebKit bunu mavi, sönümlenen bir
+    // vurguyla boyuyor ve kullanıcıya "ekranın diğer yerleri mavi olup sönüyor"
+    // diye görünüyor.
+    //
+    // CSS'teki `user-select: none` bunu zaten engelliyor, ama burada da kesiliyor:
+    // `preventDefault()` motordan bağımsız çalışıyor ve seçimi hiç BAŞLATMIYOR —
+    // CSS'e güvenmek, öneki desteklemeyen bir motorda sessizce çuvallamak demekti.
+    // Araç çubuğu ve metin kutusu yukarıda zaten elendi, yani odaklanma bozulmuyor.
+    e.preventDefault();
+
     if (state.selectionRect) {
         if (e.target.classList.contains('resize-handle')) {
             state.isResizing = true; state.activeHandle = e.target.dataset.handle;

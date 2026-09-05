@@ -1219,6 +1219,25 @@ Kartı indirmek şart: ana pencere `ScreenSaver` (1000), overlay `PopUpMenu` (10
 seviyesinde, yani kart normalde overlay'in ÜSTÜNDE duruyor. İndirmeden yapılan bir
 sızıntı ölçümü ayıklamayı değil katman sırasını ölçerdi ve her hâlde geçerdi.
 
+#### Ayıklama listesi yük taşıyor mu? Hayır — `content_protected` taşıyor
+
+`--qa-capture=exclusion` aynı bölgeyi akıştan İKİ kez okuyor: bir kez overlay'in
+kimlikleri dışlanarak, bir kez BOŞ listeyle. Overlay o sırada ekranı %50 siyahla
+karartıyor ve altında yakalama anının donmuş görüntüsünü tutuyor, yani akışa
+girseydi kare belirgin biçimde kararırdı.
+
+| | Sonuç |
+|---|---|
+| Ayıklama listesi dolu | `#bb271a` (kartın gerçek rengi) |
+| Ayıklama listesi BOŞ | `#ac3526` — kararmadı |
+| Karartma sızsaydı beklenen | `#5d130d` civarı |
+
+Yani overlay `content_protected` (`NSWindowSharingNone`) sayesinde zaten hiç
+girmiyor; kimlik listesi İKİNCİ HAT. Bunun iki sonucu var: yeni ayıklama sızıntı
+korumasını bozamaz (koruma ona bağlı değil), ve eski başlık tabanlı filtre saf
+maliyetti — uygulamanın kendi arayüzünü yakalanamaz yapıyordu, karşılığında hiçbir
+şey vermiyordu.
+
 ## GERÇEK imleç — `--qa-capture=pointer,save,through`
 
 Yukarıdaki altı akış sentetik `MouseEvent` kullanıyor: uygulamanın kendi

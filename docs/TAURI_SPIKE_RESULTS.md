@@ -1152,7 +1152,7 @@ geçiyor ve `#cc0000` panoya `#bb271a` olarak dönüyor. Kanıtlanan şey geomet
 | Akış | Kanıt |
 |---|---|
 | Bölge seçimi | Seçim istenen dikdörtgene ±0 px oturdu; pano resmi 1176×936 (= 588×468 ×2); dört çeyrek doğru köşede |
-| Açıklama araçları | Kalem etkinleşti; çizilen çeyrekte 2976 kırmızı piksel, dokunulmayan çeyrekte 0 |
+| Açıklama araçları | Altı aracın hepsi, BİÇİMLERİYLE ayırt edilerek (aşağıda) |
 | Renk seçici | Tıklanan pikselin hex'i `#bb271a` — bölge seçimindeki çeyrek örneğiyle birebir aynı |
 | OCR | Taranan metin `ZEBRA QUARTZ` — damganın iki kelimesi de |
 | Kaydırmalı yakalama | 26 birleşim, 3224 px satır; önizleme 1176×3224; panodaki görüntü aynı boyutta |
@@ -1281,9 +1281,30 @@ gönderen bir sınama sessizce yeşil verebilirdi.
 
 - **Üç veya daha fazla monitör.** Bu makinede iki ekran var. Kullanıcının hatayı
   bildirdiği düzen Windows'ta üç ekrandı.
-- **Kalan açıklama araçları** (ok, kare, yuvarlak, bulanıklaştırma, metin). Kalem
-  yolu ölçüldü; hepsi aynı `mousedown`/`mousemove` dalını ve aynı `drawCanvas`
-  bileşimini kullanıyor.
+(Açıklama araçlarının hepsi ölçüldü, aşağıya bakın.)
+
+### Açıklama araçları: altısı da, biçimleriyle
+
+Kalem rengi BEYAZA çekiliyor (kartın dört çeyreğinin hiçbiri beyaza yakın değil),
+sonra her araç kendi çeyreğine aynı sürüklemeyi yapıyor. Yalnız "iz var mı" diye
+bakmak yetmezdi: araç düğmesi hiç işlemese ve kalem seçili kalsa da her çeyrekte iz
+olurdu. O yüzden BİÇİM ayırt ediliyor.
+
+| Araç | Ölçülen |
+|---|---|
+| Kalem | Köşegen: merkez dolu, üst kenar ortası boş (2280 px) |
+| Kare | Çerçeve: kenar ortası VE köşe dolu, merkez boş (7620 px) |
+| Yuvarlak | Elips: kenar ortası dolu, köşe ve merkez boş (5280 px) |
+| Ok | Çizgi artı uç başlığı: bitiş çevresi 701 px, başlangıç çevresi 524 px |
+| Bulanıklaştırma | Mozaiklenen blokta 1 renk, dokunulmayan kontrol bloğunda 10 |
+| Metin | Enter kutuyu boşalttı, 2216 piksel görüntüye yazıldı |
+
+**`blur` bir Gauss bulanıklığı DEĞİL, mozaik.** `applyBlur` bölgeyi 1/20 boyuta
+indirip yumuşatmadan geri büyütüyor, yani 20×20 blokları tek renge çeviriyor. İlk
+ölçüm bunu bilmeden kurulmuştu: iki rengin sınırında karışma aranıyordu ve DÜZ
+renkli bir alanda mozaiğin bıraktığı iz yok, sıfır çıktı. Doğru ölçüm dokulu bir
+hedefin üstünde: beyaz bir kalem darbesi çiziliyor, yarısı mozaikleniyor, blok
+içindeki farklı renk sayısı karşılaştırılıyor.
 
 ### Harness'ı çalıştırırken
 

@@ -489,6 +489,58 @@ fn sample(img: &Img, rx: f64, ry: f64) -> (f64, f64, f64) {
     (r as f64 / n as f64, g as f64 / n as f64, b as f64 / n as f64)
 }
 
+/// Verilen dikdörtgende BEYAZ sayılabilecek piksel. Kalem rengi beyaza
+/// çekildiğinde kartın dört çeyreğinin hiçbiri beyaza yakın değil.
+fn count_white(img: &Img, x0: usize, y0: usize, x1: usize, y1: usize) -> usize {
+    let mut n = 0;
+    for y in y0..y1.min(img.h) {
+        for x in x0..x1.min(img.w) {
+            let i = (y * img.w + x) * 4;
+            if i + 2 < img.rgba.len()
+                && img.rgba[i] > 225
+                && img.rgba[i + 1] > 225
+                && img.rgba[i + 2] > 225
+            {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// Göreli koordinattaki tek pikselin beyaz olup olmadığı — biçim ayırt etmek için
+/// (dikdörtgenin köşesi doludur, elipsinki değil).
+fn white_at(img: &Img, rx: f64, ry: f64) -> bool {
+    let bw = ((img.w as f64) * 0.012).max(3.0) as usize;
+    let cx = ((img.w as f64) * rx) as usize;
+    let cy = ((img.h as f64) * ry) as usize;
+    let x0 = cx.saturating_sub(bw);
+    let y0 = cy.saturating_sub(bw);
+    count_white(img, x0, y0, cx + bw, cy + bw) > 0
+}
+
+/// Verilen noktadaki küçük blokta kaç FARKLI renk var.
+///
+/// `blur` aracı aslında bir MOZAİK: bölgeyi 20×20 bloklara indirip her bloğu tek
+/// renge çeviriyor. Düz renkli bir alanda hiçbir iz bırakmaz, o yüzden ölçüm dokulu
+/// bir hedefin üstünde yapılıyor: mozaiklenen blokta tek renk kalır, dokunulmamış
+/// blokta (beyaz darbe + arka plan + kenar yumuşatma) çok sayıda renk vardır.
+fn distinct_colors(img: &Img, rx: f64, ry: f64, size: usize) -> usize {
+    let cx = (img.w as f64 * rx) as usize;
+    let cy = (img.h as f64 * ry) as usize;
+    let mut seen = std::collections::HashSet::new();
+    for y in cy..(cy + size).min(img.h) {
+        for x in cx..(cx + size).min(img.w) {
+            let i = (y * img.w + x) * 4;
+            if i + 2 < img.rgba.len() {
+                // 3 bit atılıyor: JPEG/renk uzayı gürültüsü ayrı renk sayılmasın.
+                seen.insert((img.rgba[i] >> 3, img.rgba[i + 1] >> 3, img.rgba[i + 2] >> 3));
+            }
+        }
+    }
+    seen.len()
+}
+
 /// Bir sütunun ortalama parlaklığı.
 fn column_mean(img: &Img, x: usize) -> f64 {
     let mut sum = 0f64;
@@ -630,67 +682,206 @@ fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo, index: usize) {
     remove_card(app);
 }
 
-/// Açıklama araçları: kalemle çiz → çizginin panodaki görüntüde OLDUĞUNU gör.
+/// Yakalamayı açar ve çeyrek bloğunu seçer.
+fn snip_session(app: &tauri::AppHandle, card: &Card) -> bool {
+    on_main(app, |h| crate::capture::start(h, "draw"));
+    if !wait_overlay(app, "capture-0") {
+        return false;
+    }
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    eval(app, "capture-0", drag_js(qx, qy, qx + qw, qy + qh, 20));
+    sleep(400);
+    true
+}
+
+/// Bir aracı seçer ve GERÇEKTEN seçildiğini uygulamadan geri okur.
+fn pick_tool(app: &tauri::AppHandle, tool: &str) -> bool {
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        format!(
+            "(function(){{document.querySelector('.tool-btn[data-tool=\"{tool}\"]').click();\
+             window.api.sendDebugLog('QAC tool.active=' + (state.activeTool || 'yok'));}})();"
+        ),
+    );
+    wait_probe("tool.active", 2500).as_deref() == Some(tool)
+}
+
+/// Açıklama araçları: altı aracın hepsi, biçimleriyle birlikte.
 ///
-/// Araç düğmeleri `click` dinliyor (araç çubuğunun Kopyala/Kaydet düğmeleri ise
-/// `mousedown`) — ikisi aynı sanılıp yanlış olay gönderilseydi test sessizce
-/// yeşil verirdi.
+/// Yalnız "beyaz piksel var mı" diye bakmak yetmezdi: araç düğmesi hiç işlemese ve
+/// kalem seçili kalsa da her çeyrekte iz olurdu. O yüzden BİÇİM ayırt ediliyor —
+/// kalem köşegen bırakıyor (merkez dolu, kenar ortası boş), kare çerçeve (kenar
+/// ortası VE köşe dolu), yuvarlak elips (kenar ortası dolu, köşe boş).
 fn flow_tools(app: &tauri::AppHandle, m: &MonitorInfo) {
-    note("— açıklama araçları (kalem) —");
+    note("— açıklama araçları —");
     let Some(card) = install_card(app, m, "colors") else {
         check(false, "sınama kartı yerleştirilemedi");
         return;
     };
     let before = gallery_ids(app);
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
 
-    on_main(app, |h| crate::capture::start(h, "draw"));
-    if !check(wait_overlay(app, "capture-0"), "seçim overlay'i açıldı") {
+    // ── Oturum A: renk + kalem / kare / yuvarlak / ok ──────────────────────
+    if !check(snip_session(app, &card), "seçim overlay'i açıldı (şekil araçları)") {
         remove_card(app);
         return;
     }
 
-    let (qx, qy, qw, qh) = card.quads_rect(6.0);
-    eval(app, "capture-0", drag_js(qx, qy, qx + qw, qy + qh, 20));
-    sleep(400);
-
-    // Kalemi seç ve etkin olduğunu doğrula.
+    // Kalem rengi BEYAZ: kartın dört çeyreğinin hiçbiri beyaza yakın değil, yani
+    // hangi izin çizimden geldiği tartışmasız.
     clear_probes();
     eval(
         app,
         "capture-0",
-        r#"(function(){
-  document.querySelector('.tool-btn[data-tool="pen"]').click();
-  window.api.sendDebugLog('QAC tool.active=' + (state.activeTool || 'yok'));
-})();"#
+        "(function(){document.querySelector('.color-dot[data-color=\"#ffffff\"]').click();\
+          window.api.sendDebugLog('QAC pen.color=' + state.selectedColor);})();"
             .to_string(),
     );
-    let active = wait_probe("tool.active", 2500).unwrap_or_default();
-    check(active == "pen", &format!("kalem aracı etkinleşti (okunan: {active})"));
+    let color = wait_probe("pen.color", 2500).unwrap_or_default();
+    check(color == "#ffffff", &format!("renk paleti uygulandı (okunan: {color})"));
 
-    // MAVİ çeyreğin ortasından yatay bir çizgi. Kırmızı orada olmalı; yeşil
-    // çeyrekte olmamalı — çizim seçime ve çizilen yere hapsedilmiş olmalı.
-    let sy_line = qy + qh * 0.75;
-    eval(
-        app,
-        "capture-0",
-        drag_js(qx + 24.0, sy_line, qx + qw * 0.5 - 24.0, sy_line, 20),
-    );
-    sleep(400);
+    for (tool, fx, fy) in [("pen", 0.25, 0.25), ("rect", 0.75, 0.25), ("circle", 0.25, 0.75), ("arrow", 0.75, 0.75)] {
+        check(pick_tool(app, tool), &format!("{tool}: araç etkinleşti"));
+        let (cx, cy) = (qx + qw * fx, qy + qh * fy);
+        let (dx, dy) = (qw * 0.15, qh * 0.15);
+        eval(app, "capture-0", drag_js(cx - dx, cy - dy, cx + dx, cy + dy, 16));
+        sleep(350);
+    }
 
     eval(app, "capture-0", press_js("btn-copy"));
-    sleep(1800);
-
+    sleep(2000);
     match on_main(app, |_| clipboard_image()).flatten() {
         Some(img) => {
             let (hw, hh) = (img.w / 2, img.h / 2);
-            let drawn = count_red(&img, 0, hh, hw, img.h);
-            let clean = count_red(&img, hw, 0, img.w, hh);
-            note(&format!("kırmızı piksel: çizilen çeyrek={drawn}, dokunulmayan çeyrek={clean}"));
-            check(drawn > 500, "kalem darbesi kopyalanan görüntüde duruyor");
-            check(clean < 50, "çizim dokunulmayan çeyreğe taşmadı");
+            let counts = [
+                ("kalem", count_white(&img, 0, 0, hw, hh)),
+                ("kare", count_white(&img, hw, 0, img.w, hh)),
+                ("yuvarlak", count_white(&img, 0, hh, hw, img.h)),
+                ("ok", count_white(&img, hw, hh, img.w, img.h)),
+            ];
+            note(&format!("beyaz piksel: {counts:?}"));
+            for (name, n) in counts {
+                check(n > 400, &format!("{name}: iz kopyalanan görüntüde ({n} piksel)"));
+            }
+            check(
+                white_at(&img, 0.25, 0.25) && !white_at(&img, 0.25, 0.10),
+                "kalem KÖŞEGEN çizdi (merkez dolu, üst kenar ortası boş)",
+            );
+            check(
+                white_at(&img, 0.75, 0.10) && white_at(&img, 0.60, 0.10) && !white_at(&img, 0.75, 0.25),
+                "kare ÇERÇEVE çizdi (kenar ortası ve köşe dolu, merkez boş)",
+            );
+            check(
+                white_at(&img, 0.25, 0.60) && !white_at(&img, 0.10, 0.60) && !white_at(&img, 0.25, 0.75),
+                "yuvarlak ELİPS çizdi (kenar ortası dolu, köşe ve merkez boş)",
+            );
+            // Ok bir çizgi ARTI uç başlığı: bitiş çevresinde başlangıçtan belirgin
+            // fazla piksel olmalı. Yoksa çizilen şey düz bir çizgidir.
+            let bw = (img.w as f64 * 0.05) as usize;
+            let bh = (img.h as f64 * 0.05) as usize;
+            let at = |rx: f64, ry: f64| {
+                let cx = (img.w as f64 * rx) as usize;
+                let cy = (img.h as f64 * ry) as usize;
+                count_white(&img, cx.saturating_sub(bw), cy.saturating_sub(bh), cx + bw, cy + bh)
+            };
+            let (head, tail) = (at(0.885, 0.885), at(0.615, 0.615));
+            note(&format!("ok: uç çevresi={head} px, başlangıç çevresi={tail} px"));
+            check(head > tail + 100, "ok UÇ BAŞLIĞI çizdi (bitişte belirgin fazlalık)");
         }
         None => {
-            check(false, "kalem sonrası panoda resim yok");
+            check(false, "şekil araçlarından sonra panoda resim yok");
+        }
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(600);
+
+    // ── Oturum B: bulanıklaştırma + metin ─────────────────────────────────
+    // Ayrı oturum: bulanıklaştırma yukarıdaki beyaz izleri de bulaştırıp ölçümü
+    // kirletirdi.
+    if !check(snip_session(app, &card), "seçim overlay'i açıldı (bulanıklaştırma + metin)") {
+        remove_card(app);
+        return;
+    }
+
+    // Mozaik ancak DOKULU bir hedefte ölçülebiliyor: önce beyaz bir kalem darbesi
+    // çiziliyor, sonra darbenin SOL yarısı mozaikleniyor. Sağ yarısı kontrol.
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        "(function(){document.querySelector('.color-dot[data-color=\"#ffffff\"]').click();\
+          window.api.sendDebugLog('QAC pen.color=' + state.selectedColor);})();"
+            .to_string(),
+    );
+    let _ = wait_probe("pen.color", 2500);
+    check(pick_tool(app, "pen"), "kalem aracı etkinleşti (mozaik hedefi)");
+    eval(
+        app,
+        "capture-0",
+        drag_js(qx + qw * 0.10, qy + qh * 0.10, qx + qw * 0.90, qy + qh * 0.30, 40),
+    );
+    sleep(400);
+
+    check(pick_tool(app, "blur"), "bulanıklaştırma aracı etkinleşti");
+    eval(
+        app,
+        "capture-0",
+        drag_js(qx + qw * 0.15, qy + qh * 0.06, qx + qw * 0.45, qy + qh * 0.34, 16),
+    );
+    sleep(500);
+
+    // Metin: kutu tıklamayla açılıyor, değer yazılıp Enter ile işleniyor. Renk hâlâ
+    // beyaz, yani yazı mavi çeyrekte tartışmasız ayırt ediliyor.
+    check(pick_tool(app, "text"), "metin aracı etkinleşti");
+    eval(app, "capture-0", click_js(qx + qw * 0.15, qy + qh * 0.68));
+    sleep(600);
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        "(function(){const t=document.getElementById('text-input');\
+          t.value='HHHHHHHH';\
+          t.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));\
+          window.api.sendDebugLog('QAC text.done=' + (t.value === '' ? 'islendi' : 'duruyor'));})();"
+            .to_string(),
+    );
+    let done = wait_probe("text.done", 2500).unwrap_or_default();
+    check(done == "islendi", &format!("metin kutusu Enter ile işlendi (okunan: {done})"));
+
+    eval(app, "capture-0", press_js("btn-copy"));
+    sleep(2000);
+    match on_main(app, |_| clipboard_image()).flatten() {
+        Some(img) => {
+            // Darbenin mozaiklenen yarısı ile dokunulmayan yarısı, aynı boyutta
+            // birer blokta karşılaştırılıyor. Darbe x=0.30'da y≈0.15, x=0.70'te
+            // y≈0.25 (eğim 0.20/0.80).
+            let blok = 16;
+            let mosaic = distinct_colors(&img, 0.30, 0.145, blok);
+            let intact = distinct_colors(&img, 0.70, 0.245, blok);
+            note(&format!("blokta farklı renk: mozaiklenen={mosaic}, dokunulmayan={intact}"));
+            check(
+                intact >= 6,
+                &format!("kontrol bloğu dokulu (kalem darbesi orada, {intact} renk)"),
+            );
+            check(
+                mosaic <= 4 && intact > mosaic * 2,
+                &format!("mozaik bölgedeki detay silindi ({mosaic} renk, kontrol {intact})"),
+            );
+
+            let text_px = count_white(
+                &img,
+                (img.w as f64 * 0.08) as usize,
+                (img.h as f64 * 0.60) as usize,
+                (img.w as f64 * 0.55) as usize,
+                (img.h as f64 * 0.82) as usize,
+            );
+            note(&format!("metin pikseli: {text_px}"));
+            check(text_px > 150, "metin görüntüye YAZILDI");
+        }
+        None => {
+            check(false, "bulanıklaştırma/metin sonrası panoda resim yok");
         }
     }
 

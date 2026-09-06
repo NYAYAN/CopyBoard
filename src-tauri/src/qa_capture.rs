@@ -1443,7 +1443,7 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo, index: usize) {
         let (hx, hy) = to_screen(m, m.width * 0.5, m.height * 0.5);
         mouse::move_to(hx, hy);
         sleep(250);
-        let gercek = on_main(app, |h| crate::geom::cursor_position(h)).flatten();
+        let gercek = on_main(app, crate::geom::cursor_position).flatten();
         let dogru = gercek
             .map(|(cx, cy)| cx >= m.x && cx < m.x + m.width && cy >= m.y && cy < m.y + m.height)
             .unwrap_or(false);

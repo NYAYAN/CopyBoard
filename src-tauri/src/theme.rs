@@ -50,16 +50,16 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn store() -> std::sync::Arc<Store> {
-        let mut p = std::env::temp_dir();
-        p.push(format!("copyboard-theme-test-{}.json", std::process::id()));
-        let _ = std::fs::remove_file(&p);
-        Store::load(p)
+    /// Yazıcı thread'i OLMADAN depo: geciktirilmiş bir yazma, geçici dosya
+    /// silindikten sonra onu geri yaratıyordu (bkz. `testutil`).
+    fn store() -> (std::sync::Arc<Store>, crate::testutil::TempPath) {
+        let t = crate::testutil::TempPath::json("theme-test");
+        (Store::load_without_writer(t.to_path_buf()), t)
     }
 
     #[test]
     fn varsayilan_koyu_os_ayarini_izlemez() {
-        let s = store();
+        let (s, _tmp) = store();
         assert_eq!(get_mode(&s), "dark");
         // OS açık temada olsa bile mod 'system' değilse çözümlenen değişmez
         assert_eq!(resolved(&s, false), "dark");
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn system_modu_os_u_izler() {
-        let s = store();
+        let (s, _tmp) = store();
         assert!(set_mode(&s, "system"));
         assert_eq!(resolved(&s, true), "dark");
         assert_eq!(resolved(&s, false), "light");
@@ -76,14 +76,14 @@ mod tests {
 
     #[test]
     fn gecersiz_mod_reddedilir() {
-        let s = store();
+        let (s, _tmp) = store();
         assert!(!set_mode(&s, "mor"));
         assert_eq!(get_mode(&s), "dark");
     }
 
     #[test]
     fn ayni_modu_yeniden_atamak_degisiklik_saymaz() {
-        let s = store();
+        let (s, _tmp) = store();
         assert!(set_mode(&s, "light"));
         assert!(!set_mode(&s, "light"));
         let _: PathBuf = s.path().to_path_buf();

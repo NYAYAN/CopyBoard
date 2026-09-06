@@ -195,16 +195,15 @@ impl ShortcutKey {
 mod tests {
     use super::*;
 
-    fn store() -> Arc<Store> {
-        let mut p = std::env::temp_dir();
-        p.push(format!("copyboard-state-test-{}.json", std::process::id()));
-        let _ = std::fs::remove_file(&p);
-        Store::load(p)
+    /// Yazıcı thread'i OLMADAN depo (bkz. `testutil`).
+    fn store() -> (Arc<Store>, crate::testutil::TempPath) {
+        let t = crate::testutil::TempPath::json("state-test");
+        (Store::load_without_writer(t.to_path_buf()), t)
     }
 
     #[test]
     fn varsayilanlar_electron_ile_ayni() {
-        let s = AppState::new(store());
+        let s = AppState::new(store().0);
         let set = s.settings();
         assert_eq!(set.max_items(), 50);
         assert_eq!(set.quick_paste_count(), 20);
@@ -230,13 +229,13 @@ mod tests {
     #[test]
     fn eksik_shortcuts_enabled_anahtari_acik_sayilir() {
         // Gerçek kullanıcı dosyasında `shortcutsEnabled` içinde `scroll` YOKTU.
-        let s = AppState::new(store());
+        let s = AppState::new(store().0);
         assert!(s.settings().shortcut_enabled(ShortcutKey::Scroll));
     }
 
     #[test]
     fn kisayol_kapatmak_baglamayi_korur() {
-        let s = AppState::new(store());
+        let s = AppState::new(store().0);
         let set = s.settings();
         set.set_shortcut(ShortcutKey::Draw, "Alt+7");
         set.set_shortcut_enabled(ShortcutKey::Draw, false);

@@ -26,6 +26,8 @@ pub mod qa_capture;
 pub mod shortcuts;
 pub mod state;
 pub mod store;
+#[cfg(test)]
+mod testutil;
 pub mod theme;
 pub mod tray;
 pub mod updater;

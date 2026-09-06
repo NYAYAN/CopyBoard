@@ -581,6 +581,32 @@ pub fn run(app: tauri::AppHandle) {
             log::info!("QA · OS koyu tema ipucu: {os_dark:?}");
             check(os_dark.is_some(), "OS tema tercihi okunabildi (ana thread'de)");
 
+            // ── Temizlik: harness'ın panoya yazdığı HER ŞEY ───────────────────
+            //
+            // Adım adım temizlik eksik kalıyordu: `QA-SCROLL` siliniyordu ama
+            // `QA-REC` ve `QA-EVT` kullanıcının geçmişinde kalıyordu (denetimde üç
+            // artık bulundu). Tek bir süpürme daha güvenli — harness'ın yazdığı her
+            // dize `QA-` ile başlıyor.
+            let artiklar: Vec<String> = {
+                let st = app.state::<AppState>();
+                crate::clipboard::history::history(&st.store)
+                    .iter()
+                    .filter(|i| {
+                        i.get("content")
+                            .and_then(|c| c.as_str())
+                            .map(|c| c.starts_with("QA-"))
+                            .unwrap_or(false)
+                    })
+                    .filter_map(|i| i.get("id").and_then(|v| v.as_str()).map(str::to_string))
+                    .collect()
+            };
+            if !artiklar.is_empty() {
+                log::info!("QA · {} deneme pano kaydı temizleniyor", artiklar.len());
+            }
+            for id in artiklar {
+                on_main(&app, move |h| crate::clipboard::history::delete(h, &id));
+            }
+
             log::info!("QA bitti: {} başarısız adım", fails);
         })
         .expect("qa thread");

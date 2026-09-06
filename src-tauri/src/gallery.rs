@@ -14,7 +14,7 @@ use tauri::Manager;
 use crate::state::AppState;
 use crate::store::Store;
 
-const MAX_SCREENSHOTS: usize = 30;
+pub(crate) const MAX_SCREENSHOTS: usize = 30;
 
 /// Küçük resim, ızgaranın GERÇEKTEN çizdiği şekilde üretiliyor — hücre biçiminde,
 /// kırpılmış, hücrenin CSS boyutunun iki katında — bir kutuya sığdırılarak değil.

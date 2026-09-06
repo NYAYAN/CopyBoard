@@ -462,6 +462,32 @@ fn clipboard_image() -> Option<Img> {
     Some(Img { w: img.width, h: img.height, rgba: img.bytes.into_owned() })
 }
 
+/// Panoyu bilinen bir METNE çeker — yani içindeki GÖRÜNTÜYÜ siler.
+///
+/// Kopyalama sınamalarından ÖNCE çağrılmalı. Aksi hâlde kopyalama başarısız olsa
+/// bile bir önceki akışın görüntüsü panoda duruyor ve sınama onu YENİ sanıyor: tam
+/// turda açıklama araçları tam olarak böyle "0 beyaz piksel" raporladı, oysa
+/// okuduğu şey bir önceki akışın renkli çeyrek görüntüsüydü.
+fn arm_clipboard(app: &tauri::AppHandle) {
+    on_main(app, |_| crate::platform::clipboard_write_text("qac-bekliyor"));
+    sleep(300);
+}
+
+/// Panoya bir GÖRÜNTÜ düşmesini bekler. Sabit `sleep` yerine yoklama: kopyalama
+/// bazen 2 sn'den uzun sürüyor ve sabit bekleme yarışı kaybediyordu.
+fn wait_clipboard_image(app: &tauri::AppHandle, ms: u64) -> Option<Img> {
+    let until = Instant::now() + Duration::from_millis(ms);
+    loop {
+        if let Some(img) = on_main(app, |_| clipboard_image()).flatten() {
+            return Some(img);
+        }
+        if Instant::now() >= until {
+            return None;
+        }
+        sleep(250);
+    }
+}
+
 /// Panodaki resmi, göreli merkez etrafında küçük bir kutuda ortalar.
 fn sample(img: &Img, rx: f64, ry: f64) -> (f64, f64, f64) {
     let bw = ((img.w as f64) * 0.06).max(2.0) as usize;
@@ -614,10 +640,10 @@ fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo, index: usize) {
     // Kopyala — düğme `mousedown` dinliyor.
     let sx: f64 = scale.split(',').next().and_then(|v| v.parse().ok()).unwrap_or(m.scale);
     let sy: f64 = scale.split(',').nth(1).and_then(|v| v.parse().ok()).unwrap_or(m.scale);
+    arm_clipboard(app);
     eval(app, &label, press_js("btn-copy"));
-    sleep(1800);
 
-    let Some(img) = on_main(app, |_| clipboard_image()).flatten() else {
+    let Some(img) = wait_clipboard_image(app, 8000) else {
         check(false, "Kopyala sonrası panoda resim yok");
         remove_card(app);
         return;
@@ -728,9 +754,9 @@ fn flow_tools(app: &tauri::AppHandle, m: &MonitorInfo) {
         sleep(350);
     }
 
+    arm_clipboard(app);
     eval(app, "capture-0", press_js("btn-copy"));
-    sleep(2000);
-    match on_main(app, |_| clipboard_image()).flatten() {
+    match wait_clipboard_image(app, 8000) {
         Some(img) => {
             let (hw, hh) = (img.w / 2, img.h / 2);
             let counts = [
@@ -828,9 +854,9 @@ fn flow_tools(app: &tauri::AppHandle, m: &MonitorInfo) {
     let done = wait_probe("text.done", 2500).unwrap_or_default();
     check(done == "islendi", &format!("metin kutusu Enter ile işlendi (okunan: {done})"));
 
+    arm_clipboard(app);
     eval(app, "capture-0", press_js("btn-copy"));
-    sleep(2000);
-    match on_main(app, |_| clipboard_image()).flatten() {
+    match wait_clipboard_image(app, 8000) {
         Some(img) => {
             // Darbenin mozaiklenen yarısı ile dokunulmayan yarısı, aynı boyutta
             // birer blokta karşılaştırılıyor. Darbe x=0.30'da y≈0.15, x=0.70'te
@@ -1073,8 +1099,7 @@ fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
     on_main(app, |_| crate::platform::clipboard_write_text("qac-scroll-bekliyor"));
     sleep(300);
     eval(app, "capture-0", press_js("btn-copy"));
-    sleep(2500);
-    match on_main(app, |_| clipboard_image()).flatten() {
+    match wait_clipboard_image(app, 10000) {
         Some(img) => {
             note(&format!("panodaki birleşik görüntü: {}x{}", img.w, img.h));
             check(
@@ -1220,10 +1245,10 @@ fn flow_pointer(app: &tauri::AppHandle, m: &MonitorInfo) {
         return;
     };
     let (sx, sy) = to_screen(m, bx, by);
+    arm_clipboard(app);
     mouse::click(sx, sy);
-    sleep(2000);
 
-    match on_main(app, |_| clipboard_image()).flatten() {
+    match wait_clipboard_image(app, 8000) {
         Some(img) => {
             let tl = sample(&img, 0.25, 0.25);
             let br = sample(&img, 0.75, 0.75);
@@ -1342,9 +1367,8 @@ fn flow_a7(app: &tauri::AppHandle, m: &MonitorInfo) {
     on_main(app, |_| crate::platform::clipboard_write_text("qac-a7-bekliyor"));
     sleep(400);
     check(real_click_element(app, m, "btn-copy"), "Kopyala'ya gerçek tıklama gönderildi");
-    sleep(3000);
 
-    match on_main(app, |_| clipboard_image()).flatten() {
+    match wait_clipboard_image(app, 10000) {
         Some(img) => {
             note(&format!("panodaki görüntü: {}x{}", img.w, img.h));
             check(

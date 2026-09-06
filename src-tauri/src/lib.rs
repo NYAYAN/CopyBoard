@@ -46,6 +46,20 @@ const HIDDEN_FLAG: &str = "--hidden";
 pub fn run() {
     install_panic_hook();
 
+    // Hata ayıklama harness'ları için ERKEN İŞARET.
+    //
+    // Tek örnek kilidi aşağıda İLK eklenti: başka bir CopyBoard açıkken bu süreç
+    // var olanı öne getirip çıkıyor ve `setup` hiç çalışmıyor. Sonuç 0 baytlık bir
+    // günlük oluyordu ve "koşu takıldı" gibi görünüyordu — iki kez saatler yedi.
+    // Bu satır stdout'a ÖNCE düşüyor, yani boş günlük artık kendini açıklıyor.
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|a| a.starts_with("--qa")) {
+        println!(
+            "QAC · başlatılıyor… (başka bir CopyBoard AÇIKSA tek-örnek kilidi bu koşuyu \
+             sessizce düşürür ve aşağısı boş kalır)"
+        );
+    }
+
     tauri::Builder::default()
         // Tek örnek kilidi İLK eklenti: ikinci kopya, günlük dosyasına ya da başka
         // bir eklentiye dokunmadan var olanı öne getirip çıksın (eklenti belgesi de

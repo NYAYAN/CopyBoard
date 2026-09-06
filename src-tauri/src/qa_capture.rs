@@ -374,9 +374,17 @@ mod mouse {
     const BUTTON_LEFT: u32 = 0;
     /// kVK_Return — kaydetme panelinde varsayılan düğme (Kaydet).
     pub const KEY_RETURN: u16 = 0x24;
+    /// FİZİKSEL tuş kodları (klavye düzeninden bağımsız).
+    pub const KEY_V: u16 = 0x09;
+    pub const KEY_9: u16 = 0x19;
+    pub const KEY_ESC: u16 = 0x35;
+    /// kCGEventFlagMaskShift / …Alternate.
+    pub const FLAG_SHIFT: u64 = 0x0002_0000;
+    pub const FLAG_ALT: u64 = 0x0008_0000;
 
     #[link(name = "CoreGraphics", kind = "framework")]
     unsafe extern "C" {
+        fn CGEventSetFlags(event: Ref, flags: u64);
         fn CGEventSourceCreate(state: u32) -> Ref;
         fn CGEventCreateMouseEvent(source: Ref, kind: u32, pos: CGPoint, button: u32) -> Ref;
         fn CGEventCreateKeyboardEvent(source: Ref, key: u16, down: bool) -> Ref;
@@ -428,6 +436,29 @@ mod mouse {
         }
         nap(120);
         post(LEFT_UP, x2, y2);
+        nap(200);
+    }
+
+    /// Değiştiricili tuş vuruşu — global kısayolları sınamak için.
+    ///
+    /// Bayraklar HER İKİ olaya da konuyor: yalnız basmaya konsaydı Carbon'un
+    /// `RegisterEventHotKey`i eşleşmeyi kaçırabilirdi.
+    pub fn key_with_flags(code: u16, flags: u64) {
+        unsafe {
+            let src = CGEventSourceCreate(SOURCE_HID);
+            for down in [true, false] {
+                let ev = CGEventCreateKeyboardEvent(src, code, down);
+                if !ev.is_null() {
+                    CGEventSetFlags(ev, flags);
+                    CGEventPost(HID_TAP, ev);
+                    CFRelease(ev);
+                }
+                nap(80);
+            }
+            if !src.is_null() {
+                CFRelease(src);
+            }
+        }
         nap(200);
     }
 
@@ -1288,6 +1319,107 @@ fn real_click_element(app: &tauri::AppHandle, m: &MonitorInfo, id: &str) -> bool
     true
 }
 
+/// Global kısayollar: GERÇEK tuş vuruşuyla.
+///
+/// Kısayollar Carbon `RegisterEventHotKey` ile kaydediliyor
+/// (`platform/macos/hotkey_carbon.rs`) ve açılışta günlüğe "7 kayıtlı" düşüyor —
+/// ama kayıtlı olmak ÇALIŞTIĞI anlamına gelmiyor. Sentetik olayla da ölçülemez:
+/// global kısayol işletim sisteminin olay hattında çözülüyor, uygulamanın DOM'unda
+/// değil. Tek yol gerçek tuş vuruşu.
+#[cfg(target_os = "macos")]
+fn flow_hotkey(app: &tauri::AppHandle, _m: &MonitorInfo) {
+    note("— global kısayollar (gerçek tuş vuruşu) —");
+
+    // ── Alt+Shift+V: ana pencere ──────────────────────────────────────────
+    on_main(app, crate::windows::main_window::hide);
+    sleep(700);
+    check(!visible(app, "main"), "başlangıç: ana pencere gizli");
+
+    mouse::key_with_flags(mouse::KEY_V, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
+    let mut shown = false;
+    for _ in 0..30 {
+        sleep(100);
+        if visible(app, "main") {
+            shown = true;
+            break;
+        }
+    }
+    check(shown, "Alt+Shift+V ana pencereyi açtı");
+    on_main(app, crate::windows::main_window::hide);
+    sleep(500);
+
+    // ── Alt+Shift+9: ekran görüntüsü ──────────────────────────────────────
+    mouse::key_with_flags(mouse::KEY_9, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
+    let mut opened = false;
+    for _ in 0..50 {
+        sleep(100);
+        if visible(app, "capture-0") {
+            opened = true;
+            break;
+        }
+    }
+    check(opened, "Alt+Shift+9 yakalama overlay'ini açtı");
+    check(
+        app.state::<AppState>().runtime.lock().unwrap().is_capturing,
+        "kısayol sonrası oturum bayrağı kalktı (is_capturing)",
+    );
+
+    // Esc ile kapat — overlay odakta olduğu için düz tuş yetiyor.
+    sleep(400);
+    mouse::key(mouse::KEY_ESC);
+    let mut closed = false;
+    for _ in 0..40 {
+        sleep(100);
+        if !visible(app, "capture-0") {
+            closed = true;
+            break;
+        }
+    }
+    check(closed, "Esc yakalamayı kapattı");
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(400);
+    check(
+        !app.state::<AppState>().runtime.lock().unwrap().is_capturing,
+        "kapanış sonrası oturum bayrağı düştü",
+    );
+
+    // ── Olumsuz durum: kısayol KAPALIYKEN aynı tuş hiçbir şey yapmamalı ────
+    //
+    // Bu adım olmadan yukarıdaki yeşiller pek az şey söylerdi: overlay başka bir
+    // sebeple de açılmış olabilirdi. Aynı zamanda kısayolu açıp kapatma özelliğini
+    // de sınıyor — ayarlar panelindeki anahtar bu yolu kullanıyor.
+    on_main(app, |h| crate::shortcuts::set_enabled(h, crate::state::ShortcutKey::Draw, false));
+    sleep(700);
+    mouse::key_with_flags(mouse::KEY_9, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
+    let mut acildi = false;
+    for _ in 0..25 {
+        sleep(100);
+        if visible(app, "capture-0") {
+            acildi = true;
+            break;
+        }
+    }
+    check(!acildi, "kısayol KAPALIYKEN Alt+Shift+9 hiçbir şey açmadı");
+
+    // Kullanıcının ayarını geri koy.
+    on_main(app, |h| crate::shortcuts::set_enabled(h, crate::state::ShortcutKey::Draw, true));
+    sleep(700);
+    mouse::key_with_flags(mouse::KEY_9, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
+    let mut geri = false;
+    for _ in 0..40 {
+        sleep(100);
+        if visible(app, "capture-0") {
+            geri = true;
+            break;
+        }
+    }
+    check(geri, "kısayol yeniden AÇILINCA tekrar çalıştı");
+    mouse::key(mouse::KEY_ESC);
+    sleep(600);
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(400);
+}
+
 /// A7: kaydırmalı yakalamada "Bitir" sonrası Kopyala GERÇEKTEN tıklanabiliyor mu?
 ///
 /// Bildirilen hata isabet alanıyla ilgiliydi: overlay yakalama sırasında yalnız
@@ -1871,7 +2003,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") || has("a7") {
+            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -1881,6 +2013,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     if has("pointer") { flow_pointer(&app, &m); }
                     if has("save") { flow_savepanel(&app, &m); }
                     if has("a7") { flow_a7(&app, &m); }
+                    if has("hotkey") { flow_hotkey(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }
             }

@@ -1277,10 +1277,38 @@ kaydırma düğmeleri `click`. `btn-record`a `mousedown` göndermek kaydı hiç
 başlatmıyordu ve harness bunu "kayıt başlamadı" diye doğru raporladı. Yanlış olayı
 gönderen bir sınama sessizce yeşil verebilirdi.
 
+### Global kısayollar — `--qa-capture=hotkey`
+
+Kısayollar Carbon `RegisterEventHotKey` ile kaydediliyor ve açılışta günlüğe
+"7 kayıtlı" düşüyor, ama KAYITLI olmak çalıştığı anlamına gelmiyor. Sentetik olayla
+da ölçülemez: global kısayol işletim sisteminin olay hattında çözülüyor, uygulamanın
+DOM'unda değil. Gerçek tuş vuruşu tek yol.
+
+| Adım | Sonuç |
+|---|---|
+| Alt+Shift+V | Ana pencere açıldı |
+| Alt+Shift+9 | Yakalama overlay'i açıldı, `is_capturing` kalktı |
+| Esc | Yakalama kapandı, bayrak düştü |
+| Kısayol KAPALIYKEN Alt+Shift+9 | Hiçbir şey açılmadı |
+| Yeniden AÇILINCA Alt+Shift+9 | Tekrar çalıştı |
+
+Son iki satır testin ayırt ettiğini gösteriyor — onlar olmadan yeşiller "overlay
+başka bir sebeple açılmış olabilir"i eleyemezdi. Aynı adımlar kısayolu açıp kapatma
+özelliğini de sınıyor (ayarlar panelindeki anahtar bu yolu kullanıyor) ve kullanıcının
+ayarı sonunda geri konuyor.
+
 ### Hâlâ doğrulanmayan
 
 - **Üç veya daha fazla monitör.** Bu makinede iki ekran var. Kullanıcının hatayı
   bildirdiği düzen Windows'ta üç ekrandı.
+- **Güncelleyici** (`updater.rs`, 247 satır): `pubkey` boş olduğu için açılış
+  kontrolü atlanıyor ve otomatik güncelleme hiç çalışmıyor. Anahtar üretilmeden
+  sınanamaz.
+- **Hızlı yapıştırmanın Cmd+V enjeksiyonu** (`platform/macos/paste.rs`): pencere
+  açılıp kapanıyor ama yapıştırma başka bir uygulamaya yazmayı gerektiriyor.
+- **Electron→Tauri göçü** (`migrate.rs`): parçaları birim testli, bütün yol yalnız
+  Electron verisiyle ilk açılışta koşuyor.
+- **Tepsi menüsü** (`tray.rs`): menü kuruluyor, hiçbir test öğeye tıklamıyor.
 (Açıklama araçlarının hepsi ölçüldü, aşağıya bakın.)
 
 ### Açıklama araçları: altısı da, biçimleriyle

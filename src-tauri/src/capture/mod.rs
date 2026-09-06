@@ -425,8 +425,34 @@ pub async fn capture_retry(app: tauri::AppHandle, window: tauri::WebviewWindow) 
 /// Overlay kullanılabilir bir görüntü aldı → göster.
 #[tauri::command]
 pub async fn snip_ready(window: tauri::WebviewWindow) {
-    let _ = window.show();
-    let _ = window.set_focus();
+    // ── SIRA: önce uygulamayı öne al, SONRA göster ve odakla ────────────────
+    //
+    // Kullanıcı bildirdi: "ekran görüntüsü, kaydırmalı, video ve OCR'da doğrudan
+    // alan seçemiyorum; bir kere tıkladıktan sonra seçebiliyorum." Dördü de
+    // buradan geçiyor.
+    //
+    // İki ayrı sebep vardı ve ikisi de ölçüldü (`--qa-capture=firstclick`,
+    // uygulama bilerek arka plana atılarak):
+    //
+    // 1. Bu komut gövdesi async runtime'da, yani ANA THREAD DIŞINDA koşuyor.
+    //    Oradan yapılan `set_focus()` overlay'i gerçekten öne almıyordu:
+    //    ilk sürüklemede 0 mousedown, seçim kutusu 0×0.
+    // 2. Etkinleştirme pencere GÖSTERİLDİKTEN sonra yapılınca arada bir yarış
+    //    kalıyordu: dört kipten üçü geçiyor, biri (hangisi olduğu değişiyor)
+    //    hâlâ tıklamayı yutuyordu. Uygulama pencere belirmeden ÖNCE öne
+    //    alınınca pencere zaten aktif bir uygulamada açılıyor.
+    //
+    // CopyBoard Dock'u gizli bir yardımcı uygulama (`ActivationPolicy::Accessory`),
+    // bu yüzden `show()` + `set_focus()` tek başına onu aktif uygulama yapmıyor —
+    // ana pencere de aynı sebeple `activate_app()` çağırıyor
+    // (bkz. `main_window::show`).
+    let app = window.app_handle().clone();
+    let target = window.clone();
+    let _ = app.run_on_main_thread(move || {
+        crate::platform::activate_app();
+        let _ = target.show();
+        let _ = target.set_focus();
+    });
     // Karışık DPI güvencesi + tanı: gösterim sırasında gelen DPI değişimi pencereyi
     // yeniden boyutlandırmış olabilir; hedef dikdörtgeni yeniden uygula ve gerçekleşen
     // konum/boyutu günlüğe yaz (çok monitörde "seçim yapılamıyor" raporları için).

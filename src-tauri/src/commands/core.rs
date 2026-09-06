@@ -116,7 +116,7 @@ pub async fn toast_resize(app: tauri::AppHandle, height: f64) {
 
 /// Renderer'dan hata ayıklama günlüğü. Electron'daki `debug-log` kanalı.
 #[tauri::command]
-pub fn debug_log(message: String) {
+pub fn debug_log(window: tauri::WebviewWindow, message: String) {
     if message == "snip-painted" {
         if let Some(ms) = crate::capture::elapsed_since_begin_ms() {
             log::info!("PERF snip-painted +{ms} ms");
@@ -129,7 +129,11 @@ pub fn debug_log(message: String) {
     if let Some(rest) = message.strip_prefix("QAC ") {
         crate::qa_capture::probe(rest);
     }
-    log::info!("[renderer] {message}");
+    // Pencere ETİKETİ de yazılıyor. Çok monitörde iki yakalama overlay'i aynı anda
+    // açık oluyor ve etiketsiz satır hangisinden geldiğini söylemiyordu: "ilk
+    // mousemove ulaştı" satırı, kullanıcının baktığı ekranın DEĞİL diğerinin
+    // olabiliyordu ve tanı orada tıkandı.
+    log::info!("[renderer {}] {message}", window.label());
 }
 
 /// Dil değişimi. Her pencere kendi metinlerini yüklenirken boyadığı için

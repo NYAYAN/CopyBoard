@@ -1,0 +1,65 @@
+# Her push'ta derleme ve testler — İKİ platformda da.
+#
+# Neden ayrı bir iş akışı: `release.yml` yalnız etiket atıldığında (ya da elle)
+# koşuyor, yani Windows derlemesi ancak SÜRÜM anında sınanıyordu. Bu, Windows'a
+# özgü kırıkların günlerce fark edilmeden durmasına yol açtı — iki kez:
+#
+#  1. macOS'taki `recorder::start`e mikrofon aygıtı parametresi eklendi,
+#     `recorder_win.rs`e eklenmedi; imzalar kaydı ve Windows derlenmiyordu.
+#  2. AVAssetWriter geçişinde `objc2-*` bağımlılıkları genel `[dependencies]`
+#     bölümüne yazıldı; `objc2` Apple dışı platformda derlemeyi REDDEDİYOR ve
+#     Windows hedefi kırıldı.
+#
+# İkisi de `cargo check` ile bir dakikada yakalanırdı. Burada yakalanıyorlar.
+name: Check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rust:
+    name: cargo check + test (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # tesseract-rs Tesseract + Leptonica'yı KAYNAKTAN derliyor; önbelleksiz ilk
+      # koşu uzun sürer, sonrakiler dakikalar içinde biter.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: check-${{ matrix.platform }}
+
+      - name: cmake doğrula
+        run: cmake --version
+
+      # `--all-targets` testleri ve örnekleri de kapsıyor: hata ayıklamaya özgü
+      # harness'lar (`qa.rs`, `qa_capture.rs`) da böylece derleniyor.
+      - name: cargo check
+        working-directory: ./src-tauri
+        run: cargo check --all-targets
+
+      - name: cargo test
+        working-directory: ./src-tauri
+        run: cargo test
+
+  js:
+    name: npm test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test

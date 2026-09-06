@@ -326,7 +326,16 @@ pub fn run(app: tauri::AppHandle) {
                 for _ in 0..30 { sleep(100); if visible(&app, "capture-0") == Some(true) { up = true; break; } }
                 check(up, "kaydedici overlay'i açıldı ve görünür");
                 if up {
-                    sleep(400); // varsayılan 500×500 seçim uygulanıyor
+                    // Bölgeyi SEÇ. `applyDefaultSize()` yalnız TEK monitörde çalışıyor
+                    // (`if (!multiMonitor)`), yani çok ekranlı makinede seçim yok ve
+                    // `startRecording` ilk satırda sessizce dönüyor. Eskiden bu adım
+                    // "kayıt başlamadı" diye düşüyordu ve sebebi ürün değil testti.
+                    let secim = r#"(function () {
+                        const ev = (t, x, y) => document.body.dispatchEvent(new MouseEvent(t, { bubbles: true, clientX: x, clientY: y, button: 0 }));
+                        ev('mousedown', 200, 200); ev('mousemove', 500, 400); ev('mousemove', 800, 600); ev('mouseup', 800, 600);
+                    })();"#;
+                    on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(secim); } });
+                    sleep(600);
                     let click = "document.getElementById('btn-record').click();";
                     on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(click); } });
                     let mut rec = false;
@@ -563,9 +572,14 @@ pub fn run(app: tauri::AppHandle) {
             }
 
             // ── 10. Tema ──────────────────────────────────────────────────────
-            let os_dark = crate::platform::os_prefers_dark_hint();
+            // ANA THREAD'de sorulmalı: `os_prefers_dark_hint` içeride
+            // `MainThreadMarker::new()?` yapıyor ve başka bir thread'den çağrılınca
+            // sessizce `None` dönüyor. Eskiden bu adım QA'nın kendi thread'inden
+            // çağrılıp düşüyordu — ölçtüğü şey OS tercihi değil, hangi thread'de
+            // olduğuydu.
+            let os_dark = on_main(&app, |_| crate::platform::os_prefers_dark_hint()).flatten();
             log::info!("QA · OS koyu tema ipucu: {os_dark:?}");
-            check(os_dark.is_some(), "OS tema tercihi okunabildi");
+            check(os_dark.is_some(), "OS tema tercihi okunabildi (ana thread'de)");
 
             log::info!("QA bitti: {} başarısız adım", fails);
         })

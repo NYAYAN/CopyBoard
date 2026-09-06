@@ -175,6 +175,22 @@ pub fn quality_bitrate(quality: &str) -> u32 {
     }
 }
 
+/// Son BAŞARIYLA yazılan piksel tamponu, `Idle` karelerde tekrar edilmek üzere.
+///
+/// Ham CoreVideo işaretçisi tutuluyor; `CVPixelBuffer` bir CoreFoundation nesnesi
+/// ve thread'ler arası paylaşılabiliyor, erişim ayrıca `Mutex` ile serileşiyor.
+struct RetainedBuffer(*mut std::ffi::c_void);
+
+// SAFETY: CVPixelBuffer thread'ler arası taşınabilir; tek referansı burada ve
+// erişim `Mutex` altında.
+unsafe impl Send for RetainedBuffer {}
+
+impl Drop for RetainedBuffer {
+    fn drop(&mut self) {
+        unsafe { CFRelease(self.0) };
+    }
+}
+
 pub struct AssetWriter {
     writer: Retained<AVAssetWriter>,
     video: Mutex<Retained<AVAssetWriterInput>>,
@@ -188,6 +204,13 @@ pub struct AssetWriter {
     /// piksel tamponunu ve zaman damgasını alıyor — Apple'ın ekran kaydı için
     /// belgelediği yol da bu.
     adaptor: Mutex<Retained<AVAssetWriterInputPixelBufferAdaptor>>,
+    /// En son yazılan kare — ekran DURDUĞUNDA tekrar edilmek üzere tutuluyor.
+    /// Bkz. [`AssetWriter::tick_repeat`].
+    last_frame: Mutex<Option<RetainedBuffer>>,
+    /// Son yazılan karenin zaman damgası ve yazıldığı AN. Tekrar edilen karenin
+    /// damgası bu ikisinden türüyor: SCK'nın zaman çizgisinde kalmak gerekiyor,
+    /// duvar saatine geçmek izleri kaydırırdı.
+    last_pts: Mutex<Option<(objc2_core_media::CMTime, std::time::Instant)>>,
     /// TEK ses izi.
     ///
     /// Mikrofon ve sistem sesi ayrı izlere yazmak denendi: dosya bozulmuyordu ama
@@ -389,6 +412,8 @@ impl AssetWriter {
                 writer,
                 video: Mutex::new(video),
                 adaptor: Mutex::new(adaptor),
+                last_frame: Mutex::new(None),
+                last_pts: Mutex::new(None),
                 audio,
                 session_started: AtomicBool::new(false),
                 video_frames: AtomicU64::new(0),
@@ -462,11 +487,14 @@ impl AssetWriter {
 
         let owned_ref: &CVPixelBuffer = unsafe { &*owned.cast::<CVPixelBuffer>() };
         let appended = unsafe { adaptor.appendPixelBuffer_withPresentationTime(owned_ref, pts) };
-        unsafe { CFRelease(owned) };
         let _ = pixels;
 
         if appended {
             self.video_frames.fetch_add(1, Ordering::Relaxed);
+            // Tampon SERBEST BIRAKILMIYOR, saklanıyor: ekran durduğunda tekrar
+            // edilecek (bkz. `repeat_last`). Eskisi burada düşüp bırakılıyor.
+            *self.last_frame.lock().unwrap() = Some(RetainedBuffer(owned));
+            *self.last_pts.lock().unwrap() = Some((pts, std::time::Instant::now()));
         } else {
             // İlk başarısızlık sessiz kalmasın: yazıcı hata durumuna düştüyse
             // bundan SONRAKİ her ekleme de başarısız olur ve kayıt boş çıkar.
@@ -482,7 +510,57 @@ impl AssetWriter {
                     unsafe { self.writer.status() }
                 );
             }
+            unsafe { CFRelease(owned) };
         }
+    }
+
+    /// Ekran DURDUYSA son kareyi yeniden yazar; zaman damgasını kendi hesaplar.
+    ///
+    /// ## Neden gerekli
+    ///
+    /// ScreenCaptureKit ekran değişmediğinde önce piksel taşımayan `Idle` kareler
+    /// yolluyor, sonra onları da kesiyor. Sonucu ölçülmemişti: hareketsiz bir ekranın
+    /// 20 saniyelik kaydında ses izi 20,05 sn, GÖRÜNTÜ izi 0,067 sn çıkıyordu (tek
+    /// kare). Böyle bir dosya oynatıcıda anında biten bir videodur — kullanıcı sabit
+    /// bir ekranı anlatırken tam olarak bu oluyor.
+    ///
+    /// Tekrarı `Idle` karelere bağlamak yetmedi (görüntü izi 10,8 sn'de kaldı, çünkü
+    /// SCK bir süre sonra onları da göndermiyor). Bu yüzden çağrı bir ZAMANLAYICIDAN
+    /// geliyor ve damga son gerçek kareden geçen süreyle türetiliyor — SCK'nın zaman
+    /// çizgisinde kalınıyor.
+    ///
+    /// Bedeli yok: H.264 birebir aynı kareyi birkaç bitlik P-kare olarak kodluyor.
+    /// `min_gap`ten daha yakın bir tekrar yazılmıyor.
+    pub fn tick_repeat(&self, min_gap: std::time::Duration) -> bool {
+        if !self.session_started.load(Ordering::Acquire) {
+            return false;
+        }
+        let (base, at) = match *self.last_pts.lock().unwrap() {
+            Some(v) => v,
+            None => return false,
+        };
+        let elapsed = at.elapsed();
+        if elapsed < min_gap {
+            return false;
+        }
+        let held = self.last_frame.lock().unwrap();
+        let Some(buf) = held.as_ref() else { return false };
+        let adaptor = self.adaptor.lock().unwrap();
+        if !unsafe { adaptor.assetWriterInput().isReadyForMoreMediaData() } {
+            return false;
+        }
+        let pts = advance(base, elapsed);
+        let pixels: &CVPixelBuffer = unsafe { &*buf.0.cast::<CVPixelBuffer>() };
+        let ok = unsafe { adaptor.appendPixelBuffer_withPresentationTime(pixels, pts) };
+        if ok {
+            self.video_frames.fetch_add(1, Ordering::Relaxed);
+            drop(adaptor);
+            drop(held);
+            *self.last_pts.lock().unwrap() = Some((pts, std::time::Instant::now()));
+        } else {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+        }
+        ok
     }
 
     /// Bir ses örneği ekler. Oturum başlamadıysa sessizce atılır.
@@ -562,8 +640,44 @@ impl AssetWriter {
     }
 }
 
+/// Bir zaman damgasını verilen süre kadar ilerletir.
+///
+/// Ayrı bir fonksiyon çünkü sessizce yanlış olabilecek tek yer burası: `value`
+/// saniye değil, `timescale` biriminde. Ölçeği unutmak izleri saatlerce kaydırırdı.
+fn advance(base: objc2_core_media::CMTime, by: std::time::Duration) -> objc2_core_media::CMTime {
+    let ts = base.timescale.max(1);
+    objc2_core_media::CMTime {
+        value: base.value + (by.as_secs_f64() * ts as f64).round() as i64,
+        timescale: ts,
+        flags: base.flags,
+        epoch: base.epoch,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn zaman_damgasi_olcek_biriminde_ilerliyor() {
+        let base = objc2_core_media::CMTime {
+            value: 1_000,
+            timescale: 600,
+            flags: objc2_core_media::CMTimeFlags(1),
+            epoch: 0,
+        };
+        // 0,5 sn × 600 = 300 birim. CMTime PAKETLİ bir yapı, alanlarına referans
+        // alınamıyor — önce kopyalanıyorlar.
+        let a = advance(base, std::time::Duration::from_millis(500));
+        let (v, ts, fl, ep) = (a.value, a.timescale, a.flags.0, a.epoch);
+        assert_eq!(v, 1_300);
+        assert_eq!(ts, 600);
+        assert_eq!(fl, 1);
+        assert_eq!(ep, 0);
+        // Sıfır ölçek gelirse 1'e sabitleniyor — 0'a bölme yok.
+        let bozuk = objc2_core_media::CMTime { value: 5, timescale: 0, ..base };
+        let bts = advance(bozuk, std::time::Duration::from_secs(2)).timescale;
+        assert_eq!(bts, 1);
+    }
+
     use super::*;
 
     /// Kroma düzlemi TAM kopyalanıyor mu?

@@ -450,12 +450,56 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
     // ana pencere de aynı sebeple `activate_app()` çağırıyor
     // (bkz. `main_window::show`).
     let app = window.app_handle().clone();
+
+    // ── ODAK, İMLECİN BULUNDUĞU EKRANDAKİ overlay'e ─────────────────────────
+    //
+    // Çok monitörde her ekran için bir overlay açılıyor ve her biri hazır olunca
+    // odak istiyordu. macOS'ta aynı anda YALNIZ BİR pencere key olabilir, yani en
+    // son hazır olan kazanıyordu — hangisi olduğu yükleme sırasına bağlı, yani
+    // rastgele. Key OLMAYAN pencere `mouseMoved` hiç almıyor ve ilk tıklama da
+    // pencereyi key yapmaya harcanıyor.
+    //
+    // Kullanıcının bildirdiği tam olarak buydu ve HARİCİ monitörde çalışıyordu:
+    // büyüteç fareyi takip etmiyor, sürükleme işlemiyor, bir kere tıklayınca
+    // düzeliyor. Ölçüm (`--qa-capture=firstclick`, iki monitörde): imleç harici
+    // ekranın üstündeyken o overlay'e ulaşan fare olayı sayısı SIFIR, dahili
+    // ekranda 12.
+    //
+    // Doğru davranış: kullanıcı imlecinin olduğu ekranla etkileşecek, odak oraya
+    // gitmeli. Diğer overlay yalnız gösteriliyor — seçim ona kayarsa
+    // `claimCaptureMonitor` zaten devreye giriyor.
+    let cursor = crate::geom::cursor_position(&app);
+    let bu_ekranda = {
+        let state = app.state::<CaptureState>();
+        let overlays = state.overlays.lock().unwrap();
+        match (overlays.get(window.label()), cursor) {
+            (Some(m), Some((cx, cy))) => m.contains(cx, cy),
+            // Konum bilinmiyorsa eski davranış: odağı iste.
+            _ => true,
+        }
+    };
+
+    log::info!(
+        "ODAK kararı {}: imleç {:?}, bu overlay'in ekranı {:?} → odak {}",
+        window.label(),
+        cursor.map(|(x, y)| (x.round(), y.round())),
+        app.state::<CaptureState>()
+            .overlays
+            .lock()
+            .unwrap()
+            .get(window.label())
+            .map(|m| (m.x.round(), m.y.round(), m.width.round(), m.height.round())),
+        if bu_ekranda { "İSTENİYOR" } else { "istenmiyor" }
+    );
+
     let target = window.clone();
     let probe = window.clone();
     let _ = app.run_on_main_thread(move || {
-        crate::platform::activate_app();
         let _ = target.show();
-        let _ = target.set_focus();
+        if bu_ekranda {
+            crate::platform::activate_app();
+            let _ = target.set_focus();
+        }
     });
 
     // ── Tanı: pencere gerçekten key oldu mu? ────────────────────────────────

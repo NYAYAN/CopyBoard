@@ -24,7 +24,10 @@ pub mod pasteboard;
 pub mod power;
 
 use objc2::rc::Retained;
-use objc2_app_kit::{NSApplication, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{
+    NSApplication, NSApplicationActivationOptions, NSRunningApplication, NSWindow,
+    NSWindowCollectionBehavior,
+};
 use objc2_foundation::MainThreadMarker;
 
 /// Kapanışı ana thread'de çalıştırır ve sonucunu geri getirir.
@@ -150,6 +153,20 @@ pub fn activate_ignoring_other_apps() {
         log::warn!("activate_app ana thread dışından çağrıldı — atlandı");
         return;
     };
+    // ── Neden İKİ yol ────────────────────────────────────────────────────
+    //
+    // `activateIgnoringOtherApps` macOS 14'ten beri kullanımdan kalkmış durumda ve
+    // yeni sürümlerde çoğu zaman YOK SAYILIYOR: sistem, arka plandaki bir uygulamanın
+    // odağı kendiliğinden çalmasını engelliyor. Ölçümde bu, yakalama overlay'inin
+    // aralıklı olarak aktif olamamasına yol açtı — kullanıcı ilk tıklamasını
+    // pencereyi uyandırmaya harcıyordu ve fare imleci bile takip etmiyordu.
+    //
+    // Belgelenen güncel yol `NSRunningApplication.activate(options:)`. Eski çağrı
+    // da bırakıldı: ikisi birlikte hem yeni hem eski sürümleri kapsıyor ve
+    // ikisinin de yan etkisi yok.
+    let running = NSRunningApplication::currentApplication();
+    running.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
+
     let app = NSApplication::sharedApplication(mtm);
     #[allow(deprecated)]
     app.activateIgnoringOtherApps(true);

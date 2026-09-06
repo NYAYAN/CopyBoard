@@ -898,3 +898,33 @@ fn sync_autostart(app: &tauri::AppHandle) {
 pub fn show_toast(app: &tauri::AppHandle, message: &str, kind: &str) {
     toast::show(app, message, kind);
 }
+
+#[cfg(test)]
+mod surum_testleri {
+    /// Sürüm numarası ÜÇ dosyada ayrı ayrı duruyor ve hiçbir şey birbirini
+    /// tutmalarını sağlamıyordu:
+    ///
+    /// - `Cargo.toml` → binary'nin sürümü (`CARGO_PKG_VERSION`)
+    /// - `tauri.conf.json` → PAKETİN sürümü (Info.plist, MSI, güncelleyici
+    ///   `latest.json` karşılaştırması bunu okuyor)
+    /// - `package.json` → npm tarafı
+    ///
+    /// Kayarlarsa paketlenen uygulama ile depo farklı sürüm söyler; daha kötüsü,
+    /// güncelleyici `tauri.conf.json`daki sürümü kıyasladığı için yayınlanan
+    /// sürüm "zaten güncel" görünebilir. Elle üç dosya düzenlemek unutulmaya
+    /// açık; bu test onu derleme zamanında yakalıyor.
+    #[test]
+    fn surum_numarasi_uc_dosyada_ayni() {
+        let cargo = env!("CARGO_PKG_VERSION");
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json bozuk");
+        let pkg: serde_json::Value =
+            serde_json::from_str(include_str!("../../package.json")).expect("package.json bozuk");
+
+        let conf_v = conf["version"].as_str().expect("tauri.conf.json'da version yok");
+        let pkg_v = pkg["version"].as_str().expect("package.json'da version yok");
+
+        assert_eq!(conf_v, cargo, "tauri.conf.json ({conf_v}) ile Cargo.toml ({cargo}) ayrışmış");
+        assert_eq!(pkg_v, cargo, "package.json ({pkg_v}) ile Cargo.toml ({cargo}) ayrışmış");
+    }
+}

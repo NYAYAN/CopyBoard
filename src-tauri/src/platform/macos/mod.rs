@@ -115,7 +115,13 @@ pub fn show_inactive(window: &tauri::WebviewWindow) -> Result<(), String> {
 /// OS görünümü koyu mu — pencere olmadan, `NSApp.effectiveAppearance` üzerinden.
 /// Ana thread dışından çağrılırsa `None` (AppKit kuralı).
 pub fn os_prefers_dark_hint() -> Option<bool> {
-    let mtm = MainThreadMarker::new()?;
+    // Ana thread dışından `None` dönüyor ve çağıran taraf bunu "okunamadı" sanıp
+    // KOYU varsayıyor (`os_prefers_dark`: `unwrap_or(true)`) — açık temalı bir
+    // makinede ilk pencere koyu açılırdı. Sessiz kalmasın.
+    let Some(mtm) = MainThreadMarker::new() else {
+        log::warn!("os_prefers_dark_hint ana thread dışından çağrıldı — tercih okunamadı");
+        return None;
+    };
     let app = NSApplication::sharedApplication(mtm);
     let name = app.effectiveAppearance().name();
     Some(name.to_string().contains("Dark"))

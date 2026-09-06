@@ -1268,6 +1268,128 @@ fn flow_pointer(app: &tauri::AppHandle, m: &MonitorInfo) {
     remove_card(app);
 }
 
+/// Bir DOM düğmesine GERÇEK tıklama.
+///
+/// İmleç önce götürülüp bekleniyor: overlay'in tıklanabilirliği isabet ALANIYLA
+/// yönetiliyor ve ana süreç imleci 30 ms'de bir yokluyor. Hemen tıklamak, pencere
+/// henüz geçirgenken tıklamak olurdu.
+#[cfg(target_os = "macos")]
+fn real_click_element(app: &tauri::AppHandle, m: &MonitorInfo, id: &str) -> bool {
+    let Some((bx, by)) = element_center(app, id) else {
+        return false;
+    };
+    let (sx, sy) = to_screen(m, bx, by);
+    mouse::move_to(sx, sy);
+    sleep(500);
+    mouse::click(sx, sy);
+    true
+}
+
+/// A7: kaydırmalı yakalamada "Bitir" sonrası Kopyala GERÇEKTEN tıklanabiliyor mu?
+///
+/// Bildirilen hata isabet alanıyla ilgiliydi: overlay yakalama sırasında yalnız
+/// araç çubuğunun dikdörtgeninde tıklanabilir kalıyor ve o dikdörtgen evre
+/// değişiminden ÖNCE bildiriliyordu — inceleme evresinde ESKİ araç çubuğunun yeri
+/// tıklanıyor, yenisi ölü kalıyordu.
+///
+/// Sentetik olayla ölçülemez: sentetik `mousedown` işletim sisteminin isabet
+/// sınamasından geçmiyor ve düğmeye her hâlükârda ulaşıyor. Bu akış Başlat, Bitir
+/// ve Kopyala'nın ÜÇÜNE de gerçek imleçle basıyor.
+#[cfg(target_os = "macos")]
+fn flow_a7(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— A7: inceleme evresinde Kopyala gerçekten tıklanabiliyor mu —");
+    let Some(card) = install_card(app, m, "scroll") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+    let before = gallery_ids(app);
+
+    on_main(app, |h| crate::capture::start(h, "scroll"));
+    if !check(wait_overlay(app, "capture-0"), "kaydırma overlay'i açıldı") {
+        remove_card(app);
+        return;
+    }
+    lower_main(app);
+
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    let (x1, y1) = to_screen(m, qx, qy);
+    let (x2, y2) = to_screen(m, qx + qw, qy + qh);
+    mouse::drag(x1, y1, x2, y2, 22);
+    sleep(700);
+
+    check(real_click_element(app, m, "btn-start"), "Başlat'a gerçek tıklama gönderildi");
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        use crate::capture::scroll_stream::ScrollState;
+        let mut started = false;
+        for _ in 0..50 {
+            sleep(100);
+            if app.state::<ScrollState>().0.lock().unwrap().is_some() {
+                started = true;
+                break;
+            }
+        }
+        check(started, "Başlat GERÇEK tıklamayla işledi (akış kuruldu)");
+    }
+    sleep(600);
+
+    for _ in 0..24 {
+        eval(
+            app,
+            crate::windows::main_window::LABEL,
+            "(function(){const e=document.getElementById('qa-scroll'); if(e) e.scrollTop += 44;})();".to_string(),
+        );
+        sleep(220);
+    }
+    sleep(700);
+
+    check(real_click_element(app, m, "btn-finish"), "Bitir'e gerçek tıklama gönderildi");
+    sleep(3000);
+
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        "window.api.sendDebugLog('QAC a7.phase=' + document.body.className);".to_string(),
+    );
+    let phase = wait_probe("a7.phase", 3000).unwrap_or_default();
+    note(&format!("evre: {phase}"));
+    if !check(phase.contains("phase-review"), "Bitir GERÇEK tıklamayla işledi (inceleme evresi)") {
+        on_main(app, |h| crate::capture::close_all(h, None));
+        remove_card(app);
+        return;
+    }
+
+    // ── A7'nin kendisi ────────────────────────────────────────────────────
+    on_main(app, |_| crate::platform::clipboard_write_text("qac-a7-bekliyor"));
+    sleep(400);
+    check(real_click_element(app, m, "btn-copy"), "Kopyala'ya gerçek tıklama gönderildi");
+    sleep(3000);
+
+    match on_main(app, |_| clipboard_image()).flatten() {
+        Some(img) => {
+            note(&format!("panodaki görüntü: {}x{}", img.w, img.h));
+            check(
+                img.h as f64 > qh * m.scale * 1.2,
+                "A7 KAPANDI: inceleme evresinde Kopyala gerçek tıklamayla çalıştı",
+            );
+        }
+        None => {
+            check(false, "A7: Kopyala'ya gerçek tıklamadan sonra panoda görüntü YOK");
+        }
+    }
+
+    sleep(700);
+    for id in gallery_ids(app).iter().filter(|i| !before.contains(i)) {
+        let id = id.clone();
+        on_main(app, move |h| crate::gallery::delete(h, &id));
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(600);
+    delete_history_where(app, |c| c.starts_with("qac-"));
+    remove_card(app);
+}
+
 /// Yerel kaydetme paneli: Kaydet'e GERÇEK tıklama, panelde Return, diske düşen
 /// dosyanın PİKSELLERİ.
 #[cfg(target_os = "macos")]
@@ -1702,22 +1824,29 @@ pub fn run(app: tauri::AppHandle, which: String) {
 
             // ── EMNİYET: galeri kotasını tüketme ──────────────────────────
             //
-            // Yakalama akışları gerçek galeriye yazıyor ve galeri 30 kayıtla
-            // sınırlı: dolduğunda `gallery::add` EN ESKİSİNİ dosyasıyla birlikte
-            // siliyor. Harness eklediğini sonunda temizliyor ama düşen kayıt
-            // kullanıcınındır ve geri gelmez. 2026-09-06'da tam olarak bu oldu ve
-            // kullanıcının en eski iki ekran görüntüsü kayboldu.
-            let free = crate::gallery::MAX_SCREENSHOTS
-                .saturating_sub(gallery_ids(&app).len());
-            const NEEDED: usize = 8;
-            if free < NEEDED {
+            // Galeri 30 kayıtla sınırlı ve dolduğunda `gallery::add` EN ESKİSİNİ
+            // dosyasıyla birlikte siliyor. Harness eklediğini sonunda temizliyor ama
+            // araya giren eviction KULLANICININ kaydını düşürüyor ve geri gelmiyor —
+            // 2026-09-06'da tam olarak bu oldu, iki ekran görüntüsü kayboldu.
+            //
+            // İhtiyaç akış başına sayılıyor, toptan değil: renk, OCR, tıklama
+            // geçirgenliği ve ayıklama ölçümü galeriye HİÇ yazmıyor, onlar dolu bir
+            // galeride de güvenle koşabilir.
+            let adds = |k: &str| match k {
+                "tools" => 2,
+                "snip" | "scroll" | "multi" | "pointer" | "save" | "a7" => 1,
+                _ => 0,
+            };
+            let needed: usize = wanted.iter().map(|w| adds(w)).sum();
+            let free = crate::gallery::MAX_SCREENSHOTS.saturating_sub(gallery_ids(&app).len());
+            if needed > free {
                 check(
                     false,
                     &format!(
-                        "galeride yalnız {free} boş yer var ({NEEDED} gerekiyor). Koşu \
-                         DURDURULDU: dolu bir galeride her sınama görüntüsü kullanıcının \
-                         en eskisini kalıcı olarak siler. Galeriden birkaç kayıt silip \
-                         yeniden çalıştırın."
+                        "seçilen akışlar galeriye {needed} kayıt yazacak ama yalnız {free} boş yer \
+                         var. Koşu DURDURULDU: dolu bir galeride her sınama görüntüsü kullanıcının \
+                         en eskisini kalıcı olarak siler. Galeriden yer açın ya da galeriye \
+                         yazmayan akışları seçin (color, ocr, through, exclusion)."
                     ),
                 );
                 println!("QAC SONUC: 1 başarısız");
@@ -1725,7 +1854,9 @@ pub fn run(app: tauri::AppHandle, which: String) {
                 app.exit(0);
                 return;
             }
-            note(&format!("galeride {free} boş yer var — devam"));
+            if needed > 0 {
+                note(&format!("galeri: {needed} kayıt yazılacak, {free} boş yer var"));
+            }
 
             let has = |k: &str| wanted.iter().any(|w| w == k);
             if has("snip") { flow_snip(&app, &m, 0); }
@@ -1738,7 +1869,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") {
+            if has("pointer") || has("save") || has("through") || has("a7") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -1747,6 +1878,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     note("Erişilebilirlik izni var — gerçek imleç kullanılıyor");
                     if has("pointer") { flow_pointer(&app, &m); }
                     if has("save") { flow_savepanel(&app, &m); }
+                    if has("a7") { flow_a7(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }
             }

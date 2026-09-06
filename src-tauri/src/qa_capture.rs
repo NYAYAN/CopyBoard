@@ -1361,8 +1361,12 @@ fn activate_other_app() {
 /// göstermek için `main_window::show` çağırdığından uygulama zaten aktif oluyordu
 /// ve hata hepsinden kaçmıştı.
 #[cfg(target_os = "macos")]
-fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
-    note("— overlay'de İLK sürükleme (uygulama arka plandayken) —");
+fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo, index: usize) {
+    note(&format!(
+        "— overlay'de İLK sürükleme, MONİTÖR {index} ({:.0}x{:.0} ×{:.2}) —",
+        m.width, m.height, m.scale
+    ));
+    let etiket = format!("capture-{index}");
 
     // Yakalama GERÇEK KISAYOLLA açılıyor — kullanıcının yolu bu. Rust'tan
     // `capture::start` çağırmak yeterli değildi: o çağrı zaten uygulamanın
@@ -1378,8 +1382,15 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
         sleep(800);
         activate_other_app();
 
+        // İmleci HEDEF EKRANA götür ve ORADAN kısayola bas. Kullanıcı çalıştığı
+        // ekranda oluyor; imleç başka ekrandayken kısayola basmak farklı bir
+        // senaryo (ve overlay odağı imlecin olduğu ekrana veriyor).
+        let (px, py) = to_screen(m, m.width * 0.5, m.height * 0.5);
+        mouse::move_to(px, py);
+        sleep(400);
+
         mouse::key_with_flags(key, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
-        if !check(wait_overlay(app, "capture-0"), &format!("{label}: overlay açıldı")) {
+        if !check(wait_overlay(app, &etiket), &format!("{label}: overlay açıldı")) {
             continue;
         }
 
@@ -1390,7 +1401,7 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
         // ve bildirilen belirtinin ta kendisini ölçüyor.
         eval(
             app,
-            "capture-0",
+            &etiket,
             "window.__qacDown = 0; window.__qacMove = 0;\
              document.addEventListener('mousedown', () => { window.__qacDown++; }, true);\
              document.addEventListener('mousemove', () => { window.__qacMove++; }, true);"
@@ -1408,10 +1419,46 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
             mouse::move_to(mx, my);
         }
         sleep(400);
+
+        // Sayfanın KENDİ geometrisi: webview pencerenin tamamını kaplıyor mu?
+        // Karışık DPI'da (dahili ×2.00, harici ×1.00) yanlış ölçekle kurulan bir
+        // webview pencerenin yalnız bir bölümünü kaplar ve imleç içerik ALANININ
+        // DIŞINDA kalır — ekran görüntüsü yine de doğru boyanır, o yüzden gözle
+        // fark edilmez.
         clear_probes();
         eval(
             app,
-            "capture-0",
+            &etiket,
+            "window.api.sendDebugLog('QAC fc.geo=' + innerWidth + 'x' + innerHeight\
+              + ' dpr=' + devicePixelRatio + ' ekran=' + screen.width + 'x' + screen.height);"
+                .to_string(),
+        );
+        if let Some(geo) = wait_probe("fc.geo", 2500) {
+            note(&format!("{label}: sayfa geometrisi {geo} (monitör {:.0}x{:.0} ×{:.2})", m.width, m.height, m.scale));
+        }
+
+        // İMLEÇ GERÇEKTEN O EKRANDA MI? Bu adım olmadan "olay ulaşmadı" sonucu
+        // ürün hatasıyla koordinat dönüşümü hatasını ayırt edemez — harici monitör
+        // negatif koordinatta ((-822,-1440)) ve dönüşüm orada kolayca kayabilir.
+        let (hx, hy) = to_screen(m, m.width * 0.5, m.height * 0.5);
+        mouse::move_to(hx, hy);
+        sleep(250);
+        let gercek = on_main(app, |h| crate::geom::cursor_position(h)).flatten();
+        let dogru = gercek
+            .map(|(cx, cy)| cx >= m.x && cx < m.x + m.width && cy >= m.y && cy < m.y + m.height)
+            .unwrap_or(false);
+        note(&format!(
+            "{label}: imleç hedeflenen {:?}, gerçekte {gercek:?} → doğru ekranda: {dogru}",
+            (hx.round(), hy.round())
+        ));
+        if !check(dogru, &format!("{label}: imleç HEDEF EKRANDA (ölçüm geçerli)")) {
+            continue;
+        }
+
+        clear_probes();
+        eval(
+            app,
+            &etiket,
             "window.api.sendDebugLog('QAC fc.move=' + (window.__qacMove ?? -1));".to_string(),
         );
         let moves: i32 = wait_probe("fc.move", 3000)
@@ -1433,7 +1480,7 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
         clear_probes();
         eval(
             app,
-            "capture-0",
+            &etiket,
             "(function(){const b=document.getElementById('selection-box');\
               const r=b?b.getBoundingClientRect():null;\
               window.api.sendDebugLog('QAC fc.down=' + (window.__qacDown ?? -1)\
@@ -1447,7 +1494,7 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
             let mut kapandi = false;
             for _ in 0..30 {
                 sleep(200);
-                if !visible(app, "capture-0") {
+                if !visible(app, &etiket) {
                     kapandi = true;
                     break;
                 }
@@ -2262,7 +2309,14 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     if has("save") { flow_savepanel(&app, &m); }
                     if has("a7") { flow_a7(&app, &m); }
                     if has("hotkey") { flow_hotkey(&app, &m); }
-                    if has("firstclick") { flow_firstclick(&app, &m); }
+                    if has("firstclick") {
+                        // İKİ ekranda da: kullanıcı harici monitörde çalışıyor ve
+                        // ilk ölçümlerin hepsi dahili ekranda koşmuştu.
+                        let monitors = crate::geom::all_monitors(&app);
+                        for (i, mon) in monitors.iter().enumerate() {
+                            flow_firstclick(&app, mon, i);
+                        }
+                    }
                     if has("stalehit") { flow_stalehit(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }

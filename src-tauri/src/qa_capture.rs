@@ -1319,6 +1319,123 @@ fn real_click_element(app: &tauri::AppHandle, m: &MonitorInfo, id: &str) -> bool
     true
 }
 
+/// BAŞKA bir uygulamayı öne getirir — CopyBoard artık aktif uygulama değil.
+///
+/// Kullanıcının gerçek durumu bu: başka bir uygulamada çalışırken kısayola basıyor.
+/// Harness'ın önceki akışları sınama kartını göstermek için `main_window::show`
+/// çağırıyor ve o `activate_app()` yaptığı için CopyBoard ZATEN aktif oluyordu —
+/// bu yüzden aşağıdaki hata testlerden kaçmıştı.
+#[cfg(target_os = "macos")]
+fn activate_other_app() {
+    use objc2_app_kit::NSRunningApplication;
+    use objc2::rc::autoreleasepool;
+    use objc2_foundation::NSString;
+    // `NSRunningApplication` ana thread istemiyor — `paste.rs` de aynı yerden
+    // çağırıyor.
+    autoreleasepool(|_| {
+        let ns_id = NSString::from_str("com.apple.finder");
+        let running = NSRunningApplication::runningApplicationsWithBundleIdentifier(&ns_id);
+        if let Some(other) = running.iter().next() {
+            other.activateWithOptions(objc2_app_kit::NSApplicationActivationOptions::empty());
+        }
+    });
+    sleep(900);
+}
+
+/// Overlay açıldığında İLK sürükleme çalışıyor mu?
+///
+/// Kullanıcı bildirdi: "ekran görüntüsü, kaydırmalı görüntü, video ve OCR'da
+/// doğrudan alan seçemiyorum, bir kere tıkladıktan sonra seçebiliyorum."
+///
+/// Sebep: CopyBoard Dock'u gizli bir yardımcı uygulama (`ActivationPolicy::Accessory`)
+/// ve `snip_ready` overlay'i gösterirken `show()` + `set_focus()` çağırıyor ama
+/// `activate_app()` ÇAĞIRMIYOR. Ana pencerede o çağrı var ve yorumunda sebebi
+/// yazılı. Uygulama aktif olmadığı için AppKit ilk tıklamayı pencereyi
+/// etkinleştirmeye harcıyor — kullanıcının tarif ettiği "önce bir tıkla" tam olarak
+/// bu.
+///
+/// Bu akış CopyBoard'u BİLEREK arka plana atıyor; önceki akışlar sınama kartını
+/// göstermek için `main_window::show` çağırdığından uygulama zaten aktif oluyordu
+/// ve hata hepsinden kaçmıştı.
+#[cfg(target_os = "macos")]
+fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— overlay'de İLK sürükleme (uygulama arka plandayken) —");
+
+    for (mode, label) in [("draw", "ekran görüntüsü"), ("ocr", "OCR"), ("scroll", "kaydırmalı"), ("video", "video")] {
+        on_main(app, |h| crate::capture::close_all(h, None));
+        sleep(500);
+        activate_other_app();
+
+        let m2 = mode.to_string();
+        on_main(app, move |h| crate::capture::start(h, &m2));
+        if !check(wait_overlay(app, "capture-0"), &format!("{label}: overlay açıldı")) {
+            continue;
+        }
+
+        // Ölçü, tıklamanın SAYFAYA ULAŞMASI. `state.selectionRect` okumak
+        // güvenilmez: OCR sayfasında öyle bir nesne yok, kaydırma sayfası ise
+        // modül olduğu için `eval`den erişilemiyor — ikisinde de sonda sessizce
+        // boş dönüp sahte yeşil veriyordu. Olay sayacı dört sayfada da çalışıyor
+        // ve bildirilen belirtinin ta kendisini ölçüyor.
+        eval(
+            app,
+            "capture-0",
+            "window.__qacDown = 0; document.addEventListener('mousedown', () => { window.__qacDown++; }, true);"
+                .to_string(),
+        );
+        sleep(300);
+
+        // TEK sürükleme — kullanıcının "bir kere tıkladıktan sonra" dediği ikinci
+        // deneme YOK.
+        let (x1, y1) = to_screen(m, m.width * 0.30, m.height * 0.30);
+        let (x2, y2) = to_screen(m, m.width * 0.60, m.height * 0.60);
+        mouse::drag(x1, y1, x2, y2, 22);
+        sleep(600);
+
+        clear_probes();
+        eval(
+            app,
+            "capture-0",
+            "(function(){const b=document.getElementById('selection-box');\
+              const r=b?b.getBoundingClientRect():null;\
+              window.api.sendDebugLog('QAC fc.down=' + (window.__qacDown ?? -1)\
+                + ' kutu=' + (r ? Math.round(r.width)+'x'+Math.round(r.height) : 'yok'));})();"
+                .to_string(),
+        );
+        // OCR'da `mouseup` taramayı BAŞLATIYOR ve `ocr_process` overlay'leri hemen
+        // kapatıyor — sayaç okunacak sayfa kalmıyor. Orada işaret şu: overlay
+        // kapandıysa tıklama ulaşmıştır, hâlâ açıksa ulaşmamıştır.
+        if mode == "ocr" {
+            let mut kapandi = false;
+            for _ in 0..30 {
+                sleep(200);
+                if !visible(app, "capture-0") {
+                    kapandi = true;
+                    break;
+                }
+            }
+            note(&format!("{label}: sürükleme sonrası overlay kapandı = {kapandi}"));
+            check(
+                kapandi,
+                &format!("{label}: İLK sürükleme taramayı başlattı (önce tıklamak gerekmiyor)"),
+            );
+            continue;
+        }
+
+        let got = wait_probe("fc.down", 3000).unwrap_or_default();
+        note(&format!("{label}: {got}"));
+        // Sonda anahtarı ayırdığı için değer "<sayı> kutu=WxH" biçiminde geliyor.
+        let downs: i32 = got.split_whitespace().next().and_then(|v| v.parse().ok()).unwrap_or(-1);
+        check(
+            downs >= 1,
+            &format!("{label}: İLK tıklama sayfaya ULAŞTI (önce tıklamak gerekmiyor)"),
+        );
+    }
+
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(500);
+}
+
 /// Global kısayollar: GERÇEK tuş vuruşuyla.
 ///
 /// Kısayollar Carbon `RegisterEventHotKey` ile kaydediliyor
@@ -2003,7 +2120,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") {
+            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -2014,6 +2131,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     if has("save") { flow_savepanel(&app, &m); }
                     if has("a7") { flow_a7(&app, &m); }
                     if has("hotkey") { flow_hotkey(&app, &m); }
+                    if has("firstclick") { flow_firstclick(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }
             }

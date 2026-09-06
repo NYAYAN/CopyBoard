@@ -243,8 +243,13 @@ fn new_id() -> String {
 pub fn now_iso() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
-    let secs = d.as_secs() as i64;
-    let ms = d.subsec_millis();
+    iso_from_epoch(d.as_secs(), d.subsec_millis())
+}
+
+/// Epoch saniyesinden ISO 8601. Ayrı bir fonksiyon çünkü ŞU AN dışındaki bir zamanı
+/// da biçimlendirmek gerekiyor (ör. binary'nin derleme tarihi).
+pub fn iso_from_epoch(epoch_secs: u64, ms: u32) -> String {
+    let secs = epoch_secs as i64;
 
     // Sivil takvim dönüşümü (Howard Hinnant'ın days_from_civil'inin tersi).
     let days = secs.div_euclid(86_400);

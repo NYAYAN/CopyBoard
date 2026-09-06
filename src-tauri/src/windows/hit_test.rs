@@ -170,10 +170,22 @@ fn start_tracker(app: &tauri::AppHandle) {
                         log::warn!("{label}: tıklama geçirgenliği ayarlanamadı: {e}");
                         continue;
                     }
-                    log::debug!(
-                        "{label}: {}",
-                        if ignore { "geçirgen" } else { "tıklanabilir" }
-                    );
+                    // Yakalama overlay'i INFO seviyesinde: sürüm derlemesinde DEBUG
+                    // yazılmıyor ve "fare hiçbir şey yapmıyor" bildirimlerinde tam da
+                    // bu satır gerekiyordu. Widget gibi diğerleri DEBUG'da kalıyor —
+                    // onlar sürekli geçirgenlik değiştiriyor, günlüğü doldururlardı.
+                    if label.starts_with(crate::windows::capture::PREFIX) {
+                        log::info!(
+                            "{label}: {} (isabet alanı sayısı: {})",
+                            if ignore { "GEÇİRGEN — fare olayları alta geçiyor" } else { "tıklanabilir" },
+                            areas.len()
+                        );
+                    } else {
+                        log::debug!(
+                            "{label}: {}",
+                            if ignore { "geçirgen" } else { "tıklanabilir" }
+                        );
+                    }
                     // İmleç yüzeye YENİ indi: hâlâ ön uygulama DEĞİLİZ, yani bu,
                     // kullanıcının hangi uygulamada yazdığını görebileceğimiz son an.
                     if !ignore && note {

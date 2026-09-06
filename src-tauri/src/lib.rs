@@ -731,6 +731,28 @@ pub fn run() {
                 });
             }
 
+            // HANGİ binary koşuyor? Bu oturumda iki kez, kullanıcının eski bir
+            // paketi çalıştırdığı fark edilmeden saatler harcandı. Yol ve derleme
+            // tarihi günlüğün başında dursun.
+            {
+                let yol = std::env::current_exe();
+                let tarih = yol
+                    .as_ref()
+                    .ok()
+                    .and_then(|p| std::fs::metadata(p).ok())
+                    .and_then(|m| m.modified().ok())
+                    .map(|t| {
+                        let d = t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                        crate::migrate::iso_from_epoch(d.as_secs(), 0)
+                    })
+                    .unwrap_or_else(|| "?".into());
+                log::info!(
+                    "sürüm {} · binary {} · derleme {tarih}",
+                    app.package_info().version,
+                    yol.map(|p| p.display().to_string()).unwrap_or_else(|_| "?".into())
+                );
+            }
+
             // Hata ayıklama derlemesinde ana thread bekçisi: kilitlenmeyi loga yazar.
             #[cfg(debug_assertions)]
             dbgtrace::start(handle.clone());

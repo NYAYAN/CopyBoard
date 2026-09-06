@@ -1,3 +1,34 @@
+// ── Tanı: ilk fare olayı sayfaya NE ZAMAN ulaştı? ──────────────────────────
+// "Fare hiçbir şey yapmıyor, bir kere tıklayınca düzeliyor" bildirimi için.
+// Overlay hazır olduğu andan itibaren ölçülüyor ve oturum başına YALNIZ BİR
+// satır yazılıyor; olay hiç gelmezse satır da hiç çıkmıyor — o da bir cevap.
+(function () {
+    let t0 = performance.now();
+    let bildirildi = { mousemove: false, mousedown: false };
+    const bildir = (tur) => {
+        if (bildirildi[tur]) return;
+        bildirildi[tur] = true;
+        if (window.api && window.api.sendDebugLog) {
+            window.api.sendDebugLog('ilk ' + tur + ' sayfaya ulaştı: +' + Math.round(performance.now() - t0) + ' ms');
+        }
+    };
+    ['mousemove', 'mousedown'].forEach((tur) => {
+        window.addEventListener(tur, () => bildir(tur), { capture: true, passive: true });
+    });
+    // Sayaç, görüntü gelip overlay GÖRÜNÜR olduğunda sıfırlanıyor: ondan öncesi
+    // pencere gizliyken geçen süre ve ölçüme girmemeli.
+    if (window.api && window.api.onCaptureScreen) {
+        const orijinal = window.api.onCaptureScreen;
+        window.api.onCaptureScreen = function (cb) {
+            return orijinal.call(window.api, function () {
+                t0 = performance.now();
+                bildirildi = { mousemove: false, mousedown: false };
+                return cb.apply(this, arguments);
+            });
+        };
+    }
+})();
+
 const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
 const canvas = document.getElementById('screen-canvas');
 const ctx = canvas.getContext('2d');

@@ -23,6 +23,12 @@
             return orijinal.call(window.api, function () {
                 t0 = performance.now();
                 bildirildi = { mousemove: false, mousedown: false };
+                // Her overlay kendini duyuruyor. Çok monitörde iki overlay açılıyor
+                // ve hangisinin fare olayı ALMADIĞI ancak satırın YOKLUĞUNDAN
+                // anlaşılıyor — o yüzden "hazırım" satırı şart.
+                if (window.api && window.api.sendDebugLog) {
+                    window.api.sendDebugLog('overlay hazır, fare bekleniyor');
+                }
                 return cb.apply(this, arguments);
             });
         };

@@ -1700,6 +1700,33 @@ pub fn run(app: tauri::AppHandle, which: String) {
                 m.x, m.y, m.width, m.height, m.scale, m.name.as_deref().unwrap_or("?")
             ));
 
+            // ── EMNİYET: galeri kotasını tüketme ──────────────────────────
+            //
+            // Yakalama akışları gerçek galeriye yazıyor ve galeri 30 kayıtla
+            // sınırlı: dolduğunda `gallery::add` EN ESKİSİNİ dosyasıyla birlikte
+            // siliyor. Harness eklediğini sonunda temizliyor ama düşen kayıt
+            // kullanıcınındır ve geri gelmez. 2026-09-06'da tam olarak bu oldu ve
+            // kullanıcının en eski iki ekran görüntüsü kayboldu.
+            let free = crate::gallery::MAX_SCREENSHOTS
+                .saturating_sub(gallery_ids(&app).len());
+            const NEEDED: usize = 8;
+            if free < NEEDED {
+                check(
+                    false,
+                    &format!(
+                        "galeride yalnız {free} boş yer var ({NEEDED} gerekiyor). Koşu \
+                         DURDURULDU: dolu bir galeride her sınama görüntüsü kullanıcının \
+                         en eskisini kalıcı olarak siler. Galeriden birkaç kayıt silip \
+                         yeniden çalıştırın."
+                    ),
+                );
+                println!("QAC SONUC: 1 başarısız");
+                sleep(400);
+                app.exit(0);
+                return;
+            }
+            note(&format!("galeride {free} boş yer var — devam"));
+
             let has = |k: &str| wanted.iter().any(|w| w == k);
             if has("snip") { flow_snip(&app, &m, 0); }
             if has("tools") { flow_tools(&app, &m); }

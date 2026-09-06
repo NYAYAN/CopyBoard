@@ -100,15 +100,25 @@ mod tests {
     use super::*;
 
     /// Gömülü dil verisini geçici bir dizine serer.
+    ///
+    /// Yol SÜREÇ KİMLİĞİ TAŞIMIYOR: veri binary'ye gömülü, yani her koşuda birebir
+    /// aynı ve 22 MB. Kimlik taşıdığı sürece her `cargo test` koşusu yeni bir kopya
+    /// bırakıyordu ve hiçbiri silinmiyordu — bu makinede 29 kopya, 632 MB. Sabit yol
+    /// üstelik daha hızlı: boyut tutuyorsa yeniden yazılmıyor.
+    ///
+    /// Yazma ATOMİK (geçici ad + `rename`): iki test süreci aynı anda koşarsa biri
+    /// diğerinin yarım yazdığı dosyayı okumasın.
     fn spread_tessdata() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("copyboard-ocr-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join("copyboard-ocr-testdata");
         std::fs::create_dir_all(&dir).unwrap();
         for lang in ["eng", "tur"] {
             let blob = tesseract_rs::get_embedded_tessdata(lang)
                 .unwrap_or_else(|| panic!("'{lang}' binary'ye gömülü değil"));
             let f = dir.join(format!("{lang}.traineddata"));
             if std::fs::metadata(&f).map(|m| m.len() as usize != blob.len()).unwrap_or(true) {
-                std::fs::write(&f, blob).unwrap();
+                let tmp = dir.join(format!("{lang}.{}.part", std::process::id()));
+                std::fs::write(&tmp, blob).unwrap();
+                std::fs::rename(&tmp, &f).unwrap();
             }
         }
         dir

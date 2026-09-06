@@ -86,6 +86,27 @@ impl Store {
         store
     }
 
+    /// Testler için: arka plan yazıcı thread'i OLMADAN bir depo.
+    ///
+    /// Üretimde tek bir depo var ve yazıcısı süreç boyunca yaşıyor. Testte ise her
+    /// depo bir thread daha sızdırıyordu, ve daha kötüsü: geciktirilmiş yazma testin
+    /// geçici dosyasını SİLİNDİKTEN SONRA geri yaratıyordu (yazıcı `dirty`ye bakmadan
+    /// `write_now()` çağırıyor). `$TMPDIR`'de koşu başına altı dosya kalıyor, süreç
+    /// kimliği her koşuda değiştiği için birikiyorlardı — bu makinede 181 dosya, 75 MB.
+    ///
+    /// Yazıcı yokken geciktirilen anahtarlar diske hiç inmiyor; testler depoyu bellek
+    /// içi bir sözlük gibi kullanıyor ve gerekirse `flush()` çağırabiliyor.
+    #[cfg(test)]
+    pub fn load_without_writer(path: PathBuf) -> Arc<Self> {
+        Arc::new(Store {
+            path,
+            data: Mutex::new(Map::new()),
+            dirty: AtomicBool::new(false),
+            ping: Mutex::new(None),
+            write_lock: Mutex::new(()),
+        })
+    }
+
     /// Geciktirilmiş yazmaları birleştiren arka plan thread'i.
     fn spawn_writer(self: Arc<Self>) {
         let (tx, rx) = mpsc::channel::<()>();
@@ -315,11 +336,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn temp_path(name: &str) -> PathBuf {
-        let mut p = std::env::temp_dir();
-        p.push(format!("copyboard-store-test-{name}-{}.json", std::process::id()));
-        let _ = std::fs::remove_file(&p);
-        p
+    /// Kapsamdan çıkınca dosyayı SİLEN geçici yol. Eskiden yalnız açılışta eskisini
+    /// siliyordu ve süreç kimliği her koşuda değiştiği için dosyalar birikiyordu.
+    fn temp_path(name: &str) -> crate::testutil::TempPath {
+        crate::testutil::TempPath::json(&format!("store-test-{name}"))
     }
 
     /// `get` + `set` ayrı kilit aldığı için araya giren yazma KAYBOLUYORDU.
@@ -330,7 +350,8 @@ mod tests {
         const PER_THREAD: usize = 50;
 
         // Önce hatayı GÖSTER: get+set kalıbı gerçekten kayıp veriyor mu?
-        let naive = Store::load(temp_path("yaris-naive"));
+        let _t = temp_path("yaris-naive");
+        let naive = Store::load(_t.to_path_buf());
         std::thread::scope(|scope| {
             for t in 0..THREADS {
                 let store = naive.clone();
@@ -347,7 +368,8 @@ mod tests {
         eprintln!("naive get+set: {naive_len}/{} kayıt hayatta kaldı", THREADS * PER_THREAD);
 
         // Şimdi düzeltmeyi doğrula: atomik oku-değiştir-yaz hiçbir şey düşürmemeli.
-        let atomic = Store::load(temp_path("yaris-atomic"));
+        let _t = temp_path("yaris-atomic");
+        let atomic = Store::load(_t.to_path_buf());
         std::thread::scope(|scope| {
             for t in 0..THREADS {
                 let store = atomic.clone();
@@ -374,7 +396,8 @@ mod tests {
 
     #[test]
     fn update_false_donerse_hicbir_sey_yazmiyor() {
-        let s = Store::load(temp_path("update-noop"));
+        let _t = temp_path("update-noop");
+        let s = Store::load(_t.to_path_buf());
         s.set("liste", vec![1u64, 2, 3]);
         s.update("liste", Vec::<u64>::new(), |v: &mut Vec<u64>| {
             v.push(4); // değiştirdik AMA kaydetme dedik
@@ -385,7 +408,8 @@ mod tests {
 
     #[test]
     fn eksik_anahtar_varsayilana_duser() {
-        let s = Store::load(temp_path("missing"));
+        let _t = temp_path("missing");
+        let s = Store::load(_t.to_path_buf());
         assert_eq!(s.get::<i64>("maxItems", 50), 50);
         assert_eq!(s.get::<String>("theme", "dark".into()), "dark");
         assert!(!s.has("globalShortcutColor"));
@@ -395,7 +419,7 @@ mod tests {
     fn yanlis_tip_varsayilana_duser_ve_uygulamayi_dusurmez() {
         let p = temp_path("badtype");
         std::fs::write(&p, r#"{"maxItems":"elli"}"#).unwrap();
-        let s = Store::load(p);
+        let s = Store::load(p.to_path_buf());
         assert_eq!(s.get::<i64>("maxItems", 50), 50);
     }
 
@@ -403,7 +427,7 @@ mod tests {
     fn bozuk_json_yedeklenir_ve_bos_depo_ile_acilir() {
         let p = temp_path("corrupt");
         std::fs::write(&p, "{ bu json değil ").unwrap();
-        let s = Store::load(p.clone());
+        let s = Store::load(p.to_path_buf());
         assert_eq!(s.get::<i64>("maxItems", 50), 50);
         assert!(p.with_extension("json.corrupt").exists());
         let _ = std::fs::remove_file(p.with_extension("json.corrupt"));
@@ -413,7 +437,7 @@ mod tests {
     fn taninmayan_anahtarlar_yazmadan_sonra_korunur() {
         let p = temp_path("unknown");
         std::fs::write(&p, r#"{"maxItems":50,"gelecekteBirAyar":{"a":1},"history":[]}"#).unwrap();
-        let s = Store::load(p.clone());
+        let s = Store::load(p.to_path_buf());
         s.set("maxItems", 100);
         s.flush();
 
@@ -427,7 +451,7 @@ mod tests {
     #[test]
     fn ayni_degeri_yazmak_disk_yazmasi_planlamaz() {
         let p = temp_path("noop");
-        let s = Store::load(p.clone());
+        let s = Store::load(p.to_path_buf());
         s.set("maxItems", 50);
         s.flush();
         s.set("maxItems", 50);

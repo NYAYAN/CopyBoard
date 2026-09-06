@@ -260,7 +260,30 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    fn store() -> Arc<Store> {
+    /// Testin geçici deposu — kendini SİLİYOR.
+    ///
+    /// Eskiden yalnız açılışta eski dosyayı siliyordu, sonunda hiçbir şey. Yol
+    /// süreç kimliğini taşıdığı için her `cargo test` koşusu yeni bir dosya
+    /// bırakıyordu: bu makinede 175 dosya / 72 MB birikmişti.
+    struct TestStore {
+        store: Arc<Store>,
+        path: std::path::PathBuf,
+    }
+
+    impl std::ops::Deref for TestStore {
+        type Target = Store;
+        fn deref(&self) -> &Store {
+            &self.store
+        }
+    }
+
+    impl Drop for TestStore {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+
+    fn store() -> TestStore {
         let mut p = std::env::temp_dir();
         p.push(format!(
             "copyboard-hist-test-{}-{:?}.json",
@@ -268,7 +291,10 @@ mod tests {
             std::thread::current().id()
         ));
         let _ = std::fs::remove_file(&p);
-        Store::load(p)
+        // Yazıcı thread'i YOK: aksi hâlde geciktirilmiş bir yazma, `Drop` dosyayı
+        // sildikten yarım saniye sonra geri yaratıyor.
+        let store = Store::load_without_writer(p.clone());
+        TestStore { store, path: p }
     }
 
     /// `add()` bir AppHandle istiyor (yayın için); saf mantığı ayrı test etmek için
@@ -281,12 +307,11 @@ mod tests {
         let previous_note = items
             .iter()
             .position(|i| content_of(i) == Some(content))
-            .map(|idx| {
+            .and_then(|idx| {
                 let note = items[idx].get("note").cloned();
                 items.remove(idx);
                 note
-            })
-            .flatten();
+            });
         let mut entry = json!({ "id": new_id(), "content": content, "timestamp": "t" });
         if let Some(note) = previous_note {
             if !note.as_str().unwrap_or("").is_empty() {

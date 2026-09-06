@@ -448,11 +448,50 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
     // (bkz. `main_window::show`).
     let app = window.app_handle().clone();
     let target = window.clone();
+    let probe = window.clone();
     let _ = app.run_on_main_thread(move || {
         crate::platform::activate_app();
         let _ = target.show();
         let _ = target.set_focus();
     });
+
+    // ── Tanı: pencere gerçekten key oldu mu? ────────────────────────────────
+    //
+    // Key OLMAYAN bir pencere `mouseMoved` de almıyor — kullanıcının "renk
+    // göstergesi fareyi takip etmiyor" dediği belirti bu, ve ilk tıklama pencereyi
+    // uyandırmaya harcanıyor. Sağlıklıyken SUSAR; yalnız pencere ilk yarım saniyede
+    // key olamazsa uyarı yazar, yani bir dahaki bildirimde günlükte cevap hazır olur.
+    #[cfg(debug_assertions)]
+    {
+        let h = probe.app_handle().clone();
+        std::thread::spawn(move || {
+            let t0 = std::time::Instant::now();
+            let mut gec = false;
+            for _ in 0..10 {
+                let w = probe.clone();
+                let (tx, rx) = std::sync::mpsc::channel();
+                let _ = h.run_on_main_thread(move || {
+                    let _ = tx.send(crate::platform::macos::focus_state(&w));
+                });
+                match rx.recv_timeout(std::time::Duration::from_secs(2)) {
+                    Ok(Ok((true, true))) => {
+                        if gec {
+                            log::warn!(
+                                "ODAK {}: pencere ancak {}ms sonra key oldu — ilk hareket/tıklama yutulmuş olabilir",
+                                probe.label(),
+                                t0.elapsed().as_millis()
+                            );
+                        }
+                        return;
+                    }
+                    Ok(Ok(_)) => gec = true,
+                    _ => return,
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            log::warn!("ODAK {}: pencere 500ms içinde key OLAMADI", probe.label());
+        });
+    }
     // Karışık DPI güvencesi + tanı: gösterim sırasında gelen DPI değişimi pencereyi
     // yeniden boyutlandırmış olabilir; hedef dikdörtgeni yeniden uygula ve gerçekleşen
     // konum/boyutu günlüğe yaz (çok monitörde "seçim yapılamıyor" raporları için).

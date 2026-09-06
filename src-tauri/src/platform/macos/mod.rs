@@ -85,6 +85,19 @@ pub fn window_id(window: &tauri::WebviewWindow) -> Result<u32, String> {
     u32::try_from(number).map_err(|_| format!("pencere numarası CGWindowID değil: {number}"))
 }
 
+/// Hata ayıklama ölçümü: uygulama AKTİF mi, pencere KEY mi?
+///
+/// "İlk tıklama yutuluyor" raporunda tahmin yürütmemek için. Bir pencere key
+/// değilse `mouseMoved` hiç almıyor (kullanıcının "renk göstergesi fareyi takip
+/// etmiyor" dediği şey) ve ilk tıklama pencereyi uyandırmaya harcanıyor.
+#[cfg(debug_assertions)]
+pub fn focus_state(window: &tauri::WebviewWindow) -> Result<(bool, bool), String> {
+    let mtm = MainThreadMarker::new().ok_or("ana thread değil")?;
+    let active = NSApplication::sharedApplication(mtm).isActive();
+    let key = with_ns_window(window, |ns| ns.isKeyWindow())?;
+    Ok((active, key))
+}
+
 /// `NSWindow.level` — Electron'un `'screen-saver'` / `'pop-up-menu'` seviyeleri.
 pub fn set_ns_level(window: &tauri::WebviewWindow, level: isize) -> Result<(), String> {
     with_ns_window(window, move |ns| ns.setLevel(level))

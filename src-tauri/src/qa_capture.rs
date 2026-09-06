@@ -377,6 +377,9 @@ mod mouse {
     /// FİZİKSEL tuş kodları (klavye düzeninden bağımsız).
     pub const KEY_V: u16 = 0x09;
     pub const KEY_9: u16 = 0x19;
+    pub const KEY_2: u16 = 0x13;
+    pub const KEY_4: u16 = 0x15;
+    pub const KEY_8: u16 = 0x1C;
     pub const KEY_ESC: u16 = 0x35;
     /// kCGEventFlagMaskShift / …Alternate.
     pub const FLAG_SHIFT: u64 = 0x0002_0000;
@@ -1361,13 +1364,21 @@ fn activate_other_app() {
 fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
     note("— overlay'de İLK sürükleme (uygulama arka plandayken) —");
 
-    for (mode, label) in [("draw", "ekran görüntüsü"), ("ocr", "OCR"), ("scroll", "kaydırmalı"), ("video", "video")] {
+    // Yakalama GERÇEK KISAYOLLA açılıyor — kullanıcının yolu bu. Rust'tan
+    // `capture::start` çağırmak yeterli değildi: o çağrı zaten uygulamanın
+    // içinden geliyor ve hatayı gizliyordu.
+    for (mode, key, label) in [
+        ("draw", mouse::KEY_9, "ekran görüntüsü"),
+        ("ocr", mouse::KEY_2, "OCR"),
+        ("scroll", mouse::KEY_4, "kaydırmalı"),
+        ("video", mouse::KEY_8, "video"),
+    ] {
+        let _ = mode;
         on_main(app, |h| crate::capture::close_all(h, None));
-        sleep(500);
+        sleep(800);
         activate_other_app();
 
-        let m2 = mode.to_string();
-        on_main(app, move |h| crate::capture::start(h, &m2));
+        mouse::key_with_flags(key, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
         if !check(wait_overlay(app, "capture-0"), &format!("{label}: overlay açıldı")) {
             continue;
         }

@@ -28,6 +28,7 @@
 
 #![cfg(target_os = "macos")]
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -49,6 +50,8 @@ pub struct Recording {
     pub path: PathBuf,
     /// Bu monitörün penceresi; durdurmada diğer overlay'lerin kapatılması için.
     pub window_label: String,
+    /// Ekran hareketsizken görüntü izini ilerleten zamanlayıcıya "dur" işareti.
+    ticker: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -245,6 +248,9 @@ pub fn start(
                         | Some(SCFrameStatus::Blank)
                         | Some(SCFrameStatus::Suspended)
                 ) {
+                    // Piksel yok. Zaman ilerlemesini `Recording`in zamanlayıcısı
+                    // yazıyor (`tick_repeat`), çünkü SCK bir süre sonra `Idle`
+                    // karelerini de göndermeyi kesiyor.
                     return;
                 }
             let ptr = sample.as_ptr();
@@ -337,13 +343,37 @@ pub fn start(
         "kayıt: {out_w}x{out_h} @{fps}fps, {:.1} Mbps, kalite={quality}, mikrofon={capture_mic}, sistem sesi={capture_system_audio}",
         f64::from(bitrate) / 1e6
     );
-    Ok(Recording { stream, writer, path: out_path, window_label })
+    // ── Durgun ekran zamanlayıcısı ────────────────────────────────────────
+    // Ekran değişmediğinde ScreenCaptureKit kare göndermiyor ve görüntü izi son
+    // değişiklikte bitiyordu: 20 sn'lik kayıtta ses 20,05 sn, görüntü 0,067 sn.
+    // Bu iş parçacığı yarım saniyede bir son kareyi yeniden yazıyor. Ekran akarken
+    // hiçbir şey yapmıyor (`tick_repeat` son kareden bu yana geçen süreye bakıyor).
+    let ticker = Arc::new(AtomicBool::new(true));
+    {
+        let run = ticker.clone();
+        let w = writer.clone();
+        std::thread::Builder::new()
+            .name("copyboard-video-ticker".into())
+            .spawn(move || {
+                while run.load(Ordering::Acquire) {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    w.tick_repeat(std::time::Duration::from_millis(500));
+                }
+            })
+            .ok();
+    }
+
+    Ok(Recording { stream, writer, path: out_path, window_label, ticker })
 }
 
 impl Recording {
     /// Akışı durdurur ve mux'un kapanmasını bekler. Dosya yolunu döner.
     pub fn stop(&mut self) -> Result<PathBuf, String> {
         let t0 = std::time::Instant::now();
+
+        // Zamanlayıcı ÖNCE durur: yazıcı sonlandırılırken kare eklemeye çalışması
+        // yazıcıyı hata durumuna düşürürdü.
+        self.ticker.store(false, Ordering::Release);
 
         // Sıra ÖNEMLİ: önce kare akışı kesilir, sonra yazıcı sonlandırılır. Ters
         // sırada, sonlandırma sürerken gelen kareler kapanmış bir input'a eklenmeye

@@ -559,28 +559,6 @@ fn hex_of(c: (f64, f64, f64)) -> String {
     format!("#{:02x}{:02x}{:02x}", c.0 as u8, c.1 as u8, c.2 as u8)
 }
 
-/// Verilen dikdörtgende KIRMIZI sayılabilecek piksel sayısı. Açıklama kaleminin
-/// varsayılan rengi `#ff3b30`; ekranın renk uzayından geçtikten sonra da tek başına
-/// kırmızı kalıyor, o yüzden eşik gevşek tutuldu.
-fn count_red(img: &Img, x0: usize, y0: usize, x1: usize, y1: usize) -> usize {
-    let mut n = 0;
-    for y in y0..y1.min(img.h) {
-        for x in x0..x1.min(img.w) {
-            let i = (y * img.w + x) * 4;
-            if i + 2 >= img.rgba.len() {
-                continue;
-            }
-            let (r, g, b) = (img.rgba[i], img.rgba[i + 1], img.rgba[i + 2]);
-            if r > 150 && g < 110 && b < 110 {
-                n += 1;
-            }
-        }
-    }
-    n
-}
-
-// ── Akışlar ────────────────────────────────────────────────────────────────
-
 /// 1. Bölge seçimi: sürükle → Kopyala → panodaki piksellere bak.
 fn flow_snip(app: &tauri::AppHandle, m: &MonitorInfo, index: usize) {
     if index == 0 {

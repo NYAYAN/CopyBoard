@@ -22,10 +22,6 @@ impl TempPath {
         Self(p)
     }
 
-    pub fn path(&self) -> &Path {
-        &self.0
-    }
-
     pub fn to_path_buf(&self) -> PathBuf {
         self.0.clone()
     }

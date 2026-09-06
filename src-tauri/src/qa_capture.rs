@@ -1474,6 +1474,99 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
     sleep(500);
 }
 
+/// Bayat isabet alanı kaydı sonraki yakalamayı sağır bırakıyor mu?
+///
+/// Kaydedici durdurulunca bilerek `setHitAreas([])` bildiriyor — "her yeri
+/// geçirgen yap", ki kullanıcı alttaki uygulamayla çalışabilsin. Kayıt PENCERE
+/// ETİKETİNE bağlı ve yakalama overlay'leri hep aynı etiketi (`capture-0`)
+/// kullanıyor. Sonraki ekran görüntüsü/OCR overlay'i o bayat kaydı miras alıyor:
+/// `snipper.js` ve `ocr.js` isabet alanı HİÇ bildirmiyor, yani kayıt olduğu gibi
+/// kalıyor ve yoklayıcı pencereyi tıklama geçirgen yapıyor. Fare hiçbir şey
+/// yapmıyor — karartma ve çerçeve görünüyor ama tıklama da hareket de altına
+/// geçiyor.
+///
+/// Bu akış bayat kaydı DOĞRUDAN kurup durumu belirleyici hâle getiriyor; gerçek
+/// kullanımda araya yarış giriyor ve hata aralıklı görünüyor.
+#[cfg(target_os = "macos")]
+fn flow_stalehit(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— bayat isabet alanı kaydı (kaydediciden sonra ekran görüntüsü) —");
+
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(600);
+
+    // GERÇEK sıra: kaydedici oturumu aç, kaydet, durdur. Durdurma anında
+    // `recorder.js` `setHitAreas([])` bildiriyor ve kayıt `capture-0` etiketinde
+    // kalıyor. Kaydı doğrudan kurmak yetmiyor: pencere yokken yoklayıcı onu hemen
+    // siliyor — bayatlık ancak pencere YAŞARKEN kurulup sonraki oturuma taşınınca
+    // oluşuyor.
+    on_main(app, |h| crate::capture::start(h, "video"));
+    if !check(wait_overlay(app, "capture-0"), "kaydedici overlay'i açıldı") {
+        return;
+    }
+    lower_main(app);
+    sleep(500);
+    let (dx1, dy1) = to_screen(m, m.width * 0.25, m.height * 0.25);
+    let (dx2, dy2) = to_screen(m, m.width * 0.55, m.height * 0.55);
+    mouse::drag(dx1, dy1, dx2, dy2, 20);
+    sleep(600);
+    eval(app, "capture-0", click_el_js("btn-record"));
+    let mut rec = false;
+    for _ in 0..50 {
+        sleep(100);
+        if app.state::<crate::capture::recorder::RecorderState>().0.lock().unwrap().is_some() {
+            rec = true;
+            break;
+        }
+    }
+    check(rec, "kaydedici: kayıt başladı");
+    sleep(1500);
+    eval(app, "capture-0", click_el_js("btn-stop"));
+    sleep(9000);
+    let before_vids = video_ids(app);
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(400);
+    for id in video_ids(app).iter().filter(|i| !before_vids.contains(i)) {
+        let id = id.clone();
+        on_main(app, move |h| crate::videos::delete(h, &id, true));
+    }
+    note("kaydedici kapandı — `setHitAreas([])` kaydı capture-0 etiketinde kaldı");
+
+    activate_other_app();
+    mouse::key_with_flags(mouse::KEY_9, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
+    if !check(wait_overlay(app, "capture-0"), "ekran görüntüsü overlay'i açıldı") {
+        return;
+    }
+
+    eval(
+        app,
+        "capture-0",
+        "window.__qacMove = 0; document.addEventListener('mousemove', () => { window.__qacMove++; }, true);"
+            .to_string(),
+    );
+    sleep(300);
+    for i in 0..12 {
+        let t = i as f64 / 12.0;
+        let (mx, my) = to_screen(m, m.width * (0.30 + 0.30 * t), m.height * (0.30 + 0.30 * t));
+        mouse::move_to(mx, my);
+    }
+    sleep(400);
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        "window.api.sendDebugLog('QAC sh.move=' + (window.__qacMove ?? -1));".to_string(),
+    );
+    let moves: i32 = wait_probe("sh.move", 3000).and_then(|v| v.trim().parse().ok()).unwrap_or(-1);
+    note(&format!("bayat kayıttan sonra fare hareketi = {moves}"));
+    check(
+        moves >= 1,
+        "bayat isabet kaydı yeni overlay'i sağır BIRAKMIYOR",
+    );
+
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(500);
+}
+
 /// Global kısayollar: GERÇEK tuş vuruşuyla.
 ///
 /// Kısayollar Carbon `RegisterEventHotKey` ile kaydediliyor
@@ -2158,7 +2251,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") {
+            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("stalehit") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -2170,6 +2263,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     if has("a7") { flow_a7(&app, &m); }
                     if has("hotkey") { flow_hotkey(&app, &m); }
                     if has("firstclick") { flow_firstclick(&app, &m); }
+                    if has("stalehit") { flow_stalehit(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }
             }

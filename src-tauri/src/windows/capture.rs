@@ -35,6 +35,26 @@ pub fn create(
     monitor: &MonitorInfo,
 ) -> Result<tauri::WebviewWindow, String> {
     let label = label_for(index);
+
+    // ── BAYAT İSABET ALANI KAYDINI SİL ───────────────────────────────────────
+    //
+    // İsabet alanları PENCERE ETİKETİNE göre kaydediliyor ve overlay'ler hep aynı
+    // etiketi kullanıyor (`capture-0`, `capture-1`). Kaydedici durdurulunca bilerek
+    // `setHitAreas([])` bildiriyor — "her yeri geçirgen yap", kullanıcı alttaki
+    // uygulamayla çalışabilsin diye. O kayıt oturum kapanınca ORTADA KALIYOR.
+    //
+    // Sonuç: bir sonraki ekran görüntüsü ya da OCR overlay'i aynı etiketle açılıyor,
+    // `snipper.js` ve `ocr.js` isabet alanı HİÇ bildirmediği için bayat kayıt
+    // yürürlükte kalıyor ve yoklayıcı pencereyi tıklama geçirgen yapıyor. Kullanıcı
+    // karartmayı ve çerçeveyi görüyor ama fare hiçbir şey yapmıyor; tıklama da
+    // hareket de altındaki uygulamaya geçiyor. Kullanıcının bildirdiği "bir kere
+    // tıklamadan alan seçemiyorum" ve "büyüteç fareyi takip etmiyor" bu.
+    //
+    // Yoklayıcı pencere yok olduğunda kaydı kendisi siliyor, ama imleç kıpırdamazsa
+    // tam denetimi 300 ms'ye kadar atlıyor — kapanış ile yeni oturum arası o
+    // pencereye sığdığında kayıt yeni pencereye miras kalıyor. Yarış buradan.
+    // Yeni overlay kurulurken silmek yarışı tamamen kapatıyor.
+    crate::windows::hit_test::clear(app, &label);
     // Etiketler `&'static str` isteyen bir alanda tutuluyor; overlay sayısı monitör
     // sayısıyla sınırlı ve oturum boyunca yeniden kullanılıyor.
     let leaked: &'static str = Box::leak(label.clone().into_boxed_str());

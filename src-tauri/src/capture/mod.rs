@@ -329,6 +329,9 @@ pub fn window_ready(app: &tauri::AppHandle, label: &str) {
 
 /// Overlay kapandı — el sıkışma durumunu temizle ki sonraki yakalama taze başlasın.
 pub fn forget_window(app: &tauri::AppHandle, label: &str) {
+    // İsabet alanı kaydı da gitsin: pencere öldü, kaydı yaşamamalı (bkz.
+    // `windows::capture::create` — bayat kayıt sonraki overlay'i sağır bırakıyordu).
+    crate::windows::hit_test::clear(app, label);
     let state = app.state::<CaptureState>();
     state.ready.lock().unwrap().remove(label);
     state.pending.lock().unwrap().remove(label);

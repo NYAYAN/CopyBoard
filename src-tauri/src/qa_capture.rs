@@ -1391,10 +1391,37 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo) {
         eval(
             app,
             "capture-0",
-            "window.__qacDown = 0; document.addEventListener('mousedown', () => { window.__qacDown++; }, true);"
+            "window.__qacDown = 0; window.__qacMove = 0;\
+             document.addEventListener('mousedown', () => { window.__qacDown++; }, true);\
+             document.addEventListener('mousemove', () => { window.__qacMove++; }, true);"
                 .to_string(),
         );
         sleep(300);
+
+        // ── ÖNCE yalnız HAREKET, tıklama YOK ──────────────────────────────
+        // Kullanıcının ilk belirtisi buydu: "renk göstergesi fareyi takip
+        // etmiyor". Gösterge `mousemove` ile güncelleniyor ve key OLMAYAN bir
+        // pencere `mouseMoved` almıyor. Tıklama sayısını ölçmek bunu kaçırıyordu.
+        for i in 0..12 {
+            let t = i as f64 / 12.0;
+            let (mx, my) = to_screen(m, m.width * (0.30 + 0.30 * t), m.height * (0.30 + 0.30 * t));
+            mouse::move_to(mx, my);
+        }
+        sleep(400);
+        clear_probes();
+        eval(
+            app,
+            "capture-0",
+            "window.api.sendDebugLog('QAC fc.move=' + (window.__qacMove ?? -1));".to_string(),
+        );
+        let moves: i32 = wait_probe("fc.move", 3000)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(-1);
+        note(&format!("{label}: tıklamadan ÖNCE fare hareketi = {moves}"));
+        check(
+            moves >= 1,
+            &format!("{label}: fare hareketi sayfaya ulaşıyor (gösterge takip eder)"),
+        );
 
         // TEK sürükleme — kullanıcının "bir kere tıkladıktan sonra" dediği ikinci
         // deneme YOK.

@@ -472,10 +472,17 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
     let bu_ekranda = {
         let state = app.state::<CaptureState>();
         let overlays = state.overlays.lock().unwrap();
-        match (overlays.get(window.label()), cursor) {
-            (Some(m), Some((cx, cy))) => m.contains(cx, cy),
+        match cursor {
+            Some((cx, cy)) => {
+                let benim = overlays.get(window.label()).map(|m| m.contains(cx, cy)).unwrap_or(false);
+                // İmleç HİÇBİR bilinen overlay'in ekranında değilse (ekranlar arası
+                // boşluk, yuvarlama, henüz kaydedilmemiş overlay) eski davranışa dön:
+                // odağı iste. Yoksa hiçbir overlay key olmaz, uygulama hiç etkinleşmez
+                // ve karartma tamamen sağır kalır.
+                benim || !overlays.values().any(|m| m.contains(cx, cy))
+            }
             // Konum bilinmiyorsa eski davranış: odağı iste.
-            _ => true,
+            None => true,
         }
     };
 
@@ -495,11 +502,53 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
     let target = window.clone();
     let probe = window.clone();
     let _ = app.run_on_main_thread(move || {
-        let _ = target.show();
         if bu_ekranda {
+            // ── SIRA ÖNEMLİ: activate ÖNCE, show SONRA ──────────────────────
+            //
+            // `c212c82` bu üçlünün sırasını farkında olmadan değiştirdi
+            // (`show` → `activate`) ve YERLİ KAYDETME PANELİNİ bozdu: panel
+            // açılıyor ama Return'ü almıyor, `save_file` geri çağrısı hiç
+            // koşmuyordu. tao `makeKeyAndOrderFront`u uygulama AKTİF DEĞİLKEN
+            // çağrıldığında bir "window activation hack"e bağlıyor
+            // (tao-0.35.3, platform_impl/macos/window.rs:631 yorumu) ve panelin
+            // sahibi olan pencere o yolda klavye odağını alamıyor.
+            //
+            // Ölçüldü (`--qa-capture=save`): eski sırayla dosya çıkıyor, yeni
+            // sırayla 10 saniye boyunca çıkmıyor. Sıra geri alındı.
             crate::platform::activate_app();
+            let _ = target.show();
             let _ = target.set_focus();
+            return;
         }
+        // ── `show()` KEY'İ ÇALIYOR ──────────────────────────────────────────
+        //
+        // tao'nun `set_visible(true)`'su `makeKeyAndOrderFront:` çağırıyor
+        // (tao-0.35.3, platform_impl/macos/window.rs:670). Yani `show()` pencereyi
+        // KEY YAPIYOR — odağı istemesek bile. Yukarıdaki `bu_ekranda` kararı
+        // `set_focus`'u tutuyordu ama `show()`'u tutmuyordu, dolayısıyla hiçbir
+        // şeyi düzeltmiyordu.
+        //
+        // Overlay'ler ayrı ayrı hazır oluyor (her biri kendi `snip_ready`sini
+        // çağırıyor), yani EN SON boyanan overlay key oluyor — imleç nerede olursa
+        // olsun. Bu makinede en son boyanan hep dahili ekranınki (3600x2338 fiziksel,
+        // harici 3440x1440'tan büyük), o yüzden hata HARİCİ monitörde her seferinde
+        // çıkıyor ve dahili ekranda hiç çıkmıyor.
+        //
+        // Ölçüm (`--qa-capture=solo`, imleç harici monitörde):
+        //   A) iki overlay açık          → capture-0=KEY, capture-1'e ulaşan olay 0
+        //   B) capture-0 kapatıldı        → capture-1=KEY, ulaşan olay 12
+        // Yani sebep ikincil ekran DEĞİL, iki pencere arasındaki key yarışı.
+        //
+        // Çözüm: imlecin OLMADIĞI ekranın overlay'i key'e dokunmadan gösteriliyor.
+        // `orderFrontRegardless` uygulama aktif olmasa da pencereyi öne alıyor
+        // (overlay'ler PopUpMenu seviyesinde ve arka plandan açılıyor), ve
+        // `is_visible()` doğrudan NSWindow'u okuduğu için Tauri tarafında durum
+        // farkı doğmuyor.
+        #[cfg(target_os = "macos")]
+        if crate::platform::macos::order_front(&target).is_ok() {
+            return;
+        }
+        let _ = target.show();
     });
 
     // ── Tanı: pencere gerçekten key oldu mu? ────────────────────────────────
@@ -508,8 +557,11 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
     // göstergesi fareyi takip etmiyor" dediği belirti bu, ve ilk tıklama pencereyi
     // uyandırmaya harcanıyor. Sağlıklıyken SUSAR; yalnız pencere ilk yarım saniyede
     // key olamazsa uyarı yazar, yani bir dahaki bildirimde günlükte cevap hazır olur.
+    // Yalnız odağı İSTEYEN overlay için: diğerinin key olmaması artık BEKLENEN
+    // durum ve her yakalamada bir uyarı yazmak günlüğü kirletip bir dahaki
+    // tanıyı yanlış yöne sürer.
     #[cfg(debug_assertions)]
-    {
+    if bu_ekranda {
         let h = probe.app_handle().clone();
         std::thread::spawn(move || {
             let t0 = std::time::Instant::now();

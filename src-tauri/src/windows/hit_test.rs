@@ -53,10 +53,37 @@ struct Entry {
     /// Yüzeye YENİ girildiğinde çağrılacak mı? (Hızlı Yapıştır'ın hedef uygulamayı
     /// hatırlaması buna bağlı — bkz. `platform::note_front_app`.)
     note_front_app: bool,
+    /// Bu pencereye EN SON UYGULANAN geçirgenlik. Değişmediyse pencere sunucusuna
+    /// gitmemek için.
+    ///
+    /// ## Neden kaydın İÇİNDE
+    ///
+    /// Eskiden izleyici thread'inin kendi `HashMap`'indeydi ve YALNIZ kayıt tamamen
+    /// boşalınca temizleniyordu. Etiketler pencere ömründen uzun yaşıyor
+    /// (`capture-0` her yakalamada yeniden kullanılıyor), yani yeni pencere eskinin
+    /// kanısını miras alıyordu: `ignore` hesabı kanıyla aynı çıkıyor, tur atlanıyor
+    /// ve `set_ignore_cursor_events` HİÇ çağrılmıyor — ama TAZE NSWindow varsayılan
+    /// (tıklanabilir) durumda. Kanı "geçirgen" der, pencere tıklamayı yer.
+    ///
+    /// Ölçüldü (`--qa-capture=stalehit,through`): oturumda İKİNCİ video kaydında
+    /// overlay 2 tıklamayı yiyor ve alttaki pencereye 0 tıklama ulaşıyor; ilk
+    /// kayıtta 0 / 1. Kayıt `windows::capture::create`'deki `clear()` ile silindiği
+    /// için kanı da kayıtla birlikte gidiyor ve ilk tur gerçek durumu uyguluyor.
+    applied: Option<bool>,
 }
 
 #[derive(Default)]
 pub struct Registry(Mutex<HashMap<String, Entry>>, std::sync::Condvar);
+
+/// Bir turluk anlık görüntü: kilit TUTULURKEN alınıyor, tur boyunca kilitsiz
+/// kullanılıyor (imleç yoklaması ve pencere sorguları kilit altında yapılmamalı).
+struct Snapshot {
+    label: String,
+    areas: Vec<HitArea>,
+    zoom: f64,
+    note_front_app: bool,
+    applied: Option<bool>,
+}
 
 /// Renderer geometrisini bildirdi.
 pub fn set_areas(
@@ -67,10 +94,17 @@ pub fn set_areas(
     note_front_app: bool,
 ) {
     let reg = app.state::<Registry>();
-    reg.0.lock().unwrap().insert(
-        label.to_string(),
-        Entry { areas, zoom: if zoom > 0.0 { zoom } else { 1.0 }, note_front_app },
-    );
+    {
+        let mut map = reg.0.lock().unwrap();
+        // Aynı pencere geometrisini yeniden bildiriyorsa kanıyı koru; kayıt
+        // silinmişse (yeni pencere, bkz. `Entry::applied`) `None` kalır ve ilk tur
+        // gerçek durumu uygular.
+        let applied = map.get(label).and_then(|e| e.applied);
+        map.insert(
+            label.to_string(),
+            Entry { areas, zoom: if zoom > 0.0 { zoom } else { 1.0 }, note_front_app, applied },
+        );
+    }
     // İzleyici kayıt boşken condvar'da uyuyor — uyandır.
     reg.1.notify_all();
     start_tracker(app);
@@ -109,21 +143,25 @@ fn start_tracker(app: &tauri::AppHandle) {
             /// İmleç sabitken en fazla bu kadar tur atlanır (~300 ms).
             const FULL_CHECK_EVERY: u32 = 10;
 
-            let mut last: HashMap<String, bool> = HashMap::new();
             let mut last_cursor: Option<(f64, f64)> = None;
             let mut skipped: u32 = 0;
             loop {
-                let entries: Vec<(String, Vec<HitArea>, f64, bool)> = {
+                let entries: Vec<Snapshot> = {
                     let reg = handle.state::<Registry>();
                     let mut map = reg.0.lock().unwrap();
                     // Kayıt boşsa bir sonraki `register()`e kadar uyu.
                     while map.is_empty() {
-                        last.clear();
                         last_cursor = None;
                         map = reg.1.wait(map).unwrap();
                     }
                     map.iter()
-                        .map(|(l, e)| (l.clone(), e.areas.clone(), e.zoom, e.note_front_app))
+                        .map(|(l, e)| Snapshot {
+                            label: l.clone(),
+                            areas: e.areas.clone(),
+                            zoom: e.zoom,
+                            note_front_app: e.note_front_app,
+                            applied: e.applied,
+                        })
                         .collect()
                 };
 
@@ -136,9 +174,9 @@ fn start_tracker(app: &tauri::AppHandle) {
                 }
                 last_cursor = cursor;
                 skipped = 0;
-                for (label, areas, zoom, note) in entries {
+                for Snapshot { label, areas, zoom, note_front_app: note, applied } in entries {
                     let Some(window) = handle.get_webview_window(&label) else {
-                        last.remove(&label);
+                        // Kaydı silmek kanıyı da siliyor: `applied` kaydın içinde.
                         clear(&handle, &label);
                         continue;
                     };
@@ -161,14 +199,19 @@ fn start_tracker(app: &tauri::AppHandle) {
                         .unwrap_or(false);
 
                     let ignore = !over;
-                    if last.get(&label) == Some(&ignore) {
+                    if applied == Some(ignore) {
                         continue;
                     }
-                    last.insert(label.clone(), ignore);
 
                     if let Err(e) = window.set_ignore_cursor_events(ignore) {
                         log::warn!("{label}: tıklama geçirgenliği ayarlanamadı: {e}");
                         continue;
+                    }
+                    // Kanıyı UYGULADIKTAN sonra yaz. Kayıt bu arada silinmiş olabilir
+                    // (pencere kapandı, yeni oturum) — o zaman dokunma, yoksa taze
+                    // kaydın kanısını eski pencerenin durumuyla kirletiriz.
+                    if let Some(e) = handle.state::<Registry>().0.lock().unwrap().get_mut(&label) {
+                        e.applied = Some(ignore);
                     }
                     // Yakalama overlay'i INFO seviyesinde: sürüm derlemesinde DEBUG
                     // yazılmıyor ve "fare hiçbir şey yapmıyor" bildirimlerinde tam da

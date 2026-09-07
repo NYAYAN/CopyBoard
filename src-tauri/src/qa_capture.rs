@@ -187,6 +187,12 @@ impl Card {
     fn tl_center(&self) -> (f64, f64) {
         (self.x + self.w * 0.25, self.y + self.band + (self.h - self.band) * 0.25)
     }
+
+    /// Sağ alt çeyreğin merkezi — renk seçicinin KONUM sadakatini ölçmek için
+    /// sol üstten belirgin biçimde farklı bir renk.
+    fn br_center(&self) -> (f64, f64) {
+        (self.x + self.w * 0.75, self.y + self.band + (self.h - self.band) * 0.75)
+    }
 }
 
 /// Ana pencereyi bilinen bir dikdörtgene oturtup içine kartı basar.
@@ -376,6 +382,9 @@ mod mouse {
     pub const KEY_RETURN: u16 = 0x24;
     /// FİZİKSEL tuş kodları (klavye düzeninden bağımsız).
     pub const KEY_V: u16 = 0x09;
+    pub const KEY_Q: u16 = 0x0C;
+    pub const KEY_A: u16 = 0x00;
+    pub const KEY_C: u16 = 0x08;
     pub const KEY_9: u16 = 0x19;
     pub const KEY_2: u16 = 0x13;
     pub const KEY_4: u16 = 0x15;
@@ -471,6 +480,15 @@ mod mouse {
             for down in [true, false] {
                 let ev = CGEventCreateKeyboardEvent(src, code, down);
                 if !ev.is_null() {
+                    // BAYRAKLARI AÇIKÇA TEMİZLE. CGEvent, HID kaynağından oluşturulunca
+                    // O ANKİ değiştirici bayraklarını MİRAS ALIYOR. `key_with_flags`
+                    // (Alt+Shift+9) sonrası ya da başka bir kalıntıda düz `key()` bile
+                    // Option+Shift'li çıkıyordu: kaydetme panelinin dosya adı alanına
+                    // `qac` yerine `ŒÆ` yazıldı ve Return, panelin onay saymadığı
+                    // Option+Shift+Return oldu — "dosya çıkmadı"nın gerçek sebebi buydu,
+                    // bir ürün hatası değil harness kusuru (ölçüm: `--qa-capture=save`
+                    // panel adı probu, temizlemeden `ŒÆ`, temizledikten sonra `qac`).
+                    CGEventSetFlags(ev, 0);
                     CGEventPost(HID_TAP, ev);
                     CFRelease(ev);
                 }
@@ -947,19 +965,38 @@ fn flow_color(app: &tauri::AppHandle, m: &MonitorInfo) {
         return;
     }
 
+    // Overlay'in KENDİ ekran görüntüsü katmanından, tıklanacak noktanın hex'i.
+    // Seçici bu katmandan okuyor; panoya düşen bunun AYNISI olmalı. Ekran renk
+    // yönetimi (Night Shift/True Tone) kırmızıyı ısıtıp desatüre edebildiği için
+    // "mutlak kırmızı" ölçmek ekrana bağımlı; sadakat ve KONUM ölçmek değil.
+    // Her İKİ örnek de tıklamadan ÖNCE: renk kipinde tıklama overlay'i KAPATIYOR,
+    // sonra örneklenecek katman kalmıyor.
     let (cx, cy) = card.tl_center();
+    let (bx, by) = card.br_center();
+    let ekranda_tl = sample_hex_at(app, "capture-0", cx, cy);
+    let ekranda_br = sample_hex_at(app, "capture-0", bx, by);
+    // KONUM: iki çeyrek belirgin farklı renk vermeli — yoksa seçici konuma değil
+    // sabit bir yere bakıyordur.
+    check(
+        ekranda_tl.is_some() && ekranda_br.is_some() && ekranda_tl != ekranda_br,
+        &format!("çeyrekler ayrışıyor (solÜst {ekranda_tl:?} ≠ sağAlt {ekranda_br:?})"),
+    );
+
     eval(app, "capture-0", click_js(cx, cy));
     sleep(1500);
 
     let got = on_main(app, |_| crate::platform::clipboard_read_text()).flatten().unwrap_or_default();
-    note(&format!("panodaki renk: {got:?} (kart değeri {C_TL})"));
+    note(&format!("panodaki renk: {got:?}, overlay'in aynı noktadaki pikseli: {ekranda_tl:?} (kart değeri {C_TL})"));
     let valid = got.len() == 7 && got.starts_with('#') && got[1..].bytes().all(|c| c.is_ascii_hexdigit());
     check(valid, "panoya geçerli bir hex kodu yazıldı");
-    if valid {
-        let r = u8::from_str_radix(&got[1..3], 16).unwrap_or(0) as f64;
-        let g = u8::from_str_radix(&got[3..5], 16).unwrap_or(0) as f64;
-        let b = u8::from_str_radix(&got[5..7], 16).unwrap_or(0) as f64;
-        check(r > g + 40.0 && r > b + 40.0, &format!("tıklanan pikselin rengi KIRMIZI ({got})"));
+    // SADAKAT: panodaki hex, overlay'in o pikselde gördüğüyle aynı mı? Bu, ekran
+    // renk yönetiminden bağımsız olarak seçicinin DOĞRU pikseli sadık kopyaladığını
+    // kanıtlıyor (Night Shift kırmızıyı ısıtsa bile eşitlik korunur).
+    if let Some(scr) = ekranda_tl.as_deref() {
+        check(
+            valid && got.eq_ignore_ascii_case(scr),
+            &format!("seçilen renk ekrandaki pikselle birebir ({got} == {scr})"),
+        );
     }
 
     // Renk kodu geçmişe de yazılıyor — sonra temizleniyor.
@@ -1194,6 +1231,21 @@ fn lower_main(app: &tauri::AppHandle) {
 /// Overlay'deki bir CSS noktasının EKRAN (global mantıksal) karşılığı.
 fn to_screen(m: &MonitorInfo, cx: f64, cy: f64) -> (f64, f64) {
     (m.x + cx, m.y + cy)
+}
+
+/// Overlay'in ekran görüntüsü katmanından bir CSS noktasının hex'i. Renderer'ın
+/// `sampleHexAt`i renk seçicinin okuduğu değerin TA KENDİSİNİ döndürüyor; testi
+/// ekran renk yönetiminden bağımsız kılıyor.
+fn sample_hex_at(app: &tauri::AppHandle, label: &str, cx: f64, cy: f64) -> Option<String> {
+    clear_probes();
+    eval(
+        app,
+        label,
+        format!(
+            "(function(){{try{{               const sx=window.state&&state.scaleX!=null?state.scaleX:devicePixelRatio;               const sy=window.state&&state.scaleY!=null?state.scaleY:devicePixelRatio;               const c=document.querySelector('canvas');const g=c.getContext('2d');               const d=g.getImageData(Math.round({cx}*sx),Math.round({cy}*sy),1,1).data;               const h='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('');               window.api.sendDebugLog('QAC pick.hex='+h);             }}catch(e){{window.api.sendDebugLog('QAC pick.hex=hata');}}}})();"
+        ),
+    );
+    wait_probe("pick.hex", 2500).filter(|v| v.starts_with('#') && v.len() == 7)
 }
 
 /// Bir DOM ögesinin overlay içindeki merkezini okur.
@@ -1705,9 +1757,125 @@ fn key_durumu(app: &tauri::AppHandle) -> String {
                 Err(e) => format!("{}=? ({e})", w.label()),
             })
             .collect();
-        format!("uygulama aktif={aktif}, {}", parcalar.join(" "))
+        format!(
+            "uygulama aktif={aktif}, {}; {}",
+            parcalar.join(" "),
+            crate::platform::macos::key_window_debug()
+        )
     })
     .unwrap_or_else(|| "odak durumu okunamadı".into())
+}
+
+/// ÇAPRAZ monitör: kısayola A ekranında basıp B ekranında seçim yapmak.
+///
+/// `flow_firstclick` imleci hedef ekrana götürüp ORADAN kısayola basıyor — yani
+/// odak zaten doğru overlay'de. Kullanıcının ikinci yolu bu değil: imleç harici
+/// ekrandayken kısayola basıyor, sonra dahili ekrana geçip orada sürüklüyor (ya da
+/// tersi). Odak, imlecin kısayol ANINDA bulunduğu overlay'e verildiği için diğer
+/// overlay key DEĞİL; oraya geçince fare olayı geliyor mu, ilk sürükleme seçim
+/// üretiyor mu — bunu ölçüyor.
+///
+/// Bu senaryo harness'ın kendisinde de ortaya çıktı: `stalehit`/`pointer` gibi
+/// akışlar imleci konumlandırmadan `capture::start` çağırıyor ve önceki koşu imleci
+/// harici ekranda bıraktıysa dahili ekrandaki ilk sürükleme yutuluyordu
+/// ("kaydedici: kayıt başladı ✗", "araç çubuğu belirdi (display=none) ✗").
+///
+/// Galeriye HİÇBİR ŞEY yazmıyor.
+#[cfg(target_os = "macos")]
+fn flow_cross(app: &tauri::AppHandle) {
+    let monitors = crate::geom::all_monitors(app);
+    if monitors.len() < 2 {
+        note("tek monitör — çapraz monitör akışı atlandı");
+        return;
+    }
+    for (fi, from) in monitors.iter().enumerate() {
+        for (ti, to) in monitors.iter().enumerate() {
+            if fi == ti {
+                continue;
+            }
+            note(&format!(
+                "— ÇAPRAZ: kısayol MONİTÖR {fi} ({:.0}x{:.0}) → seçim MONİTÖR {ti} ({:.0}x{:.0}) —",
+                from.width, from.height, to.width, to.height
+            ));
+            let hedef = format!("capture-{ti}");
+
+            on_main(app, |h| crate::capture::close_all(h, None));
+            sleep(800);
+            activate_other_app();
+
+            // Kısayol, imleç KAYNAK ekrandayken.
+            let (px, py) = to_screen(from, from.width * 0.5, from.height * 0.5);
+            mouse::move_to(px, py);
+            sleep(400);
+            mouse::key_with_flags(mouse::KEY_9, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
+            if !check(wait_overlay(app, &hedef), &format!("{fi}→{ti}: hedef overlay açıldı")) {
+                continue;
+            }
+            note(&format!("{fi}→{ti}: kısayol sonrası odak → {}", key_durumu(app)));
+
+            eval(
+                app,
+                &hedef,
+                "window.__qacDown = 0; window.__qacMove = 0;\
+                 document.addEventListener('mousedown', () => { window.__qacDown++; }, true);\
+                 document.addEventListener('mousemove', () => { window.__qacMove++; }, true);"
+                    .to_string(),
+            );
+            sleep(300);
+
+            // HEDEF ekrana geç: kenardan içeri, sonra köşegen boyunca 12 adım.
+            for i in 0..12 {
+                let t = i as f64 / 12.0;
+                let (mx, my) = to_screen(to, to.width * (0.30 + 0.30 * t), to.height * (0.30 + 0.30 * t));
+                mouse::move_to(mx, my);
+            }
+            sleep(500);
+            let gercek = on_main(app, crate::geom::cursor_position).flatten();
+            let dogru = gercek
+                .map(|(cx, cy)| cx >= to.x && cx < to.x + to.width && cy >= to.y && cy < to.y + to.height)
+                .unwrap_or(false);
+            if !check(dogru, &format!("{fi}→{ti}: imleç hedef ekranda, ölçüm geçerli {gercek:?}")) {
+                continue;
+            }
+
+            clear_probes();
+            eval(
+                app,
+                &hedef,
+                "window.api.sendDebugLog('QAC cr.move=' + (window.__qacMove ?? -1));".to_string(),
+            );
+            let moves: i32 = wait_probe("cr.move", 3000).and_then(|v| v.trim().parse().ok()).unwrap_or(-1);
+            note(&format!("{fi}→{ti}: geçişten sonra, tıklamadan ÖNCE fare hareketi = {moves}"));
+            note(&format!("{fi}→{ti}: geçiş sonrası odak → {}", key_durumu(app)));
+            check(moves >= 1, &format!("{fi}→{ti}: hedef ekranda fare hareketi sayfaya ulaşıyor (gösterge takip eder)"));
+
+            // TEK sürükleme — "önce bir tıkla" YOK.
+            let (x1, y1) = to_screen(to, to.width * 0.30, to.height * 0.30);
+            let (x2, y2) = to_screen(to, to.width * 0.60, to.height * 0.60);
+            mouse::drag(x1, y1, x2, y2, 22);
+            sleep(600);
+            clear_probes();
+            eval(
+                app,
+                &hedef,
+                "(function(){const b=document.getElementById('selection-box');\
+                  const r=b?b.getBoundingClientRect():null;\
+                  window.api.sendDebugLog('QAC cr.down=' + (window.__qacDown ?? -1)\
+                    + ' kutu=' + (r ? Math.round(r.width)+'x'+Math.round(r.height) : 'yok'));})();"
+                    .to_string(),
+            );
+            let got = wait_probe("cr.down", 3000).unwrap_or_default();
+            note(&format!("{fi}→{ti}: {got}"));
+            let downs: i32 = got.split_whitespace().next().and_then(|v| v.parse().ok()).unwrap_or(-1);
+            let kutu_var = got.contains("kutu=") && !got.contains("kutu=yok") && !got.contains("kutu=0x0");
+            check(
+                downs >= 1 && kutu_var,
+                &format!("{fi}→{ti}: hedef ekranda İLK sürükleme seçim üretti (önce tıklamak gerekmiyor)"),
+            );
+        }
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(500);
 }
 
 /// Bayat isabet alanı kaydı sonraki yakalamayı sağır bırakıyor mu?
@@ -2017,7 +2185,7 @@ fn flow_savepanel(app: &tauri::AppHandle, m: &MonitorInfo) {
         check(false, "Resimler klasörü bulunamadı");
         return;
     };
-    let existing = snip_files(&dir);
+    let existing = png_files(&dir);
     let Some(card) = install_card(app, m, "colors") else {
         check(false, "sınama kartı yerleştirilemedi");
         return;
@@ -2063,26 +2231,52 @@ fn flow_savepanel(app: &tauri::AppHandle, m: &MonitorInfo) {
     mouse::click(sx, sy);
     // Panelin belirmesi: `save_png` overlay'i indirip rfd'yi açıyor.
     sleep(2600);
-    // Return NEREYE gidiyor? Panel yerli bir sheet, yani bu listede GÖRÜNMEZ;
-    // ölçülen şey uygulamanın aktif olup olmadığı ve hâlâ bir webview
-    // penceresinin key kalıp kalmadığı. Panel Return'ü almadığında ("dosya
-    // çıkmadı") cevap burada.
+    // Return NEREYE gidiyor? Panel yerli bir sheet; `key_durumu` artık NSApp'in key
+    // penceresini ve panel sınıflarını da yazıyor.
     note(&format!("Return öncesi odak → {}", key_durumu(app)));
+    // KLAVYE PANELE ULAŞIYOR MU? Panel uzak bir görünüm (openAndSavePanelService).
+    // Dosya adı alanına `qac` yazıp adı önce/sonra okuyoruz: değişiyorsa tuşlar
+    // panele ulaşıyor (o zaman yutulan yalnız Return demek); değişmiyorsa sentetik
+    // klavye uzak panele HİÇ ulaşmıyor. Ad değişirse dosya `qac.png` olur —
+    // `png_files` onu da yakalıyor ve akış sonunda siliyor.
+    let ad_once = on_main(app, |_| crate::platform::macos::save_panel_name()).flatten();
+    for k in [mouse::KEY_Q, mouse::KEY_A, mouse::KEY_C] {
+        mouse::key(k);
+        sleep(80);
+    }
+    sleep(400);
+    let ad_sonra = on_main(app, |_| crate::platform::macos::save_panel_name()).flatten();
+    note(&format!(
+        "panel dosya adı: önce {ad_once:?}, `qac` yazıldıktan sonra {ad_sonra:?} → klavye panele ulaşıyor: {}",
+        ad_once.is_some() && ad_once != ad_sonra
+    ));
     // Varsayılan düğme Kaydet.
     mouse::key(mouse::KEY_RETURN);
 
     let mut saved = None;
-    for _ in 0..40 {
+    let mut ikinci_return = false;
+    for i in 0..40 {
         sleep(250);
-        if let Some(f) = snip_files(&dir).into_iter().find(|f| !existing.contains(f)) {
+        if let Some(f) = png_files(&dir).into_iter().find(|f| !existing.contains(f)) {
             saved = Some(f);
             break;
+        }
+        // 3 sn içinde dosya yoksa: panel hâlâ orada mı, key kim? Sonra Return'e BİR
+        // KEZ daha bas. İkincisiyle dosya çıkarsa ilk Return panele erken gitmiş ya
+        // da yutulmuş demek — adım yine başarısız sayılır, ama sebep günlüğe iner.
+        if i == 12 {
+            note(&format!("Return sonrası 3 sn dosya yok → {}", key_durumu(app)));
+            mouse::key(mouse::KEY_RETURN);
+            ikinci_return = true;
         }
     }
     match saved {
         Some(path) => {
             note(&format!("panelden kaydedilen dosya: {}", path.display()));
-            check(true, "kaydetme paneli açıldı ve Return ile onaylandı");
+            if ikinci_return {
+                note("dosya ancak İKİNCİ Return ile çıktı — ilk Return panele ulaşmadı ya da erken gitti");
+            }
+            check(!ikinci_return, "kaydetme paneli açıldı ve Return ile onaylandı");
             match std::fs::read(&path).ok().and_then(|b| image::load_from_memory(&b).ok()) {
                 Some(im) => {
                     let rgba = im.to_rgba8();
@@ -2110,6 +2304,7 @@ fn flow_savepanel(app: &tauri::AppHandle, m: &MonitorInfo) {
             }
         }
         None => {
+            note(&format!("10 sn sonunda hâlâ dosya yok → {}", key_durumu(app)));
             check(false, "kaydetme panelinden dosya çıkmadı");
         }
     }
@@ -2266,15 +2461,13 @@ fn flow_clickthrough(app: &tauri::AppHandle, m: &MonitorInfo) {
 }
 
 #[cfg(target_os = "macos")]
-fn snip_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+/// Klasördeki TÜM .png dosyaları. Kaydetme paneli akışı dosya adı alanına deneme
+/// metni yazdığı için kaydedilen dosyanın adı `snip_` ile başlamayabiliyor.
+fn png_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     std::fs::read_dir(dir)
         .map(|rd| {
             rd.filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| {
-                    p.file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.starts_with("snip_") && n.ends_with(".png"))
-                })
+                .filter(|p| p.extension().and_then(|x| x.to_str()).is_some_and(|x| x.eq_ignore_ascii_case("png")))
                 .collect()
         })
         .unwrap_or_default()
@@ -2506,7 +2699,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("solo") || has("stalehit") {
+            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("solo") || has("cross") || has("stalehit") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -2526,6 +2719,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                         }
                     }
                     if has("solo") { flow_solo(&app); }
+                    if has("cross") { flow_cross(&app); }
                     if has("stalehit") { flow_stalehit(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }

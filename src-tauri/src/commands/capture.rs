@@ -113,6 +113,7 @@ pub async fn snip_copy_color(app: tauri::AppHandle, hex: String) {
 
 fn save_png(app: &tauri::AppHandle, window: Option<tauri::WebviewWindow>, png: Vec<u8>, prefix: &str) {
     if SAVE_DIALOG_OPEN.swap(true, Ordering::AcqRel) {
+        log::warn!("kaydetme paneli zaten açık — {prefix} isteği yok sayıldı");
         return;
     }
     let stamp = std::time::SystemTime::now()
@@ -123,6 +124,14 @@ fn save_png(app: &tauri::AppHandle, window: Option<tauri::WebviewWindow>, png: V
 
     let pictures = app.path().picture_dir().ok();
     let handle = app.clone();
+    // Panel YERLİ (rfd/NSSavePanel) — açılmazsa ya da kullanıcı iptal ederse
+    // uygulamada hiçbir iz kalmıyordu ve "Kaydet çalışmıyor" bildirimleri
+    // günlükten doğrulanamıyordu. İstek ve sonuç artık yazılıyor.
+    log::info!(
+        "kaydetme paneli isteniyor: {default_name}, klasör {:?}, üst pencere {:?}",
+        pictures.as_deref(),
+        window.as_ref().map(|w| w.label().to_string())
+    );
 
     // Renderer düğmesini panel gelene dek döndürüyor. Electron'da `showSaveDialog`
     // dönene kadar bloklanıyordu ve panelin gerçekten ekranda olduğu an ayrı bir
@@ -163,6 +172,7 @@ fn save_png(app: &tauri::AppHandle, window: Option<tauri::WebviewWindow>, png: V
             }
         };
         let Some(path) = path else {
+            log::info!("kaydetme paneli: iptal edildi");
             restore_overlay();
             crate::windows::toast::show(&handle, "Kaydetme iptal edildi.", "info");
             return;
@@ -172,6 +182,7 @@ fn save_png(app: &tauri::AppHandle, window: Option<tauri::WebviewWindow>, png: V
             crate::windows::toast::show(&handle, "Kaydetme Hatası: geçersiz yol", "error");
             return;
         };
+        log::info!("kaydetme paneli: {} seçildi ({} bayt yazılıyor)", p.display(), png.len());
         match std::fs::write(&p, &png) {
             Ok(()) => {
                 let _ = crate::gallery::add(&handle, &png);

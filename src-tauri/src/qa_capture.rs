@@ -1521,6 +1521,195 @@ fn flow_firstclick(app: &tauri::AppHandle, m: &MonitorInfo, index: usize) {
     sleep(500);
 }
 
+/// İkincil ekranda fare olayı neden hiç ulaşmıyor: İKİ PENCERE mi, EKRAN mı?
+///
+/// `flow_firstclick` hatayı deterministik gösterdi (harici monitörde dört kipte de
+/// sıfır olay) ama SEBEBİ ayırmıyor. İki aday aynı belirtiyi veriyor:
+///
+/// 1. **İki overlay odak yarışı.** Monitör başına bir overlay açılıyor ve `snip_ready`
+///    her birinde odak istiyor; macOS'ta aynı anda yalnız BİR pencere key olabilir.
+///    Key olmayan pencere `mouseMoved` hiç almıyor.
+/// 2. **İkincil ekran.** WKWebView ikincil ekranda ilk tıklamaya kadar fare olayı
+///    teslim etmiyor — pencere key OLSA bile.
+///
+/// Bu akış ikisini ayırıyor: aynı monitörde, aynı ölçüyle (tıklamadan önce sayfaya
+/// ulaşan `mousemove` sayısı) üç aşama, arada YALNIZ bir değişken:
+///
+/// | aşama | kurulum |
+/// |---|---|
+/// | A | kısayolun bıraktığı hâl — tüm overlay'ler açık |
+/// | B | hedef DIŞINDAKİ overlay'ler kapatıldı, hedefe yeniden odak verildi |
+/// | C | kullanıcının kurtarma adımı — tek tıklama yapıldı |
+///
+/// Her aşamada hangi pencerenin KEY olduğu da okunuyor; "uygulama aktif" bilgisi
+/// tek başına hangi PENCEREnin olay aldığını söylemiyor ve önceki turlarda ölçüm
+/// tam buradan eksikti.
+///
+/// Okuma:
+/// - A > 0 → o monitörde hata yok (dahili ekranın beklenen sonucu; ölçüm geçerli).
+/// - A = 0, B > 0 → sebep (1). Düzeltme overlay/odak sırasında.
+/// - A = 0, B = 0, C > 0 → sebep (2). Pencere tek ve key olduğu hâlde olay yok.
+///
+/// Galeriye HİÇBİR ŞEY yazmıyor: kaydetme yok, seçim sürüklemesi yok.
+#[cfg(target_os = "macos")]
+fn flow_solo(app: &tauri::AppHandle) {
+    let monitors = crate::geom::all_monitors(app);
+    if monitors.len() < 2 {
+        note("tek monitör — TEK/ÇOK overlay ayrımı yapılamaz, akış atlandı");
+        return;
+    }
+    for (index, m) in monitors.iter().enumerate() {
+        note(&format!(
+            "— TEK/ÇOK overlay ayrımı, MONİTÖR {index} ({:.0}x{:.0} ×{:.2} @({:.0},{:.0})) —",
+            m.width, m.height, m.scale, m.x, m.y
+        ));
+        let etiket = format!("capture-{index}");
+
+        on_main(app, |h| crate::capture::close_all(h, None));
+        sleep(800);
+        activate_other_app();
+
+        // İmleç HEDEF ekranda ve kısayol ORADAN basılıyor — kullanıcının yolu.
+        let (px, py) = to_screen(m, m.width * 0.5, m.height * 0.5);
+        mouse::move_to(px, py);
+        sleep(400);
+        mouse::key_with_flags(mouse::KEY_9, mouse::FLAG_ALT | mouse::FLAG_SHIFT);
+        if !check(wait_overlay(app, &etiket), &format!("monitör {index}: overlay açıldı")) {
+            continue;
+        }
+
+        // Ölçüm gerçekten bu ekranda mı? Harici monitör negatif koordinatta;
+        // dönüşüm kayarsa "olay gelmedi" sonucu ürün hatası değil koordinat hatası.
+        let gercek = on_main(app, crate::geom::cursor_position).flatten();
+        let dogru = gercek
+            .map(|(cx, cy)| cx >= m.x && cx < m.x + m.width && cy >= m.y && cy < m.y + m.height)
+            .unwrap_or(false);
+        if !check(dogru, &format!("monitör {index}: imleç hedef ekranda, ölçüm geçerli {gercek:?}")) {
+            continue;
+        }
+
+        // ── A: kısayolun bıraktığı hâl ──────────────────────────────────────
+        note(&format!("monitör {index}: A öncesi odak → {}", key_durumu(app)));
+        let a = solo_asama(app, &etiket, m, "A: tüm overlay'ler açık");
+
+        // ── B: hedef dışındaki overlay'leri KAPAT ───────────────────────────
+        let hedef = etiket.clone();
+        let kapatilan = on_main(app, move |h| {
+            let digerleri: Vec<String> = h
+                .webview_windows()
+                .keys()
+                .filter(|l| l.starts_with(crate::windows::capture::PREFIX) && **l != hedef)
+                .cloned()
+                .collect();
+            for l in &digerleri {
+                crate::windows::close_if_open(h, l);
+            }
+            digerleri
+        })
+        .unwrap_or_default();
+        note(&format!("monitör {index}: kapatılan overlay'ler {kapatilan:?}"));
+        sleep(700);
+        // Ürünün `snip_ready`de yaptığı şeyin aynısı, diğerleri gittikten SONRA.
+        let hedef2 = etiket.clone();
+        on_main(app, move |h| {
+            if let Some(w) = h.get_webview_window(&hedef2) {
+                crate::platform::activate_app();
+                let _ = w.set_focus();
+            }
+        });
+        sleep(700);
+        note(&format!("monitör {index}: B öncesi odak → {}", key_durumu(app)));
+        let b = solo_asama(app, &etiket, m, "B: yalnız hedef overlay, odak verildi");
+
+        // ── C: kullanıcının kurtarma adımı — TEK tıklama ────────────────────
+        let (cx, cy) = to_screen(m, m.width * 0.5, m.height * 0.5);
+        mouse::click(cx, cy);
+        sleep(500);
+        note(&format!("monitör {index}: C öncesi odak → {}", key_durumu(app)));
+        let c = solo_asama(app, &etiket, m, "C: tek tıklamadan SONRA");
+
+        note(&format!("monitör {index}: hareket A={a} B={b} C={c}"));
+        let karar = if a > 0 {
+            "bu monitörde hata YOK"
+        } else if b > 0 {
+            "SEBEP: iki overlay odak yarışı — tek overlay kalınca olay geliyor"
+        } else if c > 0 {
+            "SEBEP: ikincil ekran — pencere tek ve odaklı olduğu hâlde olay YOK, kilidi tıklama açıyor"
+        } else {
+            "olay tıklamadan sonra da gelmedi — ölçüm ya da başka bir katman"
+        };
+        note(&format!("monitör {index}: KARAR → {karar}"));
+        check(a > 0, &format!("monitör {index}: fare hareketi TIKLAMADAN ÖNCE sayfaya ulaşıyor"));
+    }
+
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(500);
+}
+
+/// Sayaçları sıfırla, imleci hedef monitörde gezdir, ulaşan `mousemove` sayısını oku.
+///
+/// Dinleyici bir kez kuruluyor ve sonraki aşamalarda yalnız sayaç sıfırlanıyor:
+/// aynı sayfada üç aşama koşuyor ve her seferinde yeni dinleyici eklemek sayıyı
+/// katlayıp aşamaları kıyaslanamaz hâle getirirdi.
+#[cfg(target_os = "macos")]
+fn solo_asama(app: &tauri::AppHandle, etiket: &str, m: &MonitorInfo, ad: &str) -> i32 {
+    eval(
+        app,
+        etiket,
+        "if (window.__qacHook) { window.__qacMove = 0; window.__qacOver = 0; }\
+         else { window.__qacHook = 1; window.__qacMove = 0; window.__qacOver = 0;\
+           document.addEventListener('mousemove', () => { window.__qacMove++; }, true);\
+           document.addEventListener('mouseover', () => { window.__qacOver++; }, true); }"
+            .to_string(),
+    );
+    sleep(300);
+    for i in 0..12 {
+        let t = i as f64 / 12.0;
+        let (mx, my) = to_screen(m, m.width * (0.30 + 0.30 * t), m.height * (0.30 + 0.30 * t));
+        mouse::move_to(mx, my);
+    }
+    sleep(400);
+    clear_probes();
+    eval(
+        app,
+        etiket,
+        "window.api.sendDebugLog('QAC solo.move=' + (window.__qacMove ?? -1)\
+           + ' over=' + (window.__qacOver ?? -1) + ' sayfaOdakta=' + document.hasFocus());"
+            .to_string(),
+    );
+    let raw = wait_probe("solo.move", 3000).unwrap_or_default();
+    note(&format!("  {ad}: hareket={raw}"));
+    raw.split_whitespace().next().and_then(|v| v.parse().ok()).unwrap_or(-1)
+}
+
+/// Hangi pencere KEY? macOS'ta aynı anda yalnız biri olabilir; "uygulama aktif"
+/// bilgisi hangi PENCEREnin fare/klavye olayı aldığını söylemiyor.
+///
+/// Yakalama overlay'leriyle sınırlı DEĞİL: yerli kaydetme paneli capture
+/// penceresine bağlı bir sheet ve Return'ü alamadığında sorulacak ilk şey
+/// "o an key olan pencere hangisi" (ana pencere? toast?).
+#[cfg(target_os = "macos")]
+fn key_durumu(app: &tauri::AppHandle) -> String {
+    on_main(app, |h| {
+        let mut etiketler: Vec<String> = h.webview_windows().keys().cloned().collect();
+        etiketler.sort();
+        let mut aktif = false;
+        let parcalar: Vec<String> = etiketler
+            .iter()
+            .filter_map(|l| h.get_webview_window(l))
+            .map(|w| match crate::platform::macos::focus_state(&w) {
+                Ok((a, k)) => {
+                    aktif |= a;
+                    format!("{}={}", w.label(), if k { "KEY" } else { "-" })
+                }
+                Err(e) => format!("{}=? ({e})", w.label()),
+            })
+            .collect();
+        format!("uygulama aktif={aktif}, {}", parcalar.join(" "))
+    })
+    .unwrap_or_else(|| "odak durumu okunamadı".into())
+}
+
 /// Bayat isabet alanı kaydı sonraki yakalamayı sağır bırakıyor mu?
 ///
 /// Kaydedici durdurulunca bilerek `setHitAreas([])` bildiriyor — "her yeri
@@ -1874,6 +2063,11 @@ fn flow_savepanel(app: &tauri::AppHandle, m: &MonitorInfo) {
     mouse::click(sx, sy);
     // Panelin belirmesi: `save_png` overlay'i indirip rfd'yi açıyor.
     sleep(2600);
+    // Return NEREYE gidiyor? Panel yerli bir sheet, yani bu listede GÖRÜNMEZ;
+    // ölçülen şey uygulamanın aktif olup olmadığı ve hâlâ bir webview
+    // penceresinin key kalıp kalmadığı. Panel Return'ü almadığında ("dosya
+    // çıkmadı") cevap burada.
+    note(&format!("Return öncesi odak → {}", key_durumu(app)));
     // Varsayılan düğme Kaydet.
     mouse::key(mouse::KEY_RETURN);
 
@@ -2243,7 +2437,21 @@ pub fn run(app: tauri::AppHandle, which: String) {
             note(&format!("başlıyor — akışlar: {}", wanted.join(", ")));
 
             let Some(m) = crate::geom::all_monitors(&app).into_iter().next() else {
-                check(false, "monitör bulunamadı");
+                // KİLİTLİ EKRAN. `NSScreen.screens` oturum kilitliyken (ya da ekran
+                // uykudayken) BOŞ dönüyor. Bu akışların hepsi gerçek imleci
+                // hareket ettiriyor, yani kilitli ekranda ölçüm anlamsız — ve daha
+                // kötüsü, sebebi söylenmezse "pointer düştü, a7 düştü" diye
+                // ÜRÜN hatası gibi okunuyor. Bir kez yaşandı, bu satır o yüzden var.
+                check(
+                    false,
+                    "monitör bulunamadı — ekran KİLİTLİ ya da uyanık değil olabilir; \
+                     gerçek imleç isteyen akışlar kilitli ekranda koşamaz",
+                );
+                println!("QAC SONUC: 1 başarısız");
+                // ÇIKMAK ZORUNLU: süreç ayakta kalırsa tek-örnek eklentisi bir
+                // sonraki koşuyu sessizce düşürüyor ve "test takıldı" gibi görünüyor.
+                sleep(400);
+                app.exit(0);
                 return;
             };
             note(&format!(
@@ -2298,7 +2506,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("stalehit") {
+            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("solo") || has("stalehit") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -2317,6 +2525,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                             flow_firstclick(&app, mon, i);
                         }
                     }
+                    if has("solo") { flow_solo(&app); }
                     if has("stalehit") { flow_stalehit(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }

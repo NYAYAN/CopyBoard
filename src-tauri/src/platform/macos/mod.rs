@@ -98,6 +98,52 @@ pub fn focus_state(window: &tauri::WebviewWindow) -> Result<(bool, bool), String
     Ok((active, key))
 }
 
+/// Sol fare düğmesi şu an basılı mı — `NSEvent.pressedMouseButtons` bit 0.
+///
+/// Ana thread gerektirmiyor; yakalama overlay'inin odak izleyicisi
+/// (`capture::follow_cursor_focus`) kendi thread'inden soruyor. Sürükleme
+/// sürerken key pencereyi değiştirmek sürüklenen pencereye blur gönderir.
+pub fn left_mouse_down() -> bool {
+    objc2_app_kit::NSEvent::pressedMouseButtons() & 1 == 1
+}
+
+/// Hata ayıklama: hangi NSWindow key ve uygulamanın YERLİ panelleri (NSSavePanel
+/// gibi) ne durumda. Webview listesi bunları göstermiyor; kaydetme paneli Return'ü
+/// almadığında panelin hiç açılmadığını, açıldığını ama key olmadığını ya da key
+/// olduğu hâlde tepki vermediğini ayırt etmek için.
+#[cfg(debug_assertions)]
+pub fn key_window_debug() -> String {
+    let Some(mtm) = MainThreadMarker::new() else { return "ana thread değil".into() };
+    let app = NSApplication::sharedApplication(mtm);
+    let key = match app.keyWindow() {
+        Some(w) => format!("key={:?} \"{}\"", w.class(), w.title()),
+        None => "key=YOK".to_string(),
+    };
+    let paneller: Vec<String> = app
+        .windows()
+        .iter()
+        .filter(|w| format!("{:?}", w.class()).contains("Panel"))
+        .map(|w| format!("{:?}(görünür={}, key={})", w.class(), w.isVisible(), w.isKeyWindow()))
+        .collect();
+    format!(
+        "{key}; paneller: {}",
+        if paneller.is_empty() { "yok".to_string() } else { paneller.join(" ") }
+    )
+}
+
+/// Hata ayıklama: açık bir NSSavePanel varsa dosya adı alanının değeri.
+///
+/// Panel uzak bir görünüm (`openAndSavePanelService`); sentetik bir tuş vuruşunun
+/// ona ULAŞTIĞINI kanıtlamanın tek ucuz yolu, adı yazmadan önce ve sonra okumak.
+#[cfg(debug_assertions)]
+pub fn save_panel_name() -> Option<String> {
+    let mtm = MainThreadMarker::new()?;
+    let app = NSApplication::sharedApplication(mtm);
+    app.windows()
+        .iter()
+        .find_map(|w| w.downcast_ref::<objc2_app_kit::NSSavePanel>().map(|p| p.nameFieldStringValue().to_string()))
+}
+
 /// `NSWindow.level` — Electron'un `'screen-saver'` / `'pop-up-menu'` seviyeleri.
 pub fn set_ns_level(window: &tauri::WebviewWindow, level: isize) -> Result<(), String> {
     with_ns_window(window, move |ns| ns.setLevel(level))

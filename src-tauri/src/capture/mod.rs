@@ -94,6 +94,10 @@ pub struct CaptureState {
     pending: Mutex<HashMap<String, CaptureMeta>>,
     /// `window_ready` göndermiş overlay etiketleri.
     ready: Mutex<HashSet<String>>,
+    /// Odak izleyicisinin nesli. `start` artırıp kendi değerini izleyiciye veriyor,
+    /// `finish` yine artırıyor; değer değişince izleyici çıkıyor. Bkz.
+    /// [`follow_cursor_focus`].
+    focus_gen: std::sync::atomic::AtomicU64,
 }
 
 /// Renderer'a itilen metadata. Kare AYRI çekiliyor.
@@ -218,6 +222,18 @@ pub fn start(app: &tauri::AppHandle, mode: &str) {
                 labels.push(String::new());
             }
         }
+    }
+
+    // Çok monitörde odak imleci izlesin — kısayola bir ekranda basıp öteki
+    // ekranda seçim yapmak için. Tek monitörde izleyecek bir şey yok.
+    #[cfg(target_os = "macos")]
+    if multi {
+        let gen = app
+            .state::<CaptureState>()
+            .focus_gen
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+            + 1;
+        follow_cursor_focus(app.clone(), gen);
     }
 
     let quality = app.state::<AppState>().settings().video_quality();
@@ -500,6 +516,9 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
     );
 
     let target = window.clone();
+    // Yalnız tanı bloğu kullanıyor; sürüm derlemesinde bağlanmıyor ki
+    // "kullanılmayan değişken" uyarısı çıkmasın.
+    #[cfg(debug_assertions)]
     let probe = window.clone();
     let _ = app.run_on_main_thread(move || {
         if bu_ekranda {
@@ -685,6 +704,72 @@ pub fn close_all_except(app: &tauri::AppHandle, keep: &str) {
 /// bağlıydı — dosyanın kendi yorumu şart koşuyordu: "evreden çıkan HER yol — bitiş,
 /// iptal, pencere kapandı, çıkış — onu bırakır". Akış artık Rust tarafında yaşadığı
 /// için pencerenin kapanması onu KENDİLİĞİNDEN durdurmuyor; teardown buraya taşındı.
+/// Çok monitörde ODAK İMLECİ İZLİYOR.
+///
+/// `snip_ready` odağı imlecin o an bulunduğu ekranın overlay'ine veriyor. Ama
+/// kullanıcı kısayola bir ekranda basıp SEÇİMİ ÖTEKİ ekranda yapabiliyor; öteki
+/// overlay key değil. Ölçüm (`--qa-capture=cross`, iki yönde de): öteki ekrana
+/// geçince sayfaya ulaşan fare hareketi 0, ilk sürüklemenin `mousedown`'ı bile
+/// ulaşmıyor, seçim kutusu 0x0 — "önce bir tıkla" hatası çapraz-monitörde aynen
+/// duruyordu. Aynı şey harness'ta da çıktı: önceki akış imleci harici ekranda
+/// bırakınca dahili ekrandaki ilk sürükleme yutuluyor, `pointer`/`stalehit`
+/// rastgele düşüyordu.
+///
+/// İzleyici 40 ms'de bir imleci yokluyor; başka bir overlay'in ekranına geçtiyse
+/// o pencereye `set_focus`. `windows::hit_test` ile aynı model. Yalnız çok
+/// monitörde ve yalnız oturum açıkken koşuyor: `finish` nesli artırıyor ve overlay
+/// haritasını boşaltıyor, ikisi de izleyiciyi bitiriyor.
+///
+/// Sol düğme BASILIYKEN dokunmuyor: sürükleme sürerken key'i değiştirmek
+/// sürüklenen pencereye blur gönderir. Sürükleme öteki ekranda biterse düğme
+/// bırakılır bırakılmaz odak imlecin ekranına geçer; kullanıcı araç çubuğu için
+/// geri döndüğünde de 40 ms içinde geri gelir — el hareketinden hızlı.
+#[cfg(target_os = "macos")]
+fn follow_cursor_focus(app: tauri::AppHandle, gen: u64) {
+    use std::sync::atomic::Ordering;
+    let spawned = std::thread::Builder::new()
+        .name("copyboard-overlay-focus".into())
+        .spawn(move || {
+            let mut current: Option<String> = None;
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(40));
+                let cs = app.state::<CaptureState>();
+                if cs.focus_gen.load(Ordering::Acquire) != gen {
+                    return;
+                }
+                let target = {
+                    let overlays = cs.overlays.lock().unwrap();
+                    if overlays.is_empty() {
+                        return;
+                    }
+                    let Some((cx, cy)) = geom::cursor_position(&app) else { continue };
+                    overlays.iter().find(|(_, m)| m.contains(cx, cy)).map(|(l, _)| l.clone())
+                };
+                let Some(label) = target else { continue };
+                if current.as_deref() == Some(label.as_str()) {
+                    continue;
+                }
+                if crate::platform::left_mouse_down() {
+                    continue;
+                }
+                let Some(w) = app.get_webview_window(&label) else { continue };
+                // Henüz gösterilmemiş pencereye `set_focus` işe yaramaz (tao görünür
+                // değilse hiçbir şey yapmıyor); bir sonraki turda tekrar dene.
+                if !w.is_visible().unwrap_or(false) {
+                    continue;
+                }
+                log::info!("odak imleci izledi: {} → {label}", current.as_deref().unwrap_or("(başlangıç)"));
+                current = Some(label);
+                let _ = app.run_on_main_thread(move || {
+                    let _ = w.set_focus();
+                });
+            }
+        });
+    if let Err(e) = spawned {
+        log::warn!("overlay odak izleyicisi başlatılamadı: {e}");
+    }
+}
+
 /// Overlay hangi monitörü kaplıyor — `snip_ready` yeniden yerleştirme ve tanı için.
 pub fn remember_overlay(app: &tauri::AppHandle, label: &str, m: &geom::MonitorInfo) {
     app.state::<CaptureState>().overlays.lock().unwrap().insert(label.to_string(), m.clone());
@@ -701,6 +786,9 @@ pub fn finish(app: &tauri::AppHandle) {
     cs.frames.lock().unwrap().clear();
     cs.retries.lock().unwrap().clear();
     cs.overlays.lock().unwrap().clear();
+    // Odak izleyicisini durdur (overlay haritasının boşalması da durduruyor;
+    // ikisi birden, izleyici hangisini önce görürse).
+    cs.focus_gen.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
     // Kaydetme paneli overlay'le birlikte gittiyse kilidi de bırak.
     crate::commands::capture::reset_save_guard();
 

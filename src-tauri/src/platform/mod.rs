@@ -168,6 +168,21 @@ pub fn activate_app() {
     }
 }
 
+/// Sol fare düğmesi basılı mı? Yakalama overlay'inin odak izleyicisi sürükleme
+/// sürerken odağı DEĞİŞTİRMEMEK için soruyor. Windows'ta odak modeli farklı
+/// (fare olayları key'e bakmadan imlecin altındaki pencereye gidiyor) ve izleyici
+/// orada koşmuyor; `false` yeterli.
+pub fn left_mouse_down() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::left_mouse_down()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
 // ── Pano ─────────────────────────────────────────────────────────────────────
 // Her iki platformda da aynı üç soru: değişti mi, gizli mi, metni ne.
 

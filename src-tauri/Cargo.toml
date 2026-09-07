@@ -42,7 +42,9 @@ tesseract-rs = { version = "0.4", features = ["build-tesseract", "embed-tessdata
 screencapturekit = { version = "8", features = ["macos_15_0"] }
 window-vibrancy = "0.8"
 objc2 = "0.6"
-objc2-app-kit = "0.3"
+# `NSEvent`: overlay odak izleyicisi sol düğmenin basılı olup olmadığını soruyor.
+# `NSSavePanel`: hata ayıklama probu panelin dosya adı alanını okuyor (yalnız debug yolu).
+objc2-app-kit = { version = "0.3", features = ["NSEvent", "NSSavePanel"] }
 objc2-foundation = "0.3"
 block2 = "0.6"
 # AVAssetWriter yolu (capture/writer.rs) ve CoreGraphics/CoreVideo sarmalayıcıları.

@@ -108,6 +108,11 @@ mod tests {
     ///
     /// Yazma ATOMİK (geçici ad + `rename`): iki test süreci aynı anda koşarsa biri
     /// diğerinin yarım yazdığı dosyayı okumasın.
+    ///
+    /// Geçici ad süreç kimliğinin YANINDA bir sayaç taşıyor: `cargo test` testleri
+    /// AYNI süreçte paralel iş parçacıklarında koşturuyor, yani yalnız pid'li ad
+    /// ikisinde de aynı çıkıyordu — biri `rename` ederken öteki aynı dosyayı
+    /// arıyor ve `NotFound` ile patlıyordu (CI'da kırmızı, yerelde tesadüfen yeşil).
     fn spread_tessdata() -> PathBuf {
         let dir = std::env::temp_dir().join("copyboard-ocr-testdata");
         std::fs::create_dir_all(&dir).unwrap();
@@ -116,7 +121,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("'{lang}' binary'ye gömülü değil"));
             let f = dir.join(format!("{lang}.traineddata"));
             if std::fs::metadata(&f).map(|m| m.len() as usize != blob.len()).unwrap_or(true) {
-                let tmp = dir.join(format!("{lang}.{}.part", std::process::id()));
+                static SIRA: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let n = SIRA.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let tmp = dir.join(format!("{lang}.{}.{n}.part", std::process::id()));
                 std::fs::write(&tmp, blob).unwrap();
                 std::fs::rename(&tmp, &f).unwrap();
             }

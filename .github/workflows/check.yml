@@ -57,9 +57,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # 22 ZORUNLU, 20 DEĞİL: `npm test` betiği `node --test "test/**/*.test.mjs"`
+      # çağırıyor ve test koşucusu glob kalıplarını ancak 22.0'dan beri açıyor.
+      # Node 20 kalıbı düz bir yol sanıp "Could not find ..." ile çıkıyordu.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
       - run: npm ci
       - run: npm test

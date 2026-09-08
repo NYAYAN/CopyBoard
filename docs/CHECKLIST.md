@@ -66,6 +66,13 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 - [~] D13. Başka Windows PC'de `cargo run` çalışmadı → `scripts/win-env.cmd` sürüm/edisyon bağımsız (vswhere + msvcrt.lib doğrulaması, `COPYBOARD_VS` ile elle seçim, cmake yoksa VS kopyası/uyarı), `docs/BUILD_WINDOWS.md` (gereksinimler, sık hatalar). Hata metni geldi: düz `cargo run` cc-rs'in en yeni diye seçtiği VS 18 `cl.exe` ile düşüyor (yarım kurulum: include/lib yok) → betikle çalıştırma ya da VS 18 onarımı; kılavuza iki satır eklendi (VS 18 stub, exe kilidi). Betikle doğrulama bekleniyor
 - [ ] D11. Dev çıktısında tao uyarısı "PostMessage failed … Invalid window handle" (0x80070578) — kapanan pencereye geç mesaj; zararsız görünüyor, tekrarlarsa incelenecek
 
+- [x] D14. GitHub Actions üç işte de kırmızıydı (2026-09-08) — üçü de düzeltildi ve yerelde doğrulandı:
+  1. **Windows `cargo check` derlenmiyordu:** `capture/mod.rs`teki odak tanı bloğu `#[cfg(debug_assertions)]` ile korunuyordu ama içi macOS'a özgü `platform::macos::focus_state`ı çağırıyor → cfg `all(debug_assertions, target_os = "macos")` oldu (`probe` bağlaması da aynı cfg ile).
+  2. **`qa_capture.rs::lower_main` bulunamıyordu:** işlev `#[cfg(target_os = "macos")]` idi, çağrısı (`flow_scroll`) platformdan bağımsızdı. `set_always_on_top(false)` Windows'ta da doğru davrandığı için cfg kaldırıldı. Aynı geçişte Windows'ta ölü kalan üç QA yardımcısı (`click_el_js`, `to_screen`, `video_ids`) macOS'a gated edildi → Windows derlemesi yine SIFIR uyarı.
+  3. **`ocr::tests::bozuk_png_hata_veriyor_panik_atmiyor` düşüyordu:** `spread_tessdata` geçici dosyayı yalnız pid ile adlandırıyordu; `cargo test` testleri AYNI süreçte paralel koşturduğu için iki test aynı `.part` adını kullanıyor, biri `rename` ederken öteki `NotFound` alıyordu. Ada bir sayaç eklendi.
+  4. **`npm test` "Could not find test/**/*.test.mjs" veriyordu:** `check.yml`in js işi Node 20 kullanıyordu; `node --test` glob kalıplarını 22.0'dan beri destekliyor → iş Node 22'ye alındı.
+  Doğrulama (Windows, `scripts\win-env.cmd`): `cargo check --all-targets` sıfır uyarı, `cargo test` 73/73, `npm test` 52/52.
+
 ## E. Talep günlüğü (kronolojik)
 
 1. Tauri tarafını Electron ile karşılaştırarak incele → 35 bulgu, hepsi düzeltildi
@@ -86,3 +93,4 @@ pencere sorgusu), `gözle` (kullanıcı), `cv2` (kare analizi).
 16. Diğer PC'de `cargo run` çalışmadı → D13 (derleme reçetesi)
 17. Video durdurunca kaydetme paneli gelmiyor → A14
 18. Kayıt başlattıktan sonra 3-5 sn ekrana tıklanamıyor → A15
+19. GitHub Actions'ta hatalar var → D14

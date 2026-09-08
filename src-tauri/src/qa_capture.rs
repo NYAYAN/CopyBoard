@@ -337,6 +337,7 @@ fn click_js(x: f64, y: f64) -> String {
 /// Kaydedici ve kaydırma düğmeleri ise `click` dinliyor. Hangi düğmenin hangi
 /// olayı dinlediği koda bakılarak belirlenmeli: yanlışını göndermek testi sessizce
 /// yeşil yapar (`btn-record`a `mousedown` göndermek kaydı hiç başlatmıyordu).
+#[cfg(target_os = "macos")]
 fn click_el_js(id: &str) -> String {
     format!("document.getElementById('{id}')?.click();")
 }
@@ -1217,8 +1218,9 @@ fn flow_scroll(app: &tauri::AppHandle, m: &MonitorInfo) {
 /// Ana pencere `ScreenSaver` (1000), yakalama overlay'i `PopUpMenu` (101)
 /// katmanında. Yani kart overlay'in ÜSTÜNDE duruyor ve gerçek bir tıklama
 /// overlay'e hiç ulaşmazdı. Ekran görüntüsü zaten alındığı için kartın üstte
-/// kalmasına gerek yok.
-#[cfg(target_os = "macos")]
+/// kalmasına gerek yok. Windows'ta da aynısı geçerli: kart `always_on_top`
+/// olduğu sürece overlay'in üstünde durur, bu yüzden işlev PLATFORMDAN BAĞIMSIZ
+/// derleniyor — cfg'liyken Windows derlemesi çağrı yerinde kırılıyordu.
 fn lower_main(app: &tauri::AppHandle) {
     on_main(app, |h| {
         if let Some(w) = h.get_webview_window(crate::windows::main_window::LABEL) {
@@ -1229,6 +1231,7 @@ fn lower_main(app: &tauri::AppHandle) {
 }
 
 /// Overlay'deki bir CSS noktasının EKRAN (global mantıksal) karşılığı.
+#[cfg(target_os = "macos")]
 fn to_screen(m: &MonitorInfo, cx: f64, cy: f64) -> (f64, f64) {
     (m.x + cx, m.y + cy)
 }
@@ -2473,6 +2476,7 @@ fn png_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
         .unwrap_or_default()
 }
 
+#[cfg(target_os = "macos")]
 fn video_ids(app: &tauri::AppHandle) -> Vec<String> {
     let state = app.state::<AppState>();
     crate::videos::public_list(&state.store)

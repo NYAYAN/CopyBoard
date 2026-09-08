@@ -517,8 +517,9 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
 
     let target = window.clone();
     // Yalnız tanı bloğu kullanıyor; sürüm derlemesinde bağlanmıyor ki
-    // "kullanılmayan değişken" uyarısı çıkmasın.
-    #[cfg(debug_assertions)]
+    // "kullanılmayan değişken" uyarısı çıkmasın. Tanı `focus_state` üzerinden
+    // NSWindow okuyor, yani macOS'a özgü: cfg'si bloğunkiyle BİREBİR aynı kalmalı.
+    #[cfg(all(debug_assertions, target_os = "macos"))]
     let probe = window.clone();
     let _ = app.run_on_main_thread(move || {
         if bu_ekranda {
@@ -579,7 +580,7 @@ pub async fn snip_ready(window: tauri::WebviewWindow) {
     // Yalnız odağı İSTEYEN overlay için: diğerinin key olmaması artık BEKLENEN
     // durum ve her yakalamada bir uyarı yazmak günlüğü kirletip bir dahaki
     // tanıyı yanlış yöne sürer.
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, target_os = "macos"))]
     if bu_ekranda {
         let h = probe.app_handle().clone();
         std::thread::spawn(move || {

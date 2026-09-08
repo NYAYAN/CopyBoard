@@ -30,12 +30,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest      # Apple Silicon
+          # macOS: yalnız Apple Silicon (arm64). Intel ŞİMDİLİK YOK.
+          #
+          # Intel'in iki bağımsız engeli var ve ikisi birbirini kesiyor:
+          #   1) Ayrı Intel runner'ı (macos-15-intel) macOS 15 SDK'da kaldı —
+          #      GitHub'ın SON Intel imajı bu, daha yenisi gelmeyecek. Ama
+          #      screencapturekit → apple-metal 0.8.8 Swift köprüsü macOS 26 SDK
+          #      sembolleri istiyor (MTLSamplerReductionMode / reductionMode /
+          #      lodBias) → Intel runner'da DERLENMİYOR.
+          #   2) Alternatif "ARM runner'da universal" de çöküyor: tesseract-rs
+          #      native kütüphaneyi HOST mimarisinde derliyor (x86_64 için bile
+          #      arm64/NEON nesne üretiyor), universal'in x86_64 dilimi
+          #      LİNKLENEMİYOR (yerelde doğrulandı).
+          #
+          # Sonuç: bugün güvenilir tek kombinasyon arm64 + Windows. Intel
+          # kullanıcıları şimdilik Electron sürümünü (main) kullanır. Intel Tauri
+          # için ya tesseract-rs çapraz-derlemeyi düzeltmeli ya da macOS 26 SDK'lı
+          # bir Intel runner çıkmalı.
+          - platform: macos-latest
             args: '--target aarch64-apple-darwin'
-          # `macos-13` 2025-12'de emekli edildi (actions/runner-images#13046);
-          # Intel yapısı için GitHub'ın kalan Intel imajı bu.
-          - platform: macos-15-intel    # Intel
-            args: '--target x86_64-apple-darwin'
           - platform: windows-latest
             args: ''
 
@@ -46,7 +59,7 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-15-intel' && 'x86_64-apple-darwin' || '' }}
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin' || '' }}
 
       # tesseract-rs, Tesseract + Leptonica'yı KAYNAKTAN derliyor. Önbelleksiz ilk
       # derleme uzun sürüyor; bu önbellek onu ~3 dakikaya indiriyor.
@@ -71,26 +84,31 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # `tauri signer generate` ile üretilir; özel anahtar ASLA depoya girmez.
-          # `bundle.createUpdaterArtifacts` açık olduğu için bu ikisi ZORUNLU:
-          # ayarlanmadıklarında `tauri build` imza adımında hata verir. Karşılığında
-          # tauri-action `.sig` dosyalarını ve `latest.json`ı release'e ekler —
-          # güncelleyicinin çalışması için ikisi de gerekli (bkz. SIGNING.md).
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS kod imzası (Apple Developer ID) HENÜZ YOK — CI ad-hoc imzalı yapı
-          # üretiyor. `scripts/check-signing-identity.sh` bunu normalde derlemeyi
-          # durdurarak engelliyor; burada bilerek muaf tutuluyor, çünkü geliştirme
-          # makinesindeki kendinden imzalı sertifika CI'a taşınamaz (ve taşınmamalı).
+          # ── GÜNCELLEYİCİ ŞİMDİLİK KAPALI ────────────────────────────────────
+          # `bundle.createUpdaterArtifacts` false (tauri.conf.json). Sebebi:
+          # tauri.conf'ta `pubkey` boş, yani güncelleyici zaten atıl (imzalasa da
+          # doğrulayamaz). Açıkken her build sonunda imza anahtarı istiyordu ve
+          # "Missing comment in secret key" ile düşüyordu — .dmg/.exe üretiliyor ama
+          # yayınlanamıyordu. Kapalıyken installer'lar temiz yayınlanıyor.
           #
-          # Developer ID alındığında: bu satırı SİL, yerine APPLE_CERTIFICATE,
-          # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY secret'larını ekle
-          # (notarization için ayrıca APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID).
-          COPYBOARD_ALLOW_UNSIGNED: '1' 
+          # GÜNCELLEYİCİYİ AÇMAK İÇİN: `npm run tauri signer generate` ile anahtar
+          # çifti üret → pubkey'i tauri.conf.json'a yaz → createUpdaterArtifacts'ı
+          # true yap → TAURI_SIGNING_PRIVATE_KEY(+_PASSWORD) secret'larını ekle
+          # (özel anahtar ASLA depoya girmez) → aşağıda includeUpdaterJson: true.
+          #
+          # ── macOS İMZA: ad-hoc (Developer ID YOK) ───────────────────────────
+          # Yeni kurulumlarda TCC izinlerinin (Ekran Kaydı vb.) güncellemeler arası
+          # KORUNMASI için kararlı bir imza kimliği gerekir; ad-hoc her build'de
+          # değiştiği için izin sıfırlanır. Kalıcı çözüm ayrı bir iş (Apple
+          # Developer ID + notarization); alındığında COPYBOARD_ALLOW_UNSIGNED'ı SİL,
+          # APPLE_CERTIFICATE / _PASSWORD / APPLE_SIGNING_IDENTITY (+ APPLE_ID /
+          # APPLE_PASSWORD / APPLE_TEAM_ID) secret'larını ekle. Electron tarafı da
+          # bugün imzasız; bu, iki tarafın ortak eksiği.
+          COPYBOARD_ALLOW_UNSIGNED: '1'
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'CopyBoard ${{ github.ref_name }}'
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          includeUpdaterJson: false
           args: ${{ matrix.args }}

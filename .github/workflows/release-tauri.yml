@@ -1,0 +1,96 @@
+# TAURI sürüm derlemesi — Electron'un `release.yml`'inden AYRI TUTULUR.
+#
+# İkisi de aynı depoda yaşıyor ve birbirine dokunmuyor: Electron `v*` etiketiyle
+# (ör. v3.0.0), Tauri ise `tauri-v*` etiketiyle (ör. tauri-v3.0.0) tetikleniyor.
+# `tauri-v3.0.0` `v*` desenine UYMUYOR (v ile başlamıyor), dolayısıyla Electron işi
+# bu etikette KOŞMAZ; tersi de geçerli. Böylece Electron'un ürettiği asset'ler
+# hiç bozulmadan kalıyor, Tauri kendi GitHub sürümünü ayrıca oluşturuyor.
+#
+# Sürüm çıkarma:
+#   Electron  →  git tag v3.0.0        && git push origin v3.0.0
+#   Tauri     →  git tag tauri-v3.0.0  && git push origin tauri-v3.0.0
+name: Build and Release (Tauri)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'tauri-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # Electron sürümünde `max-parallel: 1` gerekiyordu: iki paralel
+      # `electron-builder --publish always` işi aynı etiket için taslak yarışına girip
+      # AYRI taslaklar yaratabiliyordu. `tauri-action` aynı taslağa güvenle eklediği
+      # için matris artık paralel koşabiliyor.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest      # Apple Silicon
+            args: '--target aarch64-apple-darwin'
+          # `macos-13` 2025-12'de emekli edildi (actions/runner-images#13046);
+          # Intel yapısı için GitHub'ın kalan Intel imajı bu.
+          - platform: macos-15-intel    # Intel
+            args: '--target x86_64-apple-darwin'
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-15-intel' && 'x86_64-apple-darwin' || '' }}
+
+      # tesseract-rs, Tesseract + Leptonica'yı KAYNAKTAN derliyor. Önbelleksiz ilk
+      # derleme uzun sürüyor; bu önbellek onu ~3 dakikaya indiriyor.
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.platform }}
+
+      # cmake tesseract-rs'in ön koşulu. GitHub imajlarında hazır gelir;
+      # kontrol, bir imaj değişikliğinin sessizce derlemeyi bozmasını engelliyor.
+      - name: cmake doğrula
+        run: cmake --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `tauri signer generate` ile üretilir; özel anahtar ASLA depoya girmez.
+          # `bundle.createUpdaterArtifacts` açık olduğu için bu ikisi ZORUNLU:
+          # ayarlanmadıklarında `tauri build` imza adımında hata verir. Karşılığında
+          # tauri-action `.sig` dosyalarını ve `latest.json`ı release'e ekler —
+          # güncelleyicinin çalışması için ikisi de gerekli (bkz. SIGNING.md).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS kod imzası (Apple Developer ID) HENÜZ YOK — CI ad-hoc imzalı yapı
+          # üretiyor. `scripts/check-signing-identity.sh` bunu normalde derlemeyi
+          # durdurarak engelliyor; burada bilerek muaf tutuluyor, çünkü geliştirme
+          # makinesindeki kendinden imzalı sertifika CI'a taşınamaz (ve taşınmamalı).
+          #
+          # Developer ID alındığında: bu satırı SİL, yerine APPLE_CERTIFICATE,
+          # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY secret'larını ekle
+          # (notarization için ayrıca APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID).
+          COPYBOARD_ALLOW_UNSIGNED: '1' 
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'CopyBoard ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

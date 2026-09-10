@@ -52,9 +52,18 @@ export function setVideos(list) {
     render();
 }
 
-export function render() {
+// `reveal`: seçili ögeyi görünüme kaydır. Yalnız klavyeyle gezerken true; silme
+// ve tazelemede false, yoksa kaydırma konumu bozulur (aşağıdaki not).
+export function render(opts) {
+    const reveal = !!(opts && opts.reveal);
     const grid = elements.videosGrid;
     if (!grid) return;
+    // Kaydırma konumunu KORU. Izgara her render'da sıfırdan kuruluyor
+    // (`innerHTML = ''` scrollTop'u 0'a düşürür). Eskiden sondaki bir videoyu
+    // hover-sil düğmesiyle silince seçili öge değişmiyor (çoğu zaman baştaki
+    // kalıyor) ve sondaki `scrollIntoView` listeyi en başa fırlatıyordu. Konumu
+    // saklayıp geri veriyoruz; liste kısaldıysa tarayıcı yeni tabana kırpıyor.
+    const keepScroll = grid.scrollTop;
     grid.innerHTML = '';
 
     if (!items.length) {
@@ -133,7 +142,8 @@ export function render() {
     if (elements.videosCount) {
         elements.videosCount.textContent = `${items.length} ${t('video')}`;
     }
-    grid.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
+    grid.scrollTop = keepScroll;
+    if (reveal) grid.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
 }
 
 // Silmeden önce sor. Video uygulamanın kendi klasöründe duruyor, yani "listeden
@@ -158,19 +168,19 @@ export function handleKey(e) {
         // SÜTUN SAYISI kadar atlıyor — tek sütunda da doğru çalışıyor.
         case 'ArrowDown':
             selected = Math.min(selected + columns(), items.length - 1);
-            render();
+            render({ reveal: true });
             return true;
         case 'ArrowUp':
             selected = Math.max(selected - columns(), 0);
-            render();
+            render({ reveal: true });
             return true;
         case 'ArrowRight':
             selected = Math.min(selected + 1, items.length - 1);
-            render();
+            render({ reveal: true });
             return true;
         case 'ArrowLeft':
             selected = Math.max(selected - 1, 0);
-            render();
+            render({ reveal: true });
             return true;
         case 'Enter':
             if (current) window.api.openVideo(current.id);
@@ -194,9 +204,9 @@ function columns() {
 
 // Araç çubuğu: sütun düzeni ve seçili kayda kısayollar.
 export function initVideos() {
-    // Varsayılan TEK sütun: yatay kart ada, süreye ve tarihe yer bırakıyor; video
-    // listesinde bunlar küçük resmin kendisi kadar ayırt edici.
-    const DEFAULT_COLS = 1;
+    // Varsayılan İKİ sütun: küçük resimler yan yana daha çok kayıt gösteriyor;
+    // ad/süre/tarih kartın altında yine okunuyor. (Kullanıcı isteği.)
+    const DEFAULT_COLS = 2;
     // Anahtar sürümlü: önceki yapı açılışta da yazıyordu, yani depodaki değer
     // kullanıcının SEÇİMİ değil kodun kendi ilk hâliydi. Yeni anahtar o kalıntıyı
     // yok sayıyor.

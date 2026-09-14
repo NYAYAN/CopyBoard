@@ -61,21 +61,70 @@ struct Crop {
 const FPS: u32 = 30;
 const FRAME_DUR_HNS: i64 = HNS_PER_SEC / FPS as i64;
 
-/// Donanım (GPU) H.264 kodlayıcısı kullanılsın mı?
+/// Donanım (GPU) H.264 kodlayıcısı kullanılsın mı? Varsayılan KAPALI.
 ///
-/// Varsayılan AÇIK — hızlı ve CPU'yu boşta bırakıyor. Ama sürücüye bağımlı: bazı
-/// makinelerde mux sonlandırma (`Finalize`) dakikalarca dönmüyor. Sonlandırma başarısız
-/// olduğunda [`set_hardware_encoder(false)`] çağrılıyor ve sonraki kayıtlar yazılım
-/// kodlayıcısıyla yapılıyor. `COPYBOARD_SOFTWARE_ENCODER` ortam değişkeni baştan kapatır.
+/// ## Neden kapalı — ölçüm (A14, 9. bildirim, 3 monitörlü makine, 2026-09-10)
+///
+/// O makinede donanım kodlayıcısı MFT'si girdiyi HİÇ tüketmiyor. 3 dakikalık ultra
+/// kayıtta çıkış dosyasına TEK BAYT düşmedi (0 bayt), buna karşılık ~4300 ham BGRA kare
+/// yazıcının kuyruğunda birikti (süreç 20 GB) ve `Finalize()` o kuyruğun boşalmasını
+/// bekleyerek hiç dönmedi. Yani sorun sanıldığı gibi "yavaş sonlandırma" değil,
+/// kodlayıcının hiç çalışmaması: sonlandırma sadece bunun görüldüğü yer.
+///
+/// Aynı makinede yazılım kodlayıcısı sorunsuz (10 sn kayıt, 188 kare, sonlandırma
+/// 402 ms). Bedeli CPU; karşılığında kayıt gerçekten oluyor.
+///
+/// `COPYBOARD_HARDWARE_ENCODER=1` GPU yolunu geri açar (yeni sürücüde sınamak için);
+/// `COPYBOARD_SOFTWARE_ENCODER` her koşulda kapatır. GPU yolu açıkken sonlandırma ya da
+/// bekçi düşerse [`set_hardware_encoder(false)`] o oturumda bir daha denemiyor.
+///
+/// Bayrağın kendisi "GPU yolu bu oturumda DÜŞMEDİ mi?" sorusunu tutuyor (o yüzden
+/// başlangıç değeri `true`); yolun açık olup olmadığına [`hardware_requested`] ile
+/// birlikte karar veriliyor — ortam değişkeni verilmedikçe kapalı.
 static HARDWARE_ENCODER: AtomicBool = AtomicBool::new(true);
+
+/// Ortam değişkeni GPU yolunu istiyor mu? Bir kez okunuyor.
+fn hardware_requested() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var("COPYBOARD_SOFTWARE_ENCODER").is_err()
+            && std::env::var("COPYBOARD_HARDWARE_ENCODER").is_ok_and(|v| v != "0")
+    })
+}
 
 pub fn set_hardware_encoder(on: bool) {
     HARDWARE_ENCODER.store(on, Ordering::Release);
 }
 
 pub fn hardware_encoder() -> bool {
-    HARDWARE_ENCODER.load(Ordering::Acquire) && std::env::var("COPYBOARD_SOFTWARE_ENCODER").is_err()
+    hardware_requested() && HARDWARE_ENCODER.load(Ordering::Acquire)
 }
+
+// ── Kodlayıcı bekçisi eşikleri ──────────────────────────────────────────────────
+//
+// Tıkanan kodlayıcı İKİ FARKLI biçimde görülüyor ve tek bir ölçüt ikisini birden
+// yakalamıyor; ölçüldü (2026-09-10, aynı makine):
+//
+// * BLOKLAYAN kip — `WriteSample` hiç dönmüyor (throttling kuyruğu doldu). WGC
+//   işleyicisi orada duruyor, kare sayacı da DONUYOR: 45 sn'lik denemede sayaç 56'da
+//   kaldı. Kare sayısına bakan bir bekçi tam da yakalaması gereken yerde uyumuyordu.
+// * KUYRUKLAYAN kip — `WriteSample` hemen dönüyor ama kodlayıcı hiç tüketmiyor; her
+//   kare ham BGRA olarak bellekte birikiyor. Kullanıcıda 3 dakikada 20 GB oldu ve
+//   dosyaya tek bayt düşmedi.
+//
+// Bu yüzden iki ayrı ölçüt var. Dosya boyutunun tek başına ölçüt OLMADIĞINA dikkat:
+// ekran hareketsizken WGC hiç kare vermiyor, dolayısıyla 0 bayt SAĞLIKLI olabiliyor —
+// ilk denemede bekçi tam da bunu yanlış alarma çevirip sağlam kaydı silmişti.
+
+/// Süregelen tek bir `WriteSample` bu kadar sürerse kodlayıcı bloklamış demektir.
+/// Sağlıklı yolda milisaniyeler sürüyor.
+const STALL_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Dosya HİÇ büyümezken yazıcıya bu kadar kare daha verilmişse kodlayıcı kuyruklayıp
+/// hiç tüketmiyor demektir. 300 kare ≈ 10 sn hareketli içerik; sağlıklı yolda o kadar
+/// karenin tek baytı bile yazılmamış olamaz (ölçüm: 2 karede 143 KB, ses varsa +250 ms'de
+/// başlık). Biriken ham kare 880x720'de ~750 MB, 2560x1440'ta ~4 GB — 20 GB yerine.
+const STALL_FRAMES: u64 = 300;
 
 /// Yakalama thread'ine taşınan ayarlar.
 struct Flags {
@@ -87,6 +136,8 @@ struct Flags {
     t0: i64,
     failed: Arc<Mutex<Option<String>>>,
     frames: Arc<AtomicU64>,
+    writing_since: Arc<AtomicU64>,
+    clock: Instant,
 }
 
 struct Handler {
@@ -97,6 +148,12 @@ struct Handler {
     last_sent: Option<Instant>,
     failed: Arc<Mutex<Option<String>>>,
     frames: Arc<AtomicU64>,
+    /// Süregelen `WriteSample`ın başlama anı (`clock`ten beri ms, +1; 0 = yazma yok).
+    /// Bekçi bloklayan kodlayıcıyı buradan görüyor (bkz. [`STALL_WRITE_TIMEOUT`]).
+    writing_since: Arc<AtomicU64>,
+    /// Bekçiyle PAYLAŞILAN tek saat: `Instant` atomiğe sığmıyor, ikisi de aynı
+    /// başlangıca göre ms cinsinden ölçüyor.
+    clock: Instant,
 }
 
 impl GraphicsCaptureApiHandler for Handler {
@@ -113,6 +170,8 @@ impl GraphicsCaptureApiHandler for Handler {
             last_sent: None,
             failed: f.failed,
             frames: f.frames,
+            writing_since: f.writing_since,
+            clock: f.clock,
         })
     }
 
@@ -166,13 +225,19 @@ impl GraphicsCaptureApiHandler for Handler {
 
         let mut guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(w) = guard.as_mut() {
-            if let Err(e) = w.write_video(bytes, ts, FRAME_DUR_HNS) {
+            // Sayaç ve saat yazmadan ÖNCE işaretleniyor: kodlayıcı bloklarsa
+            // `write_video` hiç dönmüyor ve bekçinin görebileceği tek iz bu.
+            self.frames.fetch_add(1, Ordering::Relaxed);
+            self.writing_since
+                .store(self.clock.elapsed().as_millis() as u64 + 1, Ordering::Release);
+            let wrote = w.write_video(bytes, ts, FRAME_DUR_HNS);
+            self.writing_since.store(0, Ordering::Release);
+            if let Err(e) = wrote {
                 let msg = format!("kare yazılamadı: {e}");
                 log::error!("kayıt: {msg}");
                 *self.failed.lock().unwrap_or_else(|p| p.into_inner()) = Some(msg);
                 return Err(e.into());
             }
-            self.frames.fetch_add(1, Ordering::Relaxed);
             self.last_sent = Some(now);
         }
         Ok(())
@@ -186,7 +251,12 @@ pub struct Recording {
     audio: Option<wasapi::AudioCapture>,
     writer: SharedWriter,
     failed: Arc<Mutex<Option<String>>>,
+    /// Yazıcıya VERİLEN kare sayısı (yazılabildiği değil — bkz. `on_frame_arrived`).
+    /// Yalnız bekçi ve günlük için; kesin sayı `MfWriter::video_frames()`.
     frames: Arc<AtomicU64>,
+    /// Bekçi kodlayıcının tüketmediğini gördü mü? Görmüşse `stop` sonlandırmayı
+    /// (`Finalize`) HİÇ denemiyor — o çağrı dönmüyor (bkz. [`STALL_FRAMES`]).
+    stalled: Arc<AtomicBool>,
     /// Kaydın yazıldığı geçici dosya. Kullanıcı kaydetmeyi iptal ederse yolu
     /// panoya gidiyor — kayıt kaybolmuyor.
     pub path: PathBuf,
@@ -294,6 +364,8 @@ pub fn start(
     };
 
     let stopping = Arc::new(AtomicBool::new(false));
+    let writing_since = Arc::new(AtomicU64::new(0));
+    let clock = Instant::now();
     let make_flags = || Flags {
         stopping: stopping.clone(),
         writer: writer.clone(),
@@ -301,6 +373,8 @@ pub fn start(
         t0,
         failed: failed.clone(),
         frames: frames.clone(),
+        writing_since: writing_since.clone(),
+        clock,
     };
     // Kenarlık YOK (Windows 11 / 10 20348+); daha eski Windows reddederse
     // varsayılanla (sarı çerçeve) yeniden denenir.
@@ -326,6 +400,80 @@ pub fn start(
         }
     };
 
+    // ── Kodlayıcı bekçisi ────────────────────────────────────────────────────────
+    // Kodlayıcı girdiyi tüketmediğinde `Finalize()` kuyruğu bekleyip hiç dönmüyor ve
+    // kullanıcı tarafında bu "durdur → hiçbir şey olmuyor" oluyordu (A14). Bekçi durumu
+    // 10 saniyede yakalıyor: kare akışını kesiyor ve `stop`a sonlandırmayı hiç
+    // denememesini söylüyor — 3 dakika RAM dolmuyor, hata durdurmada anlaşılır çıkıyor.
+    // İki ölçütün neden gerektiği: bkz. [`STALL_WRITE_TIMEOUT`] / [`STALL_FRAMES`].
+    let stalled = Arc::new(AtomicBool::new(false));
+    {
+        let (stopping, failed, frames, stalled, writing_since) = (
+            stopping.clone(),
+            failed.clone(),
+            frames.clone(),
+            stalled.clone(),
+            writing_since.clone(),
+        );
+        let path = out_path.clone();
+        let spawned = std::thread::Builder::new()
+            .name("copyboard-encoder-watchdog".into())
+            .spawn(move || {
+                // Dosyanın büyüdüğü son an: (boyut, o boyutta verilmiş kare sayısı).
+                let mut mark = (0u64, 0u64);
+                let mut logged_first_byte = false;
+                loop {
+                    std::thread::sleep(Duration::from_millis(250));
+                    if stopping.load(Ordering::Acquire) {
+                        return;
+                    }
+                    let n = frames.load(Ordering::Relaxed);
+                    let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                    if size > 0 && !logged_first_byte {
+                        logged_first_byte = true;
+                        log::info!(
+                            "kayıt: kodlayıcı yazmaya başladı (+{} ms, {n} kare, {size} bayt)",
+                            clock.elapsed().as_millis()
+                        );
+                    }
+
+                    // (a) BLOKLAYAN kip: tek bir `WriteSample` dönmüyor.
+                    let since = writing_since.load(Ordering::Acquire);
+                    let blocked_ms = if since > 0 {
+                        (clock.elapsed().as_millis() as u64).saturating_sub(since - 1)
+                    } else {
+                        0
+                    };
+                    // (b) KUYRUKLAYAN kip: dosya büyümezken kareler akmayı sürdürüyor.
+                    if size != mark.0 {
+                        mark = (size, n);
+                    }
+                    let starved = n.saturating_sub(mark.1) >= STALL_FRAMES;
+
+                    if blocked_ms >= STALL_WRITE_TIMEOUT.as_millis() as u64 || starved {
+                        let neden = if starved {
+                            format!("{} kare verildi, dosya {size} baytta duruyor", n - mark.1)
+                        } else {
+                            format!("tek kare yazımı {blocked_ms} ms'dir dönmedi")
+                        };
+                        let msg = format!(
+                            "kodlayıcı veri yazmıyor: {neden} ({} kodlayıcısı)",
+                            if hardware_encoder() { "donanım" } else { "yazılım" }
+                        );
+                        log::error!("kayıt: {msg}");
+                        *failed.lock().unwrap_or_else(|p| p.into_inner()) = Some(msg);
+                        stalled.store(true, Ordering::Release);
+                        // Kare akışını KES: işleyici bir sonraki karede yakalamayı bitiriyor.
+                        stopping.store(true, Ordering::Release);
+                        return;
+                    }
+                }
+            });
+        if let Err(e) = spawned {
+            log::warn!("kayıt: kodlayıcı bekçisi başlatılamadı: {e}");
+        }
+    }
+
     log::info!(
         "kayıt: {}x{} @{FPS}fps, kalite={quality} ({} kbps), kodlayıcı={}, ses={} → {}",
         crop.w,
@@ -341,7 +489,17 @@ pub fn start(
         out_path.display()
     );
 
-    Ok(Recording { control: Some(control), stopping, audio, writer, failed, frames, path: out_path, window_label })
+    Ok(Recording {
+        control: Some(control),
+        stopping,
+        audio,
+        writer,
+        failed,
+        frames,
+        stalled,
+        path: out_path,
+        window_label,
+    })
 }
 
 impl Recording {
@@ -393,6 +551,25 @@ impl Recording {
         log::info!("durdurma: yazıcı kapatılıyor");
         let writer = self.writer.lock().unwrap_or_else(|e| e.into_inner()).take();
         let Some(writer) = writer else { return Err("yazıcı zaten kapalı".into()) };
+
+        // Bekçi kodlayıcının tüketmediğini gördüyse `Finalize()` kuyruğun boşalmasını
+        // bekler ve DÖNMEZ; `Drop` da `Finalize` çağırdığı için yazıcıyı düşürmek de
+        // aynı yere kilitlenir. Bu yüzden sonlandırılmadan bırakılıyor.
+        if self.stalled.load(Ordering::Acquire) {
+            writer.discard();
+            // Dosya 0 bayt: elde kalan bir kayıt yok, geride çöp bırakmayalım.
+            let _ = std::fs::remove_file(&self.path);
+            crate::capture::set_stop_phase(4);
+            let msg = self
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+                .unwrap_or_else(|| "kodlayıcı veri yazmıyor".into());
+            log::error!("durdurma: {msg} — yazıcı sonlandırılmadan bırakıldı");
+            return Err(msg);
+        }
+
         let audio_samples = writer.audio_samples();
         // `IMFSinkWriter::Finalize()` donanım kodlayıcısını boşaltıyor; büyük kayıtlarda
         // uzun sürebiliyor, sürücü takılırsa hiç dönmeyebiliyor. Ayrı thread + GENİŞ bir
@@ -406,12 +583,15 @@ impl Recording {
                 let _ = tx.send(writer.finish());
             })
             .map_err(|e| format!("sonlandırma thread'i başlatılamadı: {e}"))?;
-        let frames = match rx.recv_timeout(Duration::from_secs(300)) {
+        // 60 sn: sağlıklı yolda 60 sn'lik kayıt ~1,3 sn'de sonlanıyor (QA 25). Takılan
+        // kodlayıcı ise HİÇ dönmüyor — daha uzun beklemek kullanıcıya bir şey
+        // kazandırmıyor, yalnız hatayı geciktiriyordu (eski sınır 5 dakikaydı).
+        let frames = match rx.recv_timeout(Duration::from_secs(60)) {
             Ok(r) => r?,
             Err(_) => {
                 crate::capture::set_stop_phase(4);
                 return Err(format!(
-                    "video sonlandırılamadı: kodlayıcı 5 dakika yanıt vermedi. Ham kayıt: {}",
+                    "video sonlandırılamadı: kodlayıcı 60 sn yanıt vermedi. Ham kayıt: {}",
                     finalize_path.display()
                 ));
             }
@@ -445,6 +625,27 @@ mod tests {
         assert!(bitrate_for("high") > bitrate_for("medium"));
         assert!(bitrate_for("medium") > bitrate_for("low"));
         assert_eq!(bitrate_for("bilinmeyen"), bitrate_for("high"));
+    }
+
+    /// A14: donanım H.264 kodlayıcısı bazı makinelerde girdiyi HİÇ tüketmiyor
+    /// (0 baytlık dosya + 20 GB kuyruk + dönmeyen `Finalize`). Varsayılan YAZILIM
+    /// olmalı; GPU yolu yalnız ortam değişkeniyle açılıyor.
+    #[test]
+    fn varsayilan_kodlayici_yazilim() {
+        if std::env::var("COPYBOARD_HARDWARE_ENCODER").is_ok() {
+            return; // testi bilerek GPU yoluyla koşan geliştirici için anlamsız
+        }
+        assert!(!hardware_encoder(), "donanım kodlayıcısı varsayılan olarak açık");
+        // Başarısızlıkta oturum boyunca kapalı kalıyor.
+        set_hardware_encoder(false);
+        assert!(!hardware_encoder());
+    }
+
+    #[test]
+    fn bekci_esikleri_saglikli_yola_pay_birakiyor() {
+        // Ölçüm: sağlıklı yolda ilk bayt +835 ms'de düştü, sonlandırma 323 ms sürdü.
+        assert!(STALL_WRITE_TIMEOUT >= Duration::from_secs(5));
+        assert!(STALL_FRAMES >= 240, "10 sn'lik hareketli içerikten az eşik yanlış alarm verir");
     }
 
     #[test]

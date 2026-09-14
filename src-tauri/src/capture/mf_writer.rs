@@ -226,6 +226,20 @@ impl MfWriter {
         unsafe { let _ = MFShutdown(); }
         r.map(|_| self.video_written)
     }
+
+    /// Yazıcıyı SONLANDIRMADAN bırakır.
+    ///
+    /// Kodlayıcı girdiyi tüketmediğinde (bkz. `recorder_win`'in bekçisi)
+    /// `Finalize()` kuyruğun boşalmasını bekliyor ve hiç dönmüyor; `Drop` da
+    /// `Finalize` çağırdığı için nesneyi düşürmek de aynı yere kilitleniyor. Bu yüzden
+    /// nesne `mem::forget` ile bırakılıyor: ne `Finalize`, ne COM `Release`, ne
+    /// `MFShutdown` — üçü de bloklayabilir.
+    ///
+    /// Kuyrukta biriken kareler süreç ömrü boyunca sızıyor; bekçinin ERKEN yakalaması
+    /// (8 sn ≈ 1 GB) bu yüzden önemli — 3 dakika beklenince 20 GB oluyordu.
+    pub fn discard(self) {
+        std::mem::forget(self);
+    }
 }
 
 impl Drop for MfWriter {
@@ -245,3 +259,35 @@ impl Drop for MfWriter {
 // üzerinden çözüyor; kullanılmasa bile derleyici uyarısı olmasın diye tutuluyor.
 #[allow(dead_code)]
 fn _interface_marker<T: Interface>(_: &T) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Yazılım kodlayıcısı, kullanıcının en büyük ekranını (2560x1440) ve 4K'yı kabul
+    /// ediyor mu? Donanım kodlayıcısı A14'te varsayılandan çıkarıldı; MF'in YAZILIM
+    /// H.264 kodlayıcısının eski belgelerinde 1920x1088 sınırı geçtiği için bu ölçüldü
+    /// (2026-09-10, Windows 11): 1280x720 / 1920x1080 / 1920x1088 / 2560x1440 /
+    /// 3840x2160 — beşi de açıldı, kare yazdı ve sonlandı. Sınır yok.
+    #[test]
+    fn yazilim_kodlayicisi_buyuk_cozunurlukleri_aliyor() {
+        for (w, h) in [(1920u32, 1088u32), (2560, 1440)] {
+            let path = std::env::temp_dir().join(format!("copyboard-test-mf-{w}x{h}.mp4"));
+            let _ = std::fs::remove_file(&path);
+            let mut writer = match MfWriter::new(&path, w, h, 30, 16_000_000, None, false) {
+                Ok(w) => w,
+                Err(e) => panic!("{w}x{h} yazılım kodlayıcısıyla açılamadı: {e}"),
+            };
+            writer
+                .write_video(&vec![0u8; (w * h * 4) as usize], 0, HNS_PER_SEC / 30)
+                .unwrap_or_else(|e| panic!("{w}x{h} kare yazılamadı: {e}"));
+            let frames = writer.finish().unwrap_or_else(|e| panic!("{w}x{h} sonlandırılamadı: {e}"));
+            assert_eq!(frames, 1);
+            assert!(
+                std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) > 0,
+                "{w}x{h}: dosya boş"
+            );
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}

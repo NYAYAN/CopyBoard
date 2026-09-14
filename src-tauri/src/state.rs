@@ -94,7 +94,10 @@ impl<'a> Settings<'a> {
     // Mikrofon aygıtının CoreAudio UID'si. BOŞ = sistem varsayılanı — kulaklık
     // takılınca seçimin otomatik takip etmesi için varsayılan bilerek boş.
     setting!(audio_mic_device, set_audio_mic_device, "audioMicDevice", String, String::new());
-    setting!(show_widget, set_show_widget, "showWidget", bool, false);
+    // Yüzen widget YENİ KURULUMDA açık (kullanıcı isteği, 2026-09-11): uygulamanın
+    // ana giriş noktası o, kapalı başlaması kullanıcıyı ayarlara gönderiyordu.
+    // Var olan kurulumlar etkilenmiyor — depoda `showWidget` yazılıysa o kazanıyor.
+    setting!(show_widget, set_show_widget, "showWidget", bool, true);
     setting!(widget_transparent, set_widget_transparent, "widgetTransparent", bool, false);
     setting!(widget_color, set_widget_color, "widgetColor", String, "#8957e5".into());
     setting!(widget_opacity, set_widget_opacity, "widgetOpacity", i64, 100);
@@ -209,6 +212,7 @@ mod tests {
         assert_eq!(set.quick_paste_count(), 20);
         assert!(set.auto_start());
         assert_eq!(set.video_quality(), "high");
+        assert!(set.show_widget(), "yüzen widget yeni kurulumda açık olmalı");
         assert_eq!(set.widget_color(), "#8957e5");
         assert_eq!(set.widget_scale(), 100);
     }

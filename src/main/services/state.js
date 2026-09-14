@@ -75,7 +75,7 @@ const state = {
         ),
         paste: store.get('globalShortcutPaste', 'CommandOrControl+Shift+V')
     },
-    showWidget: store.get('showWidget', false),
+    showWidget: store.get('showWidget', true),
     widgetTransparent: store.get('widgetTransparent', false),
     widgetColor: store.get('widgetColor', '#8957e5'),
     widgetOpacity: store.get('widgetOpacity', 100),

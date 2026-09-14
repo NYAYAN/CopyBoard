@@ -30,14 +30,31 @@ const hud = document.getElementById('hud');
 const hudMain = document.getElementById('hud-main');
 const hudStats = document.getElementById('hud-stats');
 const hudWarn = document.getElementById('hud-warn');
+const hudHint = document.getElementById('hud-hint');
+const anchor = document.getElementById('anchor');
+const anchorCanvas = document.getElementById('anchor-canvas');
+const anchorLabel = document.getElementById('anchor-label');
 const preview = document.getElementById('preview');
 const previewCanvas = document.getElementById('preview-canvas');
 const previewMeta = document.getElementById('preview-meta');
 const previewWarn = document.getElementById('preview-warn');
 
-// Sampling ~25 times a second. Faster buys little (the match only needs enough overlap) and
-// costs a full crop + readback per frame; slower starts losing content to fast flicks.
-const FRAME_MIN_INTERVAL = 40;
+// Örnekleme AKIŞIN hızıyla yürüyor: yeni kare geldiyse örnekle, gelmediyse bekle.
+//
+// ⚠ Eskiden `setInterval(40)` vardı ve GÖVDESİNDE de `< 40 ms` koruması vardı; ikisi
+// çarpışıyordu. Zamanlayıcının doğal sapması ve örneğin kendi maliyeti (7 MB'lık bölgede
+// 11 ms) tiklerin yarısını "henüz 40 ms olmamış" diye boşa çeviriyor, hedeflenen 25 Hz
+// pratikte 12-16 Hz'e düşüyordu (ölçüldü 2026-09-11: akış 47 kare/sn verirken renderer
+// 15-16 örnek/sn alıyordu).
+//
+// Bu oran doğrudan "ne kadar hızlı kaydırılabilir"i belirliyor: birleştirici kare başına
+// ~240 px'e kadar güvenle eşleşiyor, ~320 px'te `ambiguous` reddine düşüyor (üç içerik
+// tipinde de ölçüldü: metin, tablo, seyrek). Yani 12 Hz ≈ 2900 px/sn tavan demekti —
+// hızlı kaydıran kullanıcıda "Daha yavaş kaydırın" ve 12 sn sonra vazgeçme bu.
+const SAMPLE_TICK = 8;
+// Emniyet tavanı: 60 Hz üstü örnekleme eşleşmeye bir şey katmıyor, olay döngüsünü aç
+// bırakıyor. Aynı kareyi iki kez örneklemek de boşa iş — karar 'idle' çıkıyor, 11 ms gidiyor.
+const SAMPLE_MIN_INTERVAL = 16;
 // Matching runs on a narrow strip downscaled from the crop rather than the crop itself:
 // same rows, so every row index still lines up, but the per-frame getImageData is ~20x
 // smaller. Downscaling also box-averages horizontally, which quiets the sampling noise.
@@ -69,6 +86,56 @@ const STALL_GIVEUP_MS = 8000;
 // every time it fills. 2048 rows keeps the slack in the final part-filled tile small.
 const TILE_ROWS = 2048;
 const MISS_WARN_STREAK = 3;
+// ── Otomatik kaydırma ──────────────────────────────────────────────────────────
+// Kaydırmayı KULLANICI değil uygulama yapıyor. Gerekçe: eşleştirici kare başına
+// bölgenin ~%42'sinden fazla kaymayı izleyemiyor (ölçüldü) ve bunu kullanıcıdan
+// "daha yavaş kaydırın" diye istemek görünmez bir beceri talebiydi — hızlı kaydıran
+// herkes cezalandırılıyordu. Tekerleği biz çevirince adım bizim denetimimizde kalıyor
+// ve sınır hiç zorlanmıyor.
+//
+// Kapalı çevrim: bir tekerlek "tık"ının kaç piksel ettiği uygulamaya ve kullanıcının
+// fare ayarına göre değişiyor — varsaymıyoruz, ÖLÇÜYORUZ. Birleştirici zaten her
+// karede sayfanın kaç piksel kaydığını söylüyor; adım ona göre büyüyüp küçülüyor.
+//
+// ⚠ Hareket profili SÜREKLİ ve YAVAŞ — ölçümle öğrenildi (2026-09-11). İlk tasarım
+// "büyük adım → sayfanın durmasını bekle → ölç" idi; gerçek bir sayfada (OneNote,
+// tablo ağırlıklı) 6 birleşimden sonra `ambiguous` retlerine düştü. Sebep: dur-kalk
+// hareketi eşleştiriciye en zor girdiyi veriyor — hız her karede değişiyor, hız ipucu
+// tutmuyor ve tekrarlayan içerikte aday ofsetler ayrışmıyor. Küçük ve düzenli adımlarda
+// ise kareler arası kayma az, örtüşme bol; eşleştiricinin en rahat ettiği durum bu.
+//
+// HIZ AMAÇ DEĞİL: kullanıcıdan alınan iş zaten kazanç. Tik başına bölgenin ~%8'i
+// (≈900 px/sn) ölçülen ret sınırının (%42) çok altında ve güvenli.
+const AUTO_TICK_MS = 60;
+const AUTO_START_PCT = 0.08;    // tik başına hedef: bölge yüksekliğinin %8'i
+const AUTO_MIN_PCT = 0.02;
+const AUTO_MAX_PCT = 0.20;
+// Ret geldiğinde hız düşürülüyor, temiz birleşimlerde yavaşça toparlanıyor (AIMD).
+// Kullanıcıya "yavaşla" demek yerine sistem kendi yavaşlıyor — bütün mesele buydu.
+const AUTO_SLOW_FACTOR = 0.6;
+const AUTO_SPEED_RECOVER = 1.03;
+// Bu kadar arka arkaya ret = ilerleme yok; hız düşürülüyor (bkz. sampleFrame).
+const AUTO_SLOW_AFTER_REJECTS = 6;
+// Ölçüm penceresi: bir tıkın kaç piksel ettiği bu aralıkta bir güncelleniyor.
+const AUTO_MEASURE_MS = 400;
+// Hiç kıpırdamazsa: önce ters yön, sonra elle kip. Ölçüt "son hareketten beri" DEĞİL
+// "hiç hareket görüldü mü": çalışırken yön çevirmek yakalamayı bozuyor.
+const AUTO_FLIP_AFTER_MS = 700;
+const AUTO_GIVEUP_MS = 2000;
+// Bir tıkın piksel değeri bu aralığın dışına çıkarsa ölçüm bozulmuş demektir
+// (animasyon gecikmesi, kullanıcının kendi kaydırması). Sınırlar akıl sağlığı içindir.
+const PX_PER_NOTCH_MIN = 8;
+const PX_PER_NOTCH_MAX = 400;
+
+// Çapa şeridinde gösterilen satır sayısı (yakalanan görüntünün fiziksel pikselleri).
+// Tanınmaya yetecek kadar, ekranı kapatmayacak kadar.
+const ANCHOR_ROWS = 120;
+// Henüz reddedilmedi ama sınıra yaklaşıldı: bölge yüksekliğinin bu kadarını aşan kare
+// başına kaydırma "biraz yavaşlayın" uyarısını açıyor. Birleştirici ~%42'de reddetmeye
+// başlıyor (ölçüldü), yani bu eşik kullanıcıya tepki verecek bir pay bırakıyor.
+const FAST_HINT_PCT = 0.3;
+// Toparlandıktan sonra "devam ediliyor" ne kadar görünsün.
+const RECOVERED_MS = 1500;
 
 const state = {
     phase: 'select',
@@ -97,17 +164,87 @@ let crop = null;            // { x, y, w, h } in PHYSICAL pixels of the captured
 let frameA = null, frameB = null;   // ping-pong crop canvases
 let curFrame = null, baseFrame = null, lastFrame = null;
 let profileCanvas = null, profileCtx = null;
+let lastProfile = null;   // en son EŞLEŞTİRİLEN profil (bkz. samePixels)
 let headTiles = [];   // prepended rows, each tile filled bottom-up
 let tailTiles = [];   // appended rows, each tile filled top-down
 let totalRows = 0;
 let frameTimer = null;
 let idleTimer = null;
 let lastSampleAt = 0;
+// Akıştan gelen kare sayacı ve en son ÖRNEKLENEN kare — aynı kare iki kez eşleştirilmesin.
+let frameSeq = 0;
+let sampledSeq = 0;
 let lastProgressAt = 0;  // last frame that committed rows
 let lastMotionAt = 0;    // last frame where the region was seen to move at all
 let missStreak = 0;
 let firstMotionAt = 0;   // when the region was first seen to move at all
 let finalCanvas = null;
+// Rehberlik durumu: son kararın ofseti, kaydırmanın yönü (hangi uca ekleniyor), çapa
+// şeridi açık mı, en son ne zaman toparlandı.
+let lastOffset = 0;
+let lastSide = 'bottom';
+// Otomatik kaydırma durumu. 'manual': otomatik denendi ve olmadı (yükseltilmiş pencere,
+// macOS'ta Erişilebilirlik izni yok, ya da imleç bölgeye alınamadı) — kullanıcı kendi
+// kaydırıyor ve rehberlik/çapa devreye giriyor.
+let autoMode = 'off';
+let autoTimer = null;
+let autoBusy = false;
+let autoPct = AUTO_START_PCT;   // tik başına hedef, bölge yüksekliğinin oranı
+let autoDir = -1;               // -1 aşağı, +1 yukarı
+let pxPerNotch = 0;             // ölçülen: bir tık kaç piksel
+let autoSentNotches = 0;        // ölçüm penceresinde gönderilen tık
+let autoSeenPx = 0;             // ölçüm penceresinde gözlenen kayma
+let autoMeasuredAt = 0;
+let autoStartedAt = 0;
+let autoEverMoved = false;      // hiç kıpırdadı mı (ölü kip tespiti)
+// Taban ilerlediğinden beri gönderilen tık ve ofsetin işareti: ipucunun iki bileşeni.
+// İşaret gözlemle öğreniliyor — tekerlek yönü ile ofsetin işareti arasındaki ilişki
+// platforma/uygulamaya göre değişebiliyor, varsaymıyoruz.
+let autoNotchesSinceBase = 0;
+let autoOffsetSign = 0;
+let autoRejectStreak = 0;
+// Tik başına hedef piksel çoğu zaman BİR TIKTAN küçük (bir tık uygulamaya göre
+// 50-300 px). Her tik bir tık göndermek, istenenin kat kat üstünde bir hız demekti —
+// ölçümde görüldü: hedef 14 px iken tık 326 px atıyordu ve hız hiç düşmüyordu.
+// Bütçe biriktirilip tık ancak dolduğunda gönderiliyor; böylece istenen hız
+// tıktan bağımsız olarak tutturuluyor.
+let autoBudget = 0;
+let anchorShown = false;
+let recoveredAt = -Infinity;   // sayfa yeni yüklendiyse `performance.now()` küçük: 0 olsaydı ilk saniyede boş yere "devam ediliyor" derdi
+
+// ── Ölçüm ──────────────────────────────────────────────────────────────────────
+// "Çok takılıyor / kaydırma izlenemedi" iki kez bildirildi ve elde yalnız kullanıcının
+// tarifi vardı: kare gerçekten kaç fps geliyor, örnekleme mi pahalı, yoksa eşleştirme mi
+// reddediyor — hiçbiri bilinmiyordu. Yakalama boyunca saniyede bir satır `console.warn`
+// ile copyboard.log'a düşüyor (api-tauri.js konsolu ana sürece yönlendiriyor), böylece
+// bir sonraki bildirim kendi teşhisini getiriyor.
+const perf = {
+    since: 0, recv: 0, bytes: 0, samples: 0, steps: 0,
+    putMs: 0, readMs: 0, pushMs: 0,
+    commits: 0, rejects: 0, lastOffset: 0, lastStatus: '', lastReason: '',
+};
+const per = (v, n) => (v / Math.max(1, n)).toFixed(1);
+function perfFlush(now) {
+    if (!perf.since) { perf.since = now; return; }
+    const dt = now - perf.since;
+    if (dt < 1000) return;
+    const s = perf.samples;
+    console.warn(`PERF kaydırma ${crop ? crop.w + 'x' + crop.h : '?'}: `
+        + `${per(perf.recv * 1000, dt)} kare/sn (${per(perf.bytes * 1000 / 1048576, dt)} MB/sn), `
+        + `${per(perf.samples * 1000, dt)} örnek/sn, `
+        + `örnek ${per(perf.putMs + perf.readMs + perf.pushMs, s)} ms `
+        + `(kopya ${per(perf.putMs, s)} / okuma ${per(perf.readMs, s)} / eşleştirme ${per(perf.pushMs, s)}), `
+        + `${perf.commits} birleşim, ${perf.rejects} ret, son ofset ${perf.lastOffset} `
+        + `(${perf.lastStatus}${perf.lastReason ? ' ' + perf.lastReason : ''})`
+        + `, oto=${autoMode}${autoMode === 'running'
+            ? ` adım=${perf.steps} yön=${autoDir} px/tık=${pxPerNotch.toFixed(1)} hız=%${(autoPct * 100).toFixed(1)}`
+            : ''}`);
+    perf.steps = 0;
+    perf.since = now;
+    perf.recv = perf.bytes = perf.samples = 0;
+    perf.putMs = perf.readMs = perf.pushMs = 0;
+    perf.commits = perf.rejects = 0;
+}
 
 // ── Backdrop ───────────────────────────────────────────────────────────────────
 function paintScreen() {
@@ -426,7 +563,12 @@ async function beginCapture() {
     try {
         await window.api.scrollBegin(
             { x: crop.x, y: crop.y, w: crop.w, h: crop.h },
-            (frame) => { latestFrame = frame; }
+            (frame) => {
+                latestFrame = frame;
+                frameSeq++;
+                perf.recv++;
+                perf.bytes += frame.data.length;
+            }
         );
     } catch (err) {
         console.error('Scroll capture stream failed:', err);
@@ -445,6 +587,7 @@ async function beginCapture() {
     profileCanvas = document.createElement('canvas');
     profileCanvas.width = PROFILE_W;
     profileCanvas.height = crop.h;
+    lastProfile = null;
     profileCtx = profileCanvas.getContext('2d', { willReadFrequently: true });
     profileCtx.imageSmoothingEnabled = true; // horizontal box average, not nearest-neighbour
 
@@ -468,7 +611,38 @@ async function beginCapture() {
     // mouse events through so scrolling reaches the app underneath.
     reportToolbarHitArea();
 
+    // Otomatik kaydırma: imleç bir kez bölgeye alınıyor (tekerlek imlecin altındaki
+    // pencereye gidiyor). Alınamazsa elle kipe düşüyoruz — köprüsü olmayan bir
+    // taşıyıcıda (Electron) da aynı yol.
+    autoDir = -1;
+    pxPerNotch = 0;
+    autoPct = AUTO_START_PCT;
+    autoSentNotches = 0;
+    autoSeenPx = 0;
+    autoBudget = 0;
+    autoEverMoved = false;
+    autoNotchesSinceBase = 0;
+    autoOffsetSign = 0;
+    autoRejectStreak = 0;
+    autoBusy = false;
+    autoMeasuredAt = autoStartedAt = performance.now();
+    if (window.api.autoScrollBegin) {
+        autoMode = (await window.api.autoScrollBegin(crop)) ? 'running' : 'manual';
+    } else {
+        autoMode = 'manual';
+    }
+    if (autoTimer) clearInterval(autoTimer);
+    autoTimer = setInterval(autoTick, AUTO_TICK_MS);
+    hudHint.textContent = autoMode === 'running'
+        ? t('Sayfa bitince durur · Esc ile durdurun')
+        : t('Kaydırmayı bırakınca biter');
+
     lastSampleAt = 0;
+    frameSeq = sampledSeq = 0;
+    lastOffset = 0;
+    lastSide = 'bottom';
+    recoveredAt = -Infinity;
+    hideAnchor();
     lastProgressAt = lastMotionAt = performance.now();
     startFrameLoop();
 }
@@ -480,6 +654,7 @@ function startFrameLoop() {
     idleTimer = setInterval(() => {
         if (state.phase !== 'capture') return;
         const now = performance.now();
+        perfFlush(now);
         refreshHud(now);
         if (stitcher.started) {
             checkAutoFinish(now);
@@ -488,17 +663,20 @@ function startFrameLoop() {
         }
     }, 250);
 
-    // Kareler ana süreçten geliyor; `latestFrame` her varışta tazeleniyor. Döngü
-    // FRAME_MIN_INTERVAL'da bir en tazesini örnekliyor — akış hızından bağımsız,
-    // ve kullanıcı kaydırmayı bıraktığında yeni kare gelmediği için örnekleme
-    // kendiliğinden aynı kareyi görüp 'seen' kararına düşüyor.
+    // Kareler ana süreçten geliyor; `latestFrame` her varışta tazeleniyor ve `frameSeq`
+    // artıyor. Döngü yalnızca YENİ kare varsa örnekliyor (bkz. SAMPLE_TICK), yani örnekleme
+    // oranı akışın oranına eşit: ne boşa eşleştirme, ne atlanan kare. Kullanıcı kaydırmayı
+    // bıraktığında yeni kare gelmiyor, örnekleme de kendiliğinden duruyor — bitişi o yüzden
+    // yukarıdaki 250 ms'lik zamanlayıcı görüyor (lastMotionAt ilerlemiyor).
     frameTimer = setInterval(() => {
         if (state.phase !== 'capture') return;
+        if (sampledSeq === frameSeq) return;                    // yeni kare yok
         const now = performance.now();
-        if (now - lastSampleAt < FRAME_MIN_INTERVAL) return;
+        if (now - lastSampleAt < SAMPLE_MIN_INTERVAL) return;   // emniyet tavanı
+        sampledSeq = frameSeq;
         lastSampleAt = now;
         sampleFrame(now);
-    }, FRAME_MIN_INTERVAL);
+    }, SAMPLE_TICK);
 }
 
 function stopFrameLoop() {
@@ -507,6 +685,7 @@ function stopFrameLoop() {
 }
 
 function stopStream() {
+    stopAuto();
     stopFrameLoop();
     latestFrame = null;
     try { window.api.scrollEnd(); } catch (e) { /* ana süreç zaten kapanmış olabilir */ }
@@ -545,16 +724,101 @@ function addRows(srcCanvas, srcTop, height, side) {
     }
 }
 
+/// İki profil aynı mı? (Boyutları eşit: bölge yakalama boyunca sabit.)
+function samePixels(a, b) {
+    if (!a || !b || a.data.length !== b.data.length) return false;
+    const x = a.data, y = b.data;
+    // Alfa hep 255, R/G/B gri profilde eşit: kanal başına bir bayt karşılaştırmak yeter.
+    for (let i = 0; i < x.length; i += 4) {
+        if (x[i] !== y[i]) return false;
+    }
+    return true;
+}
+
 function sampleFrame(now) {
     // Kare ana süreçte ZATEN kırpıldı (SCStream sourceRect), yani burada ölçek/kırpma
     // hesabı yok — gelen veri doğrudan kare tuvaline basılıyor.
     if (!latestFrame) return;
 
     const drawn = curFrame;
+    const t0 = performance.now();
     drawn.ctx.putImageData(latestFrame, 0, 0);
 
+    const t1 = performance.now();
     profileCtx.drawImage(drawn.canvas, 0, 0, crop.w, crop.h, 0, 0, PROFILE_W, crop.h);
-    const decision = stitcher.push(profileCtx.getImageData(0, 0, PROFILE_W, crop.h));
+    const profile = profileCtx.getImageData(0, 0, PROFILE_W, crop.h);
+    const t2 = performance.now();
+    // Otomatik kaydırmada beklenen ofset: taban ilerlediğinden beri gönderilen tık ×
+    // ölçülen px/tık, işareti gözlemle öğrenilmiş yön. Belirsiz karelerde bu, tahmin
+    // değil doğrulama (bkz. stitcher.push).
+    const hint = (autoMode === 'running' && pxPerNotch > 0 && autoOffsetSign !== 0)
+        ? autoNotchesSinceBase * pxPerNotch * autoOffsetSign
+        : 0;
+
+    // ⚠ Kare bir öncekiyle AYNIYSA eşleştirmeye hiç girilmiyor.
+    //
+    // Ölçümle bulundu (2026-09-11): ekran durduğunda ve taban tutulmuş bir ret
+    // durumundayken her yeni kare AYNI belirsiz kararı üretiyordu — saniyede 24 ret,
+    // hep aynı ofset. O retler `lastMotionAt`i tazelediği için "sayfa bitti" tespiti
+    // hiç çalışmıyor, yakalama 12 sn boşuna bekleyip vazgeçiyordu. Ekran değişmiyorsa
+    // söylenecek yeni bir şey yok: hareket, eşleştiricinin KARARINDAN değil karenin
+    // gerçekten değişmesinden okunmalı. Yan kazanç: duran ekranda eşleştirme bedava.
+    if (samePixels(profile, lastProfile)) {
+        perf.samples++;
+        perf.putMs += t1 - t0;
+        perf.readMs += t2 - t1;
+        refreshHud(now);
+        checkAutoFinish(now);
+        return;
+    }
+    lastProfile = profile;
+
+    const decision = stitcher.push(profile, { hint });
+    const t3 = performance.now();
+    perf.samples++;
+    perf.putMs += t1 - t0;
+    perf.readMs += t2 - t1;
+    perf.pushMs += t3 - t2;
+    perf.lastOffset = decision.offset;
+    perf.lastStatus = decision.status;
+    perf.lastReason = decision.reason || '';
+    if (decision.base || decision.add) perf.commits++;
+    if (decision.status === 'reject') perf.rejects++;
+
+    lastOffset = decision.offset;
+    if (decision.add) lastSide = decision.add.side;
+    // Otomatik kaydırmanın kapalı çevrimi: gözlenen kayma hem "bir tık kaç piksel"
+    // ölçümünü hem de hız uyarlamasını besliyor.
+    // ⚠ Yalnız TABAN İLERLEDİĞİNDE sayılıyor. Tutulan bir tabana karşı ölçülen ofset
+    // her karede aynı değeri veriyor; onu toplamak "bir tık kaç piksel" ölçümünü
+    // şişiriyordu (240 → 390 px, ölçüldü) ve hız denetimini bozuyordu.
+    const moved = (decision.base || decision.add) ? Math.abs(decision.offset || 0) : 0;
+    if (moved > 0) {
+        autoSeenPx += moved;
+        autoEverMoved = true;
+    }
+    if (autoMode === 'running') {
+        // Hız denetiminin ölçütü İLERLEME — reddedilen karenin bildirdiği ofset DEĞİL.
+        //
+        // Ölçüldü (2026-09-11): eşleştirici bir kareyi reddettiğinde bildirdiği ofset
+        // zaten güvenilmez (tekrarlayan içerikte 183 px'lik gerçek kayma −8 px diye
+        // raporlanıyordu). O sayıya bakan bir kural "hız suçlu değil" diye karar verip
+        // hiç yavaşlamıyor ve yakalama tamamen duruyordu. Tek sağlam sinyal şu: son
+        // karelerde bir şey biriktirebildik mi?
+        if (decision.base || decision.add) {
+            autoRejectStreak = 0;
+            autoPct = Math.min(AUTO_MAX_PCT, autoPct * AUTO_SPEED_RECOVER);
+        } else if (decision.status === 'reject') {
+            autoRejectStreak++;
+            // Üst üste ret: ne olduğunu bilmiyoruz ama elimizdeki tek kol yavaşlamak.
+            // Tabana (%2) kadar inebiliyor; ölçümde o hızda aynı içerik saniyede
+            // 11-20 birleşim veriyordu.
+            if (autoRejectStreak >= AUTO_SLOW_AFTER_REJECTS) {
+                autoRejectStreak = 0;
+                autoPct = Math.max(AUTO_MIN_PCT, autoPct * AUTO_SLOW_FACTOR);
+            }
+        }
+    }
 
     if (decision.base) addRows(baseFrame.canvas, decision.base.top, decision.base.height, 'bottom');
     if (decision.add) addRows(drawn.canvas, decision.add.top, decision.add.height, decision.add.side);
@@ -567,6 +831,11 @@ function sampleFrame(now) {
     if (advanced) {
         baseFrame = drawn;
         curFrame = drawn === frameA ? frameB : frameA;
+        autoNotchesSinceBase = 0;
+    }
+    // Yönün ofset işaretine karşılığı: ilk gerçek birleşimlerden öğreniliyor.
+    if (autoMode === 'running' && decision.add && Math.abs(decision.offset) > 2) {
+        autoOffsetSign = Math.sign(decision.offset);
     }
     if (decision.offset !== 0 || decision.status === 'reject') {
         if (!firstMotionAt) firstMotionAt = now;
@@ -577,6 +846,8 @@ function sampleFrame(now) {
     if (decision.status !== 'idle' && decision.status !== 'need-more') lastMotionAt = now;
     if (decision.base || decision.add) {
         lastProgressAt = now;
+        // Kayıptan döndü: kullanıcı geri kaydırıp şeridi buldu, bunu söyle.
+        if (anchorShown) recoveredAt = now;
         missStreak = 0;
     } else if (decision.status === 'reject') {
         missStreak++;
@@ -604,7 +875,7 @@ function checkAutoFinish(now) {
     } else if (now - lastProgressAt > COMMIT_STALL_MS) {
         // Still moving, but nothing has landed for a long time. Ending silently here would
         // read as the same bug this clock was split to fix, so it says why.
-        finishCapture(t('Kaydırma izlenemedi — daha yavaş kaydırın'));
+        finishCapture(t('Hızlı kaydırma yüzünden son kısım eklenemedi'));
     }
 }
 
@@ -617,8 +888,12 @@ function updateHud(main) {
 }
 
 function refreshHud(now) {
-    if (!stitcher.started) {
+    if (autoMode === 'running' && !stitcher.started) {
+        updateHud(t('Otomatik kaydırılıyor'));
+    } else if (!stitcher.started) {
         updateHud(t('Şimdi kaydırın'));
+    } else if (autoMode === 'running' && now - lastMotionAt <= IDLE_HINT_MS) {
+        updateHud(t('Otomatik kaydırılıyor'));
     } else if (now - lastMotionAt > IDLE_HINT_MS) {
         // Follows the same clock as the finish: announcing "finishing" while the user is
         // mid-scroll was the visible half of the bug that ended those captures.
@@ -627,13 +902,166 @@ function refreshHud(now) {
         updateHud(t('Yakalanıyor'));
     }
 
-    if (missStreak >= MISS_WARN_STREAK) {
-        hudWarn.textContent = t('Daha yavaş kaydırın');
+    const g = guidance(now);
+    hudWarn.classList.remove('fast', 'lost', 'ok');
+    if (g) {
+        hudWarn.textContent = g.text;
+        hudWarn.classList.add(g.cls);
         hudWarn.classList.remove('hidden');
-    } else if (!hudWarn.classList.contains('hidden') && missStreak === 0) {
+    } else {
         hudWarn.classList.add('hidden');
     }
     placeHud();
+}
+
+/// Sürekli kaydırma döngüsünün bir tiki: küçük bir adım at, arada bir ölç.
+async function autoTick() {
+    if (state.phase !== 'capture' || autoMode !== 'running' || autoBusy) return;
+    const now = performance.now();
+
+    // Bir tık kaç piksel? Uygulamaya ve kullanıcının fare ayarına göre değişiyor,
+    // o yüzden varsayılmıyor: gönderilen tık ile gözlenen kayma oranlanıyor.
+    if (now - autoMeasuredAt > AUTO_MEASURE_MS) {
+        if (autoSentNotches > 0 && autoSeenPx > 0) {
+            const measured = Math.max(PX_PER_NOTCH_MIN,
+                Math.min(PX_PER_NOTCH_MAX, autoSeenPx / autoSentNotches));
+            pxPerNotch = pxPerNotch ? pxPerNotch * 0.7 + measured * 0.3 : measured;
+        }
+        autoSentNotches = 0;
+        autoSeenPx = 0;
+        autoMeasuredAt = now;
+    }
+
+    // Hiç kıpırdamadı mı? Önce ters yönü dene (sayfa o yönün sonunda olabilir, ya da
+    // tekerlek işareti bu platformda ters), sonra elle kipe düş. Bir kez kıpırdadıysa
+    // bir daha buraya girilmiyor: çalışan bir yakalamanın yönünü çevirmek onu bozar.
+    if (!autoEverMoved) {
+        const still = now - autoStartedAt;
+        if (still > AUTO_GIVEUP_MS) {
+            autoMode = 'manual';
+            return;
+        }
+        if (still > AUTO_FLIP_AFTER_MS && autoDir === -1) {
+            autoDir = 1;
+        }
+    }
+
+    // Tik başına hedef piksel bütçeye ekleniyor; tık ancak bütçe dolunca gidiyor.
+    autoBudget += crop.h * autoPct;
+    const px = pxPerNotch > 0 ? pxPerNotch : 40;
+    const notches = Math.min(20, Math.floor(autoBudget / px));
+    if (notches < 1) return;
+    autoBudget -= notches * px;
+
+    autoBusy = true;
+    try {
+        // `false`: imleç bölgenin dışında — kullanıcı fareyi araç çubuğuna ya da başka
+        // bir pencereye götürmüş. Tekerleği oraya göndermiyoruz, bir sonraki tikte bakarız.
+        if (await window.api.autoScrollStep(crop, notches * autoDir)) {
+            perf.steps++;
+            autoSentNotches += notches;
+            autoNotchesSinceBase += notches;
+        } else {
+            autoBudget += notches * px;   // gitmedi: bütçeyi geri ver
+        }
+    } finally {
+        autoBusy = false;
+    }
+}
+
+function stopAuto() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    if (autoMode !== 'off') {
+        try { window.api.autoScrollEnd(); } catch (e) { /* ana süreç kapanmış olabilir */ }
+    }
+    autoMode = 'off';
+}
+
+// ── Kayıp kaydırma rehberliği ──────────────────────────────────────────────────
+//
+// Kare başına kaydırma bölgenin yarısını aşınca birleştirici eşleşmeyi reddediyor ve
+// TABANI TUTUYOR — yani kullanıcı en son yakalanan yere geri döndüğünde yakalama
+// kaldığı yerden sürüyor. Eski arayüz bunu yalnız "Daha yavaş kaydırın" diye
+// söylüyordu: kullanıcı ne olduğunu (son kısım eklenmedi), ne yapacağını (geri dön) ve
+// nereye kadar (buraya) bilmiyordu. Şerit üçünü birden yanıtlıyor.
+
+/// En son yakalanan `rows` satırı veren kaynak: kaydırma yönüne göre kuyruk ya da baş
+/// zincirinin SON karosu (baş karoları alttan yukarı doluyor, bkz. addRows).
+function lastCapturedStrip(rows) {
+    if (lastSide === 'top') {
+        const tile = headTiles[headTiles.length - 1];
+        if (!tile || !tile.rows) return null;
+        return { canvas: tile.canvas, sy: TILE_ROWS - tile.rows, sh: Math.min(rows, tile.rows) };
+    }
+    const tile = tailTiles[tailTiles.length - 1];
+    if (!tile || !tile.rows) return null;
+    const sh = Math.min(rows, tile.rows);
+    return { canvas: tile.canvas, sy: tile.rows - sh, sh };
+}
+
+function showAnchor(now) {
+    if (anchorShown) return;
+    const strip = lastCapturedStrip(ANCHOR_ROWS);
+    const r = state.selectionRect;
+    if (!strip || !r || !crop) return;
+
+    anchorCanvas.width = crop.w;
+    anchorCanvas.height = strip.sh;
+    const actx = anchorCanvas.getContext('2d');
+    actx.imageSmoothingEnabled = false;
+    actx.drawImage(strip.canvas, 0, strip.sy, crop.w, strip.sh, 0, 0, crop.w, strip.sh);
+
+    const sy = state.scaleY || state.dpr || 1;
+    const cssH = Math.round(strip.sh / sy);
+    anchorCanvas.style.width = r.w + 'px';
+    anchorCanvas.style.height = cssH + 'px';
+    anchor.style.left = r.x + 'px';
+    anchor.style.width = r.w + 'px';
+
+    // Aşağı kaydırılıyorduysa kayıp içerik YUKARIDA kaldı: şerit bölgenin üstüne.
+    const above = lastSide !== 'top';
+    const gap = 10;
+    if (above && r.y >= cssH + gap) anchor.style.top = (r.y - cssH - gap) + 'px';
+    else if (!above && r.y + r.h + cssH + gap <= window.innerHeight) anchor.style.top = (r.y + r.h + gap) + 'px';
+    else anchor.style.top = (above ? r.y : r.y + r.h - cssH) + 'px';  // sığmadı: içeride
+
+    anchorLabel.textContent = t('en son yakalanan');
+    anchor.classList.remove('hidden');
+    anchorShown = true;
+    // Vazgeçme sayacı rehberlik BAŞLADIĞI andan işlesin: kullanıcı yeni yeni ne
+    // yapacağını öğrenirken 12 sn'lik pencerenin ortasında olmasın.
+    lastProgressAt = now;
+}
+
+function hideAnchor() {
+    if (!anchorShown) return;
+    anchor.classList.add('hidden');
+    anchorShown = false;
+}
+
+/// HUD'un ikinci satırı: sessiz (iyi gidiyor) → sarı (sınıra yaklaştı) → kırmızı (kayıp)
+/// → yeşil (toparlandı).
+function guidance(now) {
+    // Otomatik kaydırma yürürken hız uyarısının anlamı yok: adımı zaten biz atıyoruz.
+    if (autoMode === 'running') { hideAnchor(); return null; }
+    if (autoMode === 'manual' && !stitcher.started) {
+        return { cls: 'fast', text: t('Otomatik kaydırılamadı — kendiniz kaydırın') };
+    }
+    if (missStreak >= MISS_WARN_STREAK) {
+        if (totalRows > 0) {
+            showAnchor(now);
+            if (anchorShown) {
+                return { cls: 'lost', text: t('Çok hızlı — bu görüntüyü görene dek geri kaydırın') };
+            }
+        }
+        return { cls: 'lost', text: t('Kaydırma izlenemedi — daha küçük adımlarla kaydırın') };
+    }
+    hideAnchor();
+    if (now - recoveredAt < RECOVERED_MS) return { cls: 'ok', text: t('Kaldığı yerden devam ediliyor') };
+    if (crop && Math.abs(lastOffset) > crop.h * FAST_HINT_PCT) {
+        return { cls: 'fast', text: t('Biraz yavaşlayın') };
+    }
+    return null;
 }
 
 // ── Finish & review ────────────────────────────────────────────────────────────
@@ -689,10 +1117,15 @@ function finishCapture(note) {
     const header = stitcher.started && lastFrame ? stitcher.headerHeight : 0;
     const footer = stitcher.started && lastFrame ? stitcher.footerHeight : 0;
 
+    console.warn(`PERF kaydırma bitti: ${captured} satır, ${stitcher.commits} birleşim, `
+        + `${gaps} boşluk, bölge ${crop ? crop.w + 'x' + crop.h : '?'}`
+        + (note ? ` — ${note}` : ''));
+
     stopStream();
     window.api.scrollEnd();
     reportToolbarHitArea();
     hud.classList.add('hidden');
+    hideAnchor();
 
     if (!captured) {
         // Nothing was ever matched — most likely the user never scrolled, or the content
@@ -703,7 +1136,9 @@ function finishCapture(note) {
         repaintOverlay();
         placeToolbar();
         instruction.classList.remove('hidden');
-        instruction.textContent = t('Hiçbir şey yakalanamadı — Başlat’a bastıktan sonra alanın üstünde kaydırın');
+        instruction.textContent = missStreak > 0
+            ? t('Hiçbir şey yakalanamadı — çok hızlı kaydırıldı, daha küçük adımlarla deneyin')
+            : t('Hiçbir şey yakalanamadı — Başlat’a bastıktan sonra alanın üstünde kaydırın');
         instruction.classList.add('warn');
         return;
     }

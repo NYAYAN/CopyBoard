@@ -18,6 +18,7 @@
 
 pub mod hotkey_carbon;
 pub mod paste;
+pub mod scroll;
 pub mod permissions;
 pub mod audio_devices;
 pub mod pasteboard;

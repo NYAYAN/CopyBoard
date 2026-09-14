@@ -239,7 +239,7 @@ pub async fn record_stop(app: tauri::AppHandle) {
                     Err(e) => {
                         log::error!("kayıt durdurulamadı: {e}");
                         #[cfg(target_os = "windows")]
-                        if e.contains("sonlandırılamadı")
+                        if (e.contains("sonlandırılamadı") || e.contains("veri yazmıyor"))
                             && crate::capture::recorder::hardware_encoder()
                         {
                             crate::capture::recorder::set_hardware_encoder(false);
@@ -357,8 +357,28 @@ pub async fn scroll_begin(
         // monitörlerin overlay'lerini yeni kapattı, yani listede yalnız ekranda
         // gerçekten duran pencere kalıyor.
         let exclude = crate::capture::overlay_window_ids(&app);
+        // ── Kare hızı ───────────────────────────────────────────────────────────
+        // Eşleştirmenin izleyebildiği kaydırma hızı doğrudan kare hızıyla çarpımlı
+        // (bkz. scroller.js SAMPLE_TICK): kare başına ~240 px'i geçen kaydırma
+        // reddediliyor, yani 15 fps ≈ 3600 px/sn tavan. Sabit 15 fps bu yüzden
+        // hızlı kaydıran kullanıcıda "Daha yavaş kaydırın"a çıkıyordu.
+        //
+        // 30 fps'e çıkıyor; ölçüm (2026-09-11, bu makine, 1040x1850 = 7,3 MB/kare):
+        // taşıma 48 kare/sn ve 352 MB/sn'yi kayıpsız götürüyor, gönderme 0,0 ms,
+        // kırpma 2,6 ms. Yani darboğaz IPC değil — sınır renderer'ın kare başına
+        // örnekleme maliyeti (7,3 MB'da 11 ms). Bütçe o yüzden bant genişliğine
+        // bağlanıyor: çok büyük bölgelerde (tam ekran 2560x1440 ≈ 14 MB) hız
+        // kendiliğinden düşüyor, küçük bölgelerde 30'a çıkıyor.
+        const FPS_BUDGET_MBPS: f64 = 240.0;
+        let frame_mb = width * height * 4.0 / 1_048_576.0;
+        let fps: u32 = std::env::var("COPYBOARD_SCROLL_FPS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(|| {
+                ((FPS_BUDGET_MBPS / frame_mb.max(0.1)) as u32).clamp(15, 30)
+            });
         let stream = crate::capture::scroll_stream::start(
-            &monitor, x, y, width, height, 15, &exclude, channel,
+            &monitor, x, y, width, height, fps, &exclude, channel,
         )
         .map_err(|e| {
             crate::windows::toast::show(&app, &format!("Ekran akışı başlatılamadı: {e}"), "error");
@@ -389,6 +409,120 @@ pub async fn scroll_end(app: tauri::AppHandle) {
     teardown_streams(&app);
 }
 
+// ── Otomatik kaydırma ────────────────────────────────────────────────────────
+//
+// Kaydırmayı kullanıcıdan istemek yerine tekerleği uygulama çeviriyor. Gerekçe A18:
+// eşleştirici kare başına bölgenin ~%42'sinden fazla kaymayı izleyemiyor, kullanıcı
+// bunu bilemez ve "Daha yavaş kaydırın" uyarısı ona görünmez bir beceri dayatıyordu.
+// Adımı biz atınca sınır hiç zorlanmıyor; ne kadar attığımızı da ölçebiliyoruz, çünkü
+// birleştirici her karede sayfanın kaç piksel kaydığını söylüyor (kapalı çevrim).
+//
+// Tekerlek İMLECİN ALTINDAKİ pencereye gidiyor, o yüzden imleç bir kez bölgeye
+// alınıyor ve bitince kullanıcının bıraktığı yere geri konuyor. İmleç bölgeden
+// çıkarsa adım ATILMIYOR: kullanıcı araç çubuğuna ya da başka bir pencereye gittiğinde
+// tekerleğimiz oraya gitmesin.
+
+/// İmlecin otomatik kaydırma başlamadan önceki konumu.
+static CURSOR_PARKED: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
+
+/// Bölgenin ekran dikdörtgeni — platformun imleç/tekerlek uzayında.
+/// Windows: fiziksel piksel. macOS: mantıksal nokta. (Bkz. `platform::cursor_pos`.)
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn screen_rect(m: &crate::geom::MonitorInfo, x: f64, y: f64, w: f64, h: f64) -> (f64, f64, f64, f64) {
+    #[cfg(target_os = "windows")]
+    {
+        (m.x * m.scale + x, m.y * m.scale + y, w, h)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        (m.x + x / m.scale, m.y + y / m.scale, w / m.scale, h / m.scale)
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn monitor_of(app: &tauri::AppHandle, window: &tauri::WebviewWindow) -> Option<crate::geom::MonitorInfo> {
+    let index = window.label().rsplit('-').next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+    crate::geom::all_monitors(app).get(index).cloned()
+}
+
+/// İmleci bölgenin ortasına alır (zaten içindeyse dokunmaz) ve eski konumu saklar.
+/// Dönen: imleç artık bölgenin içinde mi — değilse otomatik kaydırma denenmemeli.
+#[tauri::command]
+pub fn auto_scroll_begin(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> bool {
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (&app, &window, x, y, width, height);
+        false
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let Some(m) = monitor_of(&app, &window) else { return false };
+        let (rx, ry, rw, rh) = screen_rect(&m, x, y, width, height);
+        let inside = |p: (f64, f64)| p.0 >= rx && p.0 < rx + rw && p.1 >= ry && p.1 < ry + rh;
+
+        let before = crate::platform::cursor_pos();
+        *CURSOR_PARKED.lock().unwrap_or_else(|e| e.into_inner()) = before;
+        if let Some(p) = before {
+            if inside(p) {
+                return true;
+            }
+        }
+        crate::platform::set_cursor_pos(rx + rw / 2.0, ry + rh / 2.0);
+        // Gerçekten oturdu mu? Bazı kurulumlarda imleç kısıtlı olabiliyor.
+        let after = crate::platform::cursor_pos();
+        let ok = after.map(inside).unwrap_or(false);
+        log::info!(
+            "otomatik kaydırma: bölge ({rx},{ry}) {rw}x{rh}, imleç {before:?} → {after:?}, park={ok}"
+        );
+        ok
+    }
+}
+
+/// Bir adım tekerlek. İmleç bölgenin DIŞINDAYSA hiçbir şey göndermez ve `false` döner.
+#[tauri::command]
+pub fn auto_scroll_step(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    notches: i32,
+) -> bool {
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (&app, &window, x, y, width, height, notches);
+        false
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let Some(m) = monitor_of(&app, &window) else { return false };
+        let (rx, ry, rw, rh) = screen_rect(&m, x, y, width, height);
+        let Some((cx, cy)) = crate::platform::cursor_pos() else { return false };
+        if cx < rx || cx >= rx + rw || cy < ry || cy >= ry + rh {
+            return false;
+        }
+        crate::platform::scroll_wheel(notches);
+        true
+    }
+}
+
+/// İmleci kullanıcının bıraktığı yere geri koyar.
+#[tauri::command]
+pub fn auto_scroll_end() {
+    let parked = CURSOR_PARKED.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if let Some((x, y)) = parked {
+        crate::platform::set_cursor_pos(x, y);
+    }
+}
+
 /// Kaydırma/kayıt akışlarını ve kaydırma evresinin global Escape'ini bırakır.
 ///
 /// `capture::finish()` de bunu çağırıyor, böylece evreden çıkan HER yol (bitiş, iptal,
@@ -399,6 +533,10 @@ pub async fn scroll_end(app: tauri::AppHandle) {
 /// kaydediyor ve koşulsuz `unregister` onun kaydını çalıyordu — seçici açıkken bir
 /// kaydırma yakalaması bitince Esc ile kapanma sessizce ölüyordu.
 pub fn teardown_streams(app: &tauri::AppHandle) {
+    // İmleci geri koy. BURADA olmak zorunda: Escape ve pencere yok olma yolları
+    // `scroll_end` komutundan geçmiyor, doğrudan buraya geliyor — kullanıcının imleci
+    // yakalamanın ortasında bıraktığımız yerde kalırdı.
+    auto_scroll_end();
     let owned = SCROLL_OWNS_ESCAPE.swap(false, Ordering::AcqRel);
     if owned {
         let _ = app.global_shortcut().unregister(escape_shortcut());

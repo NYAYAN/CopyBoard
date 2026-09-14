@@ -313,8 +313,6 @@
   "Şimdi kaydırın": "Scroll now",
   "Yakalanıyor": "Capturing",
   "Bitiriliyor…": "Finishing…",
-  "Daha yavaş kaydırın": "Scroll more slowly",
-  "Kaydırma izlenemedi — daha yavaş kaydırın": "Couldn't follow the scroll — try scrolling more slowly",
   "{h} px · {n} birleşim": "{h} px · {n} joins",
   "Başlat’a basın, sonra bu alanın üstünde kaydırın": "Press Start, then scroll over this area",
   "Alan çok küçük — kaydırmalı yakalama için daha büyük bir bölge seçin": "That area is too small — pick a larger region for a scrolling capture",
@@ -354,5 +352,15 @@
   "etkin": "enabled",
   "Kapalı": "Off",
   "Başlangıçta açılır": "Starts at login",
-  "Elle açılır": "Manual"
+  "Elle açılır": "Manual",
+  "Çok hızlı — bu görüntüyü görene dek geri kaydırın": "Too fast — scroll back until you see this again",
+  "Kaydırma izlenemedi — daha küçük adımlarla kaydırın": "Couldn't follow the scroll — use smaller steps",
+  "Kaldığı yerden devam ediliyor": "Picking up where it left off",
+  "Biraz yavaşlayın": "Ease off a little",
+  "Hızlı kaydırma yüzünden son kısım eklenemedi": "The last stretch was too fast to add",
+  "Hiçbir şey yakalanamadı — çok hızlı kaydırıldı, daha küçük adımlarla deneyin": "Nothing captured — that was too fast; try smaller scroll steps",
+  "en son yakalanan": "last captured",
+  "Otomatik kaydırılıyor": "Scrolling for you",
+  "Otomatik kaydırılamadı — kendiniz kaydırın": "Couldn't scroll it for you — scroll it yourself",
+  "Sayfa bitince durur · Esc ile durdurun": "Stops at the end of the page · Esc to stop"
 }

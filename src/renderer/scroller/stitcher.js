@@ -39,6 +39,42 @@ export const DEFAULTS = {
 
     // Confidence
     acceptScore: 12,         // mean per-sample luma difference; a true match sits near 0-3
+
+    // ── Uzlaşı (consensus) ──────────────────────────────────────────────────────
+    // Ortalama fark, bölgenin bir kısmı KAYMA DIŞI değiştiğinde (dönen banner, geç
+    // yüklenen görsel, reklam, video) çöküyor: o satırlar her aday ofsete büyük bir hata
+    // ekliyor. Ölçüldü (2026-09-11, kullanıcı bildirimi hepsiburada.com + sentetik):
+    // bölgenin %10'u böyleyse yakalama duruyor, %20'sinde ilk kareden başka hiçbir şey
+    // yakalanmıyor. Üstelik sorun yalnız eşikte değil SIRALAMADA: doğru ofset aday
+    // listesine bile giremiyordu.
+    //
+    // İkinci bir ölçüt: dokulu satırların kaçı BİREBİR uyuşuyor? Doğru ofsette kayan
+    // içerik neredeyse sıfır farkla uyuşuyor; değişen şerit hiçbir ofsette uyuşmuyor ve
+    // uzlaşıyı yalnız SEYRELTİYOR — ortalamanın aksine zehirlemiyor. Ölçüm: doğru
+    // ofsette dokulu satırların %66'sı (bölgenin %20'si banner iken %41'i) uyuşuyor,
+    // yanlış adaylarda %0.
+    //
+    // ⚠ Payda, örtüşen satırlar DEĞİL karenin TÜM dokulu satırları. Aksi hâlde az
+    // örtüşen sahte bir ofset, elindeki 50 satırın hepsi uyuştuğu için %100 alır ve
+    // gerçek eşleşmeyi döver (`overlapPenalty` yorumundaki tuzağın aynısı). Bu payda
+    // uzlaşıyı "bu karedeki kanıtın ne kadarını açıklıyor" hâline getiriyor: hem
+    // uyuşmayı hem örtüşmeyi birlikte ödüllendiriyor.
+    /// Bir satırın "uyuştu" sayılması için satır başına ortalama fark eşiği.
+    agreeScore: 6,
+    /// Bir satırın "dokulu" sayılması için kolonlar arası ortalama mutlak sapma eşiği.
+    /// Boş (düz) satır ne lehte ne aleyhte kanıt taşıyor; sayılmıyor.
+    rowEnergyMin: 4,
+    /// Bu kadar dokulu satır yoksa uzlaşı gürültülü olur; karar eski hâline (ortalama)
+    /// bırakılıyor.
+    minInformativeRows: 32,
+    /// Ortalama eşiği aşsa bile bu uzlaşıya ulaşan aday kabul ediliyor.
+    ///
+    /// Düşük görünüyor ama ölçüm aralığı çok geniş: doğru ofsetin uzlaşısı bölgenin
+    /// %30'u değişirken 0,16'ya kadar iniyor (kalan kanıt o kadar), yanlış adaylar ise
+    /// her seviyede 0,00'da kalıyor. Eşik bu uçurumun içinde duruyor.
+    minConsensus: 0.1,
+    /// Uzlaşı bu oranda öndeyse belirsizlik çözülmüş sayılıyor.
+    consensusEdge: 1.6,
     ambiguityRatio: 0.75,    // best must beat the runner-up by 25% to stand on its own
     hintTolerance: 24,       // when ambiguous, how far from the last offset a candidate may sit
     // Scores are means, so a large offset is judged on the handful of rows that still
@@ -163,6 +199,52 @@ function bandScore(base, cur, offset, top, bottom, rowStep, colStep) {
     return count ? sum / count : Infinity;
 }
 
+/// Satır başına doku: kolonların satır ortalamasından ortalama mutlak sapması.
+/// Düz (boş) satırda ~0, metin/görsel satırında belirgin.
+function rowEnergies(profile) {
+    const s = profile.cols, h = profile.height, d = profile.data;
+    const out = new Float32Array(h);
+    for (let y = 0; y < h; y++) {
+        const i0 = y * s;
+        let sum = 0;
+        for (let i = 0; i < s; i++) sum += d[i0 + i];
+        const mean = sum / s;
+        let dev = 0;
+        for (let i = 0; i < s; i++) {
+            const t = d[i0 + i] - mean;
+            dev += t < 0 ? -t : t;
+        }
+        out[y] = dev / s;
+    }
+    return out;
+}
+
+/// Bir ofsetin iki ölçüsü tek geçişte: ortalama fark (eski ölçüt) ve uzlaşı
+/// (bkz. DEFAULTS). `informativeTotal` payda — karenin TÜM dokulu satır sayısı.
+function offsetStats(base, cur, offset, top, bottom, energy, informativeTotal, o) {
+    const s = cur.cols;
+    const a = cur.data, b = base.data;
+    const yStart = offset < 0 ? top - offset : top;
+    const yEnd = offset < 0 ? bottom : bottom - offset;
+    let sum = 0, count = 0, agree = 0;
+
+    for (let y = yStart; y < yEnd; y++) {
+        const ai = y * s, bi = (y + offset) * s;
+        let rowSum = 0;
+        for (let i = 0; i < s; i++) {
+            const d = a[ai + i] - b[bi + i];
+            rowSum += d < 0 ? -d : d;
+        }
+        sum += rowSum;
+        count += s;
+        if (energy[y] >= o.rowEnergyMin && rowSum / s <= o.agreeScore) agree++;
+    }
+    return {
+        score: count ? sum / count : Infinity,
+        consensus: informativeTotal >= o.minInformativeRows ? agree / informativeTotal : null,
+    };
+}
+
 // Mean |difference| between two rows AT THE SAME y — the test for "this row did not move".
 function rowDistance(base, cur, y) {
     const s = cur.cols;
@@ -194,6 +276,20 @@ export function findOffset(base, cur, band, opts = {}) {
 
     const prior = (d) => o.overlapPenalty * (Math.abs(d) / bandRows);
 
+    // Uzlaşı için doku haritaları ve paydalar (bir kez).
+    const energyFull = rowEnergies(cur);
+    let infoFull = 0;
+    for (let y = top; y < bottom; y++) if (energyFull[y] >= o.rowEnergyMin) infoFull++;
+    const energyCoarse = rowEnergies(cur.coarse);
+
+    // Aday sıralaması: uzlaşı VARSA ve anlamlıysa önce ona, sonra ortalamaya bakılıyor.
+    // Uzlaşısı olmayan (dokusuz) kareler eski davranışta kalıyor.
+    const better = (x, y) => {
+        const cx = x.consensus, cy = y.consensus;
+        if (cx != null && cy != null && Math.abs(cx - cy) > 0.02) return cy - cx;
+        return x.rank - y.rank;
+    };
+
     const step = o.coarseRowStep;
     const cTop = Math.ceil(top / step);
     const cBottom = Math.floor(bottom / step);
@@ -201,12 +297,17 @@ export function findOffset(base, cur, band, opts = {}) {
 
     // Both directions: scrolling UP is a negative offset, and searching only the positive
     // half is what made an upward capture match nothing at all.
+    // Kaba tarama paydası kaba piramitte (satırlar 1/`step` kadar).
+    let infoCoarse = 0;
+    for (let y = cTop; y < cBottom; y++) if (energyCoarse[y] >= o.rowEnergyMin) infoCoarse++;
+
     const coarse = [];
     for (let dc = -cMax; dc <= cMax; dc++) {
         const d = dc * step;
-        coarse.push({ d, rank: bandScore(base.coarse, cur.coarse, dc, cTop, cBottom, 1, 1) + prior(d) });
+        const st = offsetStats(base.coarse, cur.coarse, dc, cTop, cBottom, energyCoarse, infoCoarse, o);
+        coarse.push({ d, rank: st.score + prior(d), consensus: st.consensus });
     }
-    coarse.sort((x, y) => x.rank - y.rank);
+    coarse.sort(better);
 
     // Seeds must be genuinely distinct offsets, not three points on the same trough.
     const seeds = [];
@@ -220,14 +321,15 @@ export function findOffset(base, cur, band, opts = {}) {
     for (const seed of seeds) {
         const lo = Math.max(-maxShift, seed - step);
         const hi = Math.min(maxShift, seed + step);
-        let bestD = seed, bestScore = Infinity, bestRank = Infinity;
+        let best = null;
         for (let d = lo; d <= hi; d++) {
-            const sc = bandScore(base, cur, d, top, bottom, 1, 1);
-            if (sc + prior(d) < bestRank) { bestRank = sc + prior(d); bestScore = sc; bestD = d; }
+            const st = offsetStats(base, cur, d, top, bottom, energyFull, infoFull, o);
+            const cand = { offset: d, score: st.score, rank: st.score + prior(d), consensus: st.consensus };
+            if (!best || better(cand, best) < 0) best = cand;
         }
-        candidates.push({ offset: bestD, score: bestScore, rank: bestRank });
+        candidates.push(best);
     }
-    candidates.sort((x, y) => x.rank - y.rank);
+    candidates.sort(better);
     return { candidates, reason: null };
 }
 
@@ -328,7 +430,15 @@ export function createStitcher(opts = {}) {
         sticky, ...extra
     });
 
-    function push(frame) {
+    // `opts.hint`: çağıranın BEKLEDİĞİ ofset. Otomatik kaydırmada tekerleği biz
+    // çevirdiğimiz için ne kadar kaydığını yaklaşık biliyoruz; belirsiz bir karede bu
+    // bilgi tahmin değil DOĞRULAMA sağlıyor.
+    //
+    // Neden gerekli: belirsizlik çözümü `lastOffset`e yaslanıyor ve o son BİRLEŞİMDEN
+    // kalma. Bir ret geldiğinde taban tutuluyor, gerçek ofset büyümeye devam ediyor ve
+    // artık hiçbir aday `lastOffset`in yakınında olmuyor → her kare reddediliyor, taban
+    // bir daha ilerlemiyor.
+    function push(frame, opts = {}) {
         const profile = buildProfile(frame, o);
 
         if (!baseProfile) {
@@ -350,7 +460,9 @@ export function createStitcher(opts = {}) {
         const best = candidates[0];
         const runnerUp = candidates[1];
 
-        if (best.score > o.acceptScore) {
+        // Ortalama eşiği aşsa bile dokulu satırların yeterlisi birebir uyuşuyorsa kabul:
+        // bölgedeki değişen şerit ortalamayı şişiriyor ama uzlaşıyı zehirlemiyor.
+        if (best.score > o.acceptScore && !(best.consensus >= o.minConsensus)) {
             if (started) gaps++;
             return decide('reject', { score: best.score, reason: 'no-match' });
         }
@@ -359,17 +471,38 @@ export function createStitcher(opts = {}) {
         // the offset near the last committed one is the honest reading (its SIGN included,
         // which is most of what rules out a mirror-image match); with no history to lean on,
         // refuse rather than guess.
+        // Uzlaşı açık ara öndeyse belirsizlik yok: ortalamalar gürültü yüzünden
+        // birbirine yaklaşmış olabilir ama birebir uyuşan satır sayısı yalan söylemiyor.
+        const decisiveByConsensus = best.consensus != null && best.consensus >= o.minConsensus
+            && best.consensus >= ((runnerUp && runnerUp.consensus) || 0) * o.consensusEdge;
+
         let chosen = best;
-        if (runnerUp && best.score >= runnerUp.score * o.ambiguityRatio) {
+        if (!decisiveByConsensus && runnerUp && best.score >= runnerUp.score * o.ambiguityRatio) {
             const viable = candidates.filter(c => c.score <= o.acceptScore);
-            const near = lastOffset
-                ? viable.filter(c => Math.abs(c.offset - lastOffset) <= o.hintTolerance)
-                : [];
-            if (near.length !== 1) {
-                if (started) gaps++;
-                return decide('reject', { offset: best.offset, score: best.score, reason: 'ambiguous' });
+            const hint = Number.isFinite(opts.hint) && opts.hint !== 0 ? opts.hint : null;
+            if (hint !== null) {
+                // Dışarıdan gelen ipucu ÖLÇÜLMÜŞ bir beklenti (bkz. push başlığı), o yüzden
+                // "yakında tam bir aday olsun" şartı aranmıyor: pencereye düşenlerin
+                // ipucuna EN YAKINI seçiliyor. Tolerans ipucuyla ölçekleniyor.
+                const tol = Math.max(o.hintTolerance, Math.abs(hint) * 0.35);
+                const near = viable
+                    .filter(c => Math.abs(c.offset - hint) <= tol)
+                    .sort((a, b) => Math.abs(a.offset - hint) - Math.abs(b.offset - hint));
+                if (!near.length) {
+                    if (started) gaps++;
+                    return decide('reject', { offset: best.offset, score: best.score, reason: 'ambiguous' });
+                }
+                chosen = near[0];
+            } else {
+                const near = lastOffset
+                    ? viable.filter(c => Math.abs(c.offset - lastOffset) <= o.hintTolerance)
+                    : [];
+                if (near.length !== 1) {
+                    if (started) gaps++;
+                    return decide('reject', { offset: best.offset, score: best.score, reason: 'ambiguous' });
+                }
+                chosen = near[0];
             }
-            chosen = near[0];
         }
 
         const magnitude = Math.abs(chosen.offset);

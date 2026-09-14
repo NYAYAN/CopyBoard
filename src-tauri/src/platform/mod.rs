@@ -264,6 +264,50 @@ pub fn install_power_observers(app: &tauri::AppHandle) {
     let _ = app;
 }
 
+// ── Sentetik fare tekerleği (kaydırmalı yakalamada otomatik kaydırma) ────────
+//
+// Sayfayı UYGULAMA çeviriyor: eşleştirici kare başına bölgenin ~%42'sinden fazla
+// kaymayı izleyemiyor ve bunu kullanıcıdan "yavaş kaydır" diye istemek görünmez bir
+// beceri talebiydi (A18). Tekerleği biz çevirince adım bizim denetimimizde.
+//
+// ⚠ KOORDİNAT UZAYI platforma göre değişiyor ve çağıran taraf bunu bilmek zorunda:
+// Windows'ta `GetCursorPos` FİZİKSEL piksel, macOS'ta `CGEvent` MANTIKSAL nokta
+// veriyor. [`screen_rect`] dönüşümü tek yerde tutuyor.
+
+/// İmlecin ekran konumu — platformun kendi uzayında (bkz. yukarıdaki uyarı).
+pub fn cursor_pos() -> Option<(f64, f64)> {
+    #[cfg(target_os = "windows")]
+    { windows::scroll::cursor_pos() }
+    #[cfg(target_os = "macos")]
+    { macos::scroll::cursor_pos() }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    { None }
+}
+
+pub fn set_cursor_pos(x: f64, y: f64) -> bool {
+    #[cfg(target_os = "windows")]
+    { windows::scroll::set_cursor_pos(x, y) }
+    #[cfg(target_os = "macos")]
+    { macos::scroll::set_cursor_pos(x, y) }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    { let _ = (x, y); false }
+}
+
+/// Tekerleği `notches` tık çevirir. POZİTİF = yukarı, NEGATİF = aşağı.
+///
+/// Bir tıkın kaç piksel ettiği uygulamaya ve kullanıcı ayarına bağlı; çağıran taraf
+/// bunu ÖLÇÜP adımını ona göre kuruyor (bkz. scroller.js `pxPerNotch`). İşaretin
+/// macOS'ta ters çıkma ihtimali de aynı ölçümle kapanıyor: ilk adım kıpırdatmazsa
+/// ters yön deneniyor.
+pub fn scroll_wheel(notches: i32) {
+    #[cfg(target_os = "windows")]
+    { windows::scroll::wheel(notches) }
+    #[cfg(target_os = "macos")]
+    { macos::scroll::wheel(notches) }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    { let _ = notches; }
+}
+
 /// Ses giriş aygıtları. macOS dışında boş — orada seçim henüz yazılmadı.
 pub fn audio_inputs() -> Vec<serde_json::Value> {
     #[cfg(target_os = "macos")]

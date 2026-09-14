@@ -82,7 +82,7 @@ function bandRow(width, value) {
 
 // One frame of the capture region: page rows [scrollY, scrollY + height), with sticky
 // chrome painted OVER the top and bottom the way a real pinned toolbar sits above content.
-function viewport(page, scrollY, height, { header = 0, footer = 0 } = {}) {
+function viewport(page, scrollY, height, { header = 0, footer = 0, live = null } = {}) {
     const { width } = page;
     const data = new Uint8ClampedArray(width * height * 4);
     for (let y = 0; y < height; y++) {
@@ -92,6 +92,20 @@ function viewport(page, scrollY, height, { header = 0, footer = 0 } = {}) {
     for (let y = 0; y < header; y++) data.set(bandRow(width, 40 + y), y * width * 4);
     for (let y = 0; y < footer; y++) {
         data.set(bandRow(width, 200 - y), (height - 1 - y) * width * 4);
+    }
+    // A band that changes on its OWN: a rotating banner, a lazy-loaded image, an ad. It
+    // sits at a fixed place in the region, does not scroll with the page, and its content
+    // is unrelated from one frame to the next.
+    if (live) {
+        const rnd = mulberry32(scrollY + 7919);
+        for (let y = live.top; y < Math.min(height, live.top + live.rows); y++) {
+            for (let x = 0; x < width; x++) {
+                const p = (y * width + x) * 4;
+                const v = Math.floor(rnd() * 256);
+                data[p] = data[p + 1] = data[p + 2] = v;
+                data[p + 3] = 255;
+            }
+        }
     }
     return { width, height, data };
 }
@@ -237,6 +251,31 @@ test('sticky header and footer appear once and never inside the content', () => 
     // Nothing above the header can be captured — it is painted over the page there.
     assert.ok(content[0] >= stitcher.headerHeight,
         `strip starts at page row ${content[0]}, inside the header band`);
+});
+
+// Reported by a user on a real shopping site (A19): the capture kept ONLY the first
+// region. Measured cause: the match score was a plain mean over the whole region, so a
+// band changing on its own added a large error to EVERY candidate offset — not just
+// pushing the score past the accept threshold but ranking the wrong offset first, which
+// kept the true one out of the candidate list entirely. A tenth of the region was enough
+// to stop the capture; a fifth left nothing at all. The consensus criterion (how many
+// textured rows agree EXACTLY) is what the matcher leans on there, because unrelated
+// content agrees at no offset and only dilutes it.
+test('a band that changes on its own does not stop the capture', () => {
+    const page = makePage(300, 6000, { seed: 9 });
+    const frameH = 800;
+    const scrolls = [];
+    for (let i = 0; i < 14; i++) scrolls.push(i * 120);
+
+    for (const pct of [0.1, 0.2, 0.3]) {
+        const live = { top: 60, rows: Math.round(frameH * pct) };
+        const { rows } = replay(page, scrolls, frameH, { live });
+        assertContiguous(rows, `%${pct * 100} changing band`);
+        assert.ok(
+            rows.length > frameH * 2,
+            `%${pct * 100} changing band: expected the capture to keep going, got ${rows.length} rows`
+        );
+    }
 });
 
 test('a still screen never commits anything', () => {

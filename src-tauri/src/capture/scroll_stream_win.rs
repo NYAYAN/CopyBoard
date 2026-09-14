@@ -49,6 +49,14 @@ struct Handler {
     min_interval: Duration,
     last_sent: Option<Instant>,
     seq: Arc<AtomicU32>,
+    /// Ölçüm: saniyelik özet (kaç kare kırpıldı, okuma/gönderme kaç ms).
+    /// "Kaydırma izlenemedi" bildirimlerinde darboğazın WGC/kırpma mı yoksa IPC mi
+    /// olduğunu ayırmak için; renderer da kendi tarafını yazıyor (bkz. scroller.js PERF).
+    tick: Instant,
+    sent: u32,
+    bytes: u64,
+    crop_ms: f64,
+    send_ms: f64,
 }
 
 impl GraphicsCaptureApiHandler for Handler {
@@ -57,7 +65,18 @@ impl GraphicsCaptureApiHandler for Handler {
 
     fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
         let f = ctx.flags;
-        Ok(Self { channel: f.channel, crop: f.crop, min_interval: f.min_interval, last_sent: None, seq: f.seq })
+        Ok(Self {
+            channel: f.channel,
+            crop: f.crop,
+            min_interval: f.min_interval,
+            last_sent: None,
+            seq: f.seq,
+            tick: Instant::now(),
+            sent: 0,
+            bytes: 0,
+            crop_ms: 0.0,
+            send_ms: 0.0,
+        })
     }
 
     fn on_frame_arrived(
@@ -82,8 +101,10 @@ impl GraphicsCaptureApiHandler for Handler {
         }
         let (w, h) = (x1 - x0, y1 - y0);
 
+        let t_crop = Instant::now();
         let mut buf = frame.buffer_crop(x0, y0, x1, y1)?;
         let px = buf.as_nopadding_buffer()?;
+        let crop_ms = t_crop.elapsed().as_secs_f64() * 1000.0;
 
         // Kare düzeni: u32 seq | u32 w | u32 h | RGBA (bkz. api-tauri.js scrollBegin)
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
@@ -93,8 +114,32 @@ impl GraphicsCaptureApiHandler for Handler {
         out.extend_from_slice(&h.to_le_bytes());
         out.extend_from_slice(px);
         // Kanal kapanmışsa (pencere gitti) sessizce düşer; `stop` zaten yolda.
+        let n = out.len();
+        let t_send = Instant::now();
         let _ = self.channel.send(InvokeResponseBody::Raw(out));
+        self.send_ms += t_send.elapsed().as_secs_f64() * 1000.0;
+        self.crop_ms += crop_ms;
+        self.bytes += n as u64;
+        self.sent += 1;
         self.last_sent = Some(now);
+
+        let dt = self.tick.elapsed();
+        if dt >= Duration::from_secs(1) {
+            let secs = dt.as_secs_f64();
+            let k = self.sent.max(1) as f64;
+            log::info!(
+                "PERF kaydırma akışı: {:.1} kare/sn gönderildi ({:.1} MB/sn), kırpma {:.1} ms, gönderme {:.1} ms",
+                self.sent as f64 / secs,
+                self.bytes as f64 / 1_048_576.0 / secs,
+                self.crop_ms / k,
+                self.send_ms / k
+            );
+            self.tick = Instant::now();
+            self.sent = 0;
+            self.bytes = 0;
+            self.crop_ms = 0.0;
+            self.send_ms = 0.0;
+        }
         Ok(())
     }
 }

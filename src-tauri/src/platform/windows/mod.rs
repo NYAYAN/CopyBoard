@@ -5,6 +5,7 @@
 
 pub mod clipboard_formats;
 pub mod paste;
+pub mod scroll;
 pub mod power;
 pub mod theme;
 

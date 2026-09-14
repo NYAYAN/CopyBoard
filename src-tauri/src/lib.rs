@@ -190,6 +190,9 @@ pub fn run() {
             commands::record::record_stop,
             commands::record::scroll_begin,
             commands::record::scroll_end,
+            commands::record::auto_scroll_begin,
+            commands::record::auto_scroll_step,
+            commands::record::auto_scroll_end,
         ])
         // Pencerelerden açılan bağlam menüleri (galeri küçük resimleri) buraya düşüyor;
         // tepsi menüsünün kendi işleyicisi ayrı.
@@ -338,8 +341,14 @@ pub fn run() {
                     };
                     println!("RECORD_TEST: monitör[0] = {},{} {}x{} ölçek={}", m.x, m.y, m.width, m.height, m.scale);
                     let path = std::env::temp_dir().join(format!("copyboard-record-test-{quality}-{mode}.mp4"));
+                    // Bölge monitöre SIĞDIRILIYOR: monitör[0] dikeyse (ör. 1080x1920)
+                    // sabit 1280x720 taşıyor ve işleyici her kareyi atlıyordu —
+                    // test "hiç kare gelmedi" diye düşerdi, kodlayıcıya hiç gelmeden.
+                    let (mw, mh) = (m.width * m.scale, m.height * m.scale);
+                    let (rw, rh) = ((mw - 200.0).min(1280.0).max(2.0), (mh - 200.0).min(720.0).max(2.0));
+                    println!("RECORD_TEST: bölge 200,200 {rw}x{rh}");
                     let started = capture::recorder::start(
-                        &m, 200.0, 200.0, 1280.0, 720.0, &quality,
+                        &m, 200.0, 200.0, rw, rh, &quality,
                         // Overlay açık değil; dışlanacak pencere yok.
                         with_mic, with_audio, "", &[], "test".into(), path.clone(),
                     );
@@ -368,7 +377,102 @@ pub fn run() {
                 });
             }
 
-            // Geliştirme kolaylığı: `--shot-save=<yol>` monitör[0]'ı PNG olarak yazar.
+            // Geliştirme kolaylığı: `--scroll-test=<sn>[,<monitör>[,<w>x<h>]]` kaydırmalı
+            // yakalamayı GERÇEK arayüz akışından sürüyor: overlay açılıyor, sentetik fare
+            // olaylarıyla bölge seçiliyor, Enter ile Başlat, `sn` saniye sonra Enter ile
+            // Bitir. Kaydırmayı testin kendisi yapmıyor — ekranda kaydıran bir şey (tarayıcı
+            // sayfası) olması gerekiyor. Amaç ölçüm: scroller.js saniyede bir "PERF kaydırma"
+            // satırı yazıyor (kare/sn, örnek maliyeti, birleşim/ret, son ret sebebi).
+            //
+            // ⚠ Seçim koordinatları overlay sayfasının CSS pikselleri; ölçek ×1 monitörlerde
+            // fiziksel piksele eşit. Ölçekli ekranda bölge küçük çıkar, ölçüm yine çalışır.
+            #[cfg(all(debug_assertions, any(target_os = "macos", target_os = "windows")))]
+            if let Some(spec) = std::env::args().find_map(|a| {
+                if a == "--scroll-test" { Some(String::new()) } else { a.strip_prefix("--scroll-test=").map(str::to_string) }
+            }) {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    let mut parts = spec.split(',');
+                    let secs: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(8);
+                    let idx: usize = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    let size = parts.next().and_then(|s| {
+                        let (w, hh) = s.split_once('x')?;
+                        Some((w.trim().parse::<f64>().ok()?, hh.trim().parse::<f64>().ok()?))
+                    });
+                    // Dördüncü parça `<x>+<y>`: bölgenin sol üst köşesi (CSS px). Ölçümde
+                    // bölgenin TAMAMININ kayan içeriğe düşmesi gerekiyor — kısmen boş bir
+                    // bölgede birleştirici haklı olarak "idle" diyor ve ölçüm hiçbir şey
+                    // söylemiyor (ilk denemede tam bu oldu).
+                    let origin = parts.next().and_then(|s| {
+                        let (x, y) = s.split_once('+')?;
+                        Some((x.trim().parse::<f64>().ok()?, y.trim().parse::<f64>().ok()?))
+                    });
+                    std::thread::sleep(std::time::Duration::from_millis(1200));
+
+                    let monitors = geom::all_monitors(&h);
+                    let Some(m) = monitors.get(idx).cloned() else {
+                        println!("SCROLL_TEST: monitör[{idx}] yok ({} monitör var)", monitors.len());
+                        h.exit(0);
+                        return;
+                    };
+                    let (rw, rh) = size.unwrap_or((m.width - 400.0, m.height - 300.0));
+                    let (x0, y0) = origin.unwrap_or((200.0, 150.0));
+                    let (x1, y1) = (x0 + rw.max(200.0), y0 + rh.max(300.0));
+                    println!(
+                        "SCROLL_TEST: monitör[{idx}] {}x{} @({},{}) → bölge {x0},{y0} {}x{}",
+                        m.width, m.height, m.x, m.y, x1 - x0, y1 - y0
+                    );
+
+                    let label = format!("capture-{idx}");
+                    { let h2 = h.clone(); let _ = h.run_on_main_thread(move || capture::start(&h2, "scroll")); }
+                    let mut up = false;
+                    for _ in 0..40 {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        if h.get_webview_window(&label).and_then(|w| w.is_visible().ok()) == Some(true) {
+                            up = true;
+                            break;
+                        }
+                    }
+                    if !up {
+                        println!("SCROLL_TEST: overlay açılmadı ({label})");
+                        h.exit(0);
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+
+                    // Seçim + Başlat: araç çubuğu düğmesiyle aynı yol (bkz. qa.rs 9d).
+                    let select = format!(
+                        r#"(function () {{
+                            const ev = (t, x, y) => document.body.dispatchEvent(new MouseEvent(t, {{ bubbles: true, clientX: x, clientY: y, button: 0 }}));
+                            ev('mousedown', {x0}, {y0}); ev('mousemove', {mx}, {my}); ev('mousemove', {x1}, {y1}); ev('mouseup', {x1}, {y1});
+                            document.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
+                        }})();"#,
+                        x0 = x0, y0 = y0, mx = (x0 + x1) / 2.0, my = (y0 + y1) / 2.0, x1 = x1, y1 = y1
+                    );
+                    { let (l, hh) = (label.clone(), h.clone()); let _ = h.run_on_main_thread(move || { if let Some(w) = hh.get_webview_window(&l) { let _ = w.eval(select); } }); }
+
+                    let streaming = |h: &tauri::AppHandle| h.state::<capture::scroll_stream::ScrollState>().0.lock().unwrap().is_some();
+                    let mut started = false;
+                    for _ in 0..40 {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        if streaming(&h) { started = true; break; }
+                    }
+                    println!("SCROLL_TEST: başlat {} — şimdi {secs} sn kaydırılıyor", if started { "TAMAM" } else { "OLMADI" });
+                    if !started {
+                        h.exit(0);
+                        return;
+                    }
+
+                    std::thread::sleep(std::time::Duration::from_secs(secs));
+                    let finish = "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));";
+                    { let (l, hh) = (label.clone(), h.clone()); let _ = h.run_on_main_thread(move || { if let Some(w) = hh.get_webview_window(&l) { let _ = w.eval(finish); } }); }
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    println!("SCROLL_TEST: bitti (ölçümler günlükte: PERF kaydırma)");
+                    h.exit(0);
+                });
+            }
+
+            // Geliştirme kolaylığı: `--shot-save=<yol>[@<monitör>]` o monitörü PNG yazar.
             // Videodaki rengi, AYNI bölgenin bilinen-doğru still görüntüsüyle
             // karşılaştırmak için: renk bozulması varsa iki kaynak ayrışır.
             #[cfg(debug_assertions)]
@@ -377,7 +481,15 @@ pub fn run() {
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1200));
                     let monitors = geom::all_monitors(&h);
-                    match monitors.first().and_then(|m| capture::screenshot::capture_monitor(m, 0)) {
+                    // `yol@2` biçimi: hangi monitör? (Varsayılan 0.) Çok monitörlü
+                    // hatalarda doğru ekrana bakabilmek için.
+                    let (out, idx) = match out.to_string_lossy().rsplit_once('@') {
+                        Some((p, n)) if n.parse::<usize>().is_ok() => {
+                            (std::path::PathBuf::from(p), n.parse().unwrap())
+                        }
+                        _ => (out, 0usize),
+                    };
+                    match monitors.get(idx).and_then(|m| capture::screenshot::capture_monitor(m, 0)) {
                         Some(f) => {
                             let _ = std::fs::write(&out, &f.png);
                             println!("SHOT_SAVE: {}x{} -> {}", f.width, f.height, out.display());

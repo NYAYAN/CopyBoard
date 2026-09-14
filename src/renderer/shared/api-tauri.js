@@ -303,6 +303,14 @@
             });
         },
         scrollEnd: () => send('scroll_end'),
+        // Otomatik kaydırma: tekerleği ana süreç çeviriyor (bkz. commands/record.rs).
+        autoScrollBegin: (rect) => invoke('auto_scroll_begin', {
+            x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+        }).catch(() => false),
+        autoScrollStep: (rect, notches) => invoke('auto_scroll_step', {
+            x: rect.x, y: rect.y, width: rect.w, height: rect.h, notches,
+        }).catch(() => false),
+        autoScrollEnd: () => send('auto_scroll_end'),
         setIgnoreMouseEvents: (ignore) => send('set_ignore_mouse_events', { ignore: !!ignore }),
         // ── Video kaydı ─────────────────────────────────────────────────────
         // Kareler webview'a HİÇ uğramıyor: encode ve mux ana süreçte.

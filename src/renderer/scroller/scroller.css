@@ -178,6 +178,48 @@ body.phase-capture .selection-box {
     font-weight: var(--fw-medium);
 }
 
+/* Rehberliğin üç kademesi: sınıra yaklaşıldı (sarı), izlenemedi (kırmızı), toparlandı
+   (yeşil). Tek bir kırmızı uyarı kullanıcıya yalnız "bir şey ters" diyordu. */
+.hud-warn.fast { color: var(--warning); }
+.hud-warn.lost { color: var(--danger); }
+.hud-warn.ok   { color: var(--success); }
+
+/* En son yakalanan görüntünün şeridi. Bölgenin hemen dışına, kaydırmanın GELDİĞİ yöne
+   konuluyor; kullanıcı bu görüntüyü ekranda yeniden görene dek geri kaydırıyor ve
+   eşleşme kendiliğinden sürüyor. Sığmazsa bölgenin içine düşüyor (o da görmemekten iyi). */
+.anchor {
+    position: absolute;
+    pointer-events: none;
+    z-index: 6;
+    border-radius: var(--radius-2, 6px);
+    overflow: hidden;
+    outline: 2px solid var(--accent);
+    box-shadow: var(--overlay-shadow);
+}
+
+.anchor canvas {
+    display: block;
+    /* Yakalanan piksel 1:1 dursun: ölçeklenirse kullanıcı ekrandakiyle eşleştiremez. */
+    image-rendering: pixelated;
+}
+
+.anchor-label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    padding: 2px var(--sp-2, 6px);
+    background: var(--accent);
+    color: #fff;
+    font-size: var(--fs-1, 11px);
+    font-weight: var(--fw-medium);
+    border-bottom-right-radius: var(--radius-2, 6px);
+}
+
+body.phase-select #anchor,
+body.phase-review #anchor {
+    display: none;
+}
+
 /* Standing reminder of how a capture ends. Without it the scroll phase gives the user no
    idea that stopping is the finish gesture. */
 .hud-hint {

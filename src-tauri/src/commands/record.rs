@@ -514,6 +514,32 @@ pub fn auto_scroll_step(
     }
 }
 
+/// Geliştirme aracı: eşleştiriciye GİDEN profil akışını dosyaya döküyor.
+///
+/// Amacı gerçek sayfalardan test fixture'ı üretmek. Gerekçe A19: sentetik sayfalarda
+/// ölçülen davranışın gerçek bir sitede tutmadığı bir kez yaşandı ve bunu ancak
+/// kullanıcı bildirdiğinde öğrendik. Gerçek profil akışı testte oynatılabilirse
+/// eşleştiriciye dokunan her değişiklik o sayfalara karşı da sınanmış oluyor.
+///
+/// Biçim: `CBSD` + u32 genişlik + u32 yükseklik + u32 kare sayısı, ardından her kare
+/// için genişlik×yükseklik bayt (gri). `COPYBOARD_SCROLL_DUMP=<kare>` ile açılıyor.
+#[tauri::command]
+pub fn scroll_dump(request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("ham veri bekleniyordu".into());
+    };
+    let path = std::env::temp_dir().join(format!(
+        "copyboard-scroll-{}.bin",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    ));
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    log::info!("kaydırma dökümü: {} bayt → {}", bytes.len(), path.display());
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// İmleci kullanıcının bıraktığı yere geri koyar.
 #[tauri::command]
 pub fn auto_scroll_end() {

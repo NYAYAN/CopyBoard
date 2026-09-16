@@ -165,6 +165,10 @@ let frameA = null, frameB = null;   // ping-pong crop canvases
 let curFrame = null, baseFrame = null, lastFrame = null;
 let profileCanvas = null, profileCtx = null;
 let lastProfile = null;   // en son EŞLEŞTİRİLEN profil (bkz. samePixels)
+// Geliştirme aracı: `window.__cbDump = <kare>` verildiğinde eşleştiriciye giden
+// profiller biriktirilip bitişte dosyaya yazılıyor — gerçek sayfalardan test fixture'ı
+// üretmek için (bkz. commands/record.rs `scroll_dump`).
+let dumpFrames = null;
 let headTiles = [];   // prepended rows, each tile filled bottom-up
 let tailTiles = [];   // appended rows, each tile filled top-down
 let totalRows = 0;
@@ -588,6 +592,7 @@ async function beginCapture() {
     profileCanvas.width = PROFILE_W;
     profileCanvas.height = crop.h;
     lastProfile = null;
+    dumpFrames = window.__cbDump ? [] : null;
     profileCtx = profileCanvas.getContext('2d', { willReadFrequently: true });
     profileCtx.imageSmoothingEnabled = true; // horizontal box average, not nearest-neighbour
 
@@ -772,6 +777,12 @@ function sampleFrame(now) {
         return;
     }
     lastProfile = profile;
+    if (dumpFrames && dumpFrames.length < window.__cbDump) {
+        // Yalnız gri kanal: profil zaten gri, dörtte bir yer tutuyor.
+        const gray = new Uint8Array(PROFILE_W * crop.h);
+        for (let i = 0, j = 0; j < gray.length; i += 4, j++) gray[j] = profile.data[i];
+        dumpFrames.push(gray);
+    }
 
     const decision = stitcher.push(profile, { hint });
     const t3 = performance.now();
@@ -1120,6 +1131,19 @@ function finishCapture(note) {
     console.warn(`PERF kaydırma bitti: ${captured} satır, ${stitcher.commits} birleşim, `
         + `${gaps} boşluk, bölge ${crop ? crop.w + 'x' + crop.h : '?'}`
         + (note ? ` — ${note}` : ''));
+
+    if (dumpFrames && dumpFrames.length) {
+        const per = PROFILE_W * crop.h;
+        const buf = new Uint8Array(16 + dumpFrames.length * per);
+        const dv = new DataView(buf.buffer);
+        buf.set([0x43, 0x42, 0x53, 0x44], 0);          // "CBSD"
+        dv.setUint32(4, PROFILE_W, true);
+        dv.setUint32(8, crop.h, true);
+        dv.setUint32(12, dumpFrames.length, true);
+        dumpFrames.forEach((f, i) => buf.set(f, 16 + i * per));
+        try { window.api.scrollDump(buf.buffer); } catch (e) { console.warn('döküm yazılamadı: ' + e); }
+        dumpFrames = null;
+    }
 
     stopStream();
     window.api.scrollEnd();

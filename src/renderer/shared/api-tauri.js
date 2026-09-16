@@ -311,6 +311,8 @@
             x: rect.x, y: rect.y, width: rect.w, height: rect.h, notches,
         }).catch(() => false),
         autoScrollEnd: () => send('auto_scroll_end'),
+        // Geliştirme aracı: profil akışını dosyaya döküyor (bkz. commands/record.rs).
+        scrollDump: (buffer) => send('scroll_dump', buffer),
         setIgnoreMouseEvents: (ignore) => send('set_ignore_mouse_events', { ignore: !!ignore }),
         // ── Video kaydı ─────────────────────────────────────────────────────
         // Kareler webview'a HİÇ uğramıyor: encode ve mux ana süreçte.

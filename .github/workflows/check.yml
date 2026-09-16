@@ -28,7 +28,12 @@ jobs:
         platform: [macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      # Eylem sürümleri MAJOR'a sabit: GitHub, Node 20 hedefleyen eylemleri zorla
+      # Node 24'te koşturup uyarı basıyor ve desteği tamamen kaldıracak. checkout ve
+      # setup-node Node 24'e v5'te geçti; v7 en güncel major. Bu iş akışı yalnız
+      # `push`/`pull_request`/etiket ile tetikleniyor, v7'nin fork PR kısıtlaması
+      # (pull_request_target, workflow_run) buraya dokunmuyor.
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -56,11 +61,11 @@ jobs:
     name: npm test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # 22 ZORUNLU, 20 DEĞİL: `npm test` betiği `node --test "test/**/*.test.mjs"`
       # çağırıyor ve test koşucusu glob kalıplarını ancak 22.0'dan beri açıyor.
       # Node 20 kalıbı düz bir yol sanıp "Could not find ..." ile çıkıyordu.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: 'npm'

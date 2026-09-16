@@ -36,11 +36,16 @@ const K_CG_SCROLL_EVENT_UNIT_LINE: u32 = 1;
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
     fn CGEventSourceCreate(state: u32) -> CGEventSourceRef;
+    /// ⚠ C tarafında VARIADIC: `(source, units, wheelCount, wheel1, ...)` — `...`
+    /// ikinci ve üçüncü eksenler (yatay/z) için. Yalnız sabit parametreleri geçiyoruz,
+    /// yani arm64'te de çağrı doğru (sabitler register'da, variadic olanlar yığında);
+    /// yine de bildirim gerçek imzaya sadık tutuluyor ki okuyan tereddüt etmesin.
     fn CGEventCreateScrollWheelEvent(
         source: CGEventSourceRef,
         units: u32,
         wheel_count: u32,
         wheel1: i32,
+        ...
     ) -> CGEventRef;
     fn CGEventPost(tap: u32, event: CGEventRef);
     fn CGEventCreate(source: CGEventSourceRef) -> CGEventRef;

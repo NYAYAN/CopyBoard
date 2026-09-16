@@ -11,6 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { brotliDecompressSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -276,6 +277,61 @@ test('a band that changes on its own does not stop the capture', () => {
             `%${pct * 100} changing band: expected the capture to keep going, got ${rows.length} rows`
         );
     }
+});
+
+// ── Real-page fixture ──────────────────────────────────────────────────────────
+// Everything above is synthetic, and that gap cost us once: the stitcher passed every
+// test in this file while a user's capture of a real shopping site kept only the first
+// region (A19). This fixture is the profile stream the matcher ACTUALLY saw during a
+// capture of hepsiburada.com — a page with rotating banners, lazy-loaded images and ads,
+// which is the case the synthetic pages did not represent.
+//
+// Format: "CBSD" + u32 width + u32 height + u32 frame count, then one grayscale byte per
+// profile pixel per frame. Regenerate with:
+//   COPYBOARD_SCROLL_DUMP=40 copyboard --scroll-test=14,<monitor>,<w>x<h>,<x>+<y>
+// then brotli the dumped .bin (the path is logged as "kaydırma dökümü").
+const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/scroll-hepsiburada.bin.br');
+
+function fixtureFrames(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset);
+    assert.equal(String.fromCharCode(...bytes.subarray(0, 4)), 'CBSD', 'fixture header');
+    const width = dv.getUint32(4, true);
+    const height = dv.getUint32(8, true);
+    const count = dv.getUint32(12, true);
+    const per = width * height;
+    const frames = [];
+    for (let i = 0; i < count; i++) {
+        const gray = bytes.subarray(16 + i * per, 16 + (i + 1) * per);
+        const data = new Uint8ClampedArray(per * 4);
+        for (let j = 0, p = 0; j < per; j++, p += 4) {
+            data[p] = data[p + 1] = data[p + 2] = gray[j];
+            data[p + 3] = 255;
+        }
+        frames.push({ width, height, data });
+    }
+    return frames;
+}
+
+test('a real page with moving content keeps being captured', async () => {
+    const frames = fixtureFrames(brotliDecompressSync(await readFile(FIXTURE)));
+    const stitcher = createStitcher({ outputWidth: 1400 });
+
+    let rows = 0, commits = 0, streak = 0, worstStreak = 0;
+    for (const frame of frames) {
+        const d = stitcher.push(frame);
+        if (d.base) rows += d.base.height;
+        if (d.add) rows += d.add.height;
+        if (d.base || d.add) { commits++; streak = 0; }
+        else if (d.status === 'reject') { streak++; worstStreak = Math.max(worstStreak, streak); }
+    }
+
+    // The failure this fixture was recorded for is a STALL: once the matcher stops
+    // agreeing with the page, the base is held and every later frame is refused the same
+    // way, so the capture ends with the first region and a "couldn't follow" notice. On
+    // this stream the old matcher stalls from frame 24 on (17 commits, 21 refusals).
+    assert.ok(worstStreak < 6, `stalled: ${worstStreak} refusals in a row`);
+    assert.ok(commits >= 25, `expected the capture to keep committing, got ${commits}`);
+    assert.ok(rows > frames[0].height * 3, `expected a long strip, got ${rows} rows`);
 });
 
 test('a still screen never commits anything', () => {

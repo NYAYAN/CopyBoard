@@ -193,6 +193,7 @@ pub fn run() {
             commands::record::auto_scroll_begin,
             commands::record::auto_scroll_step,
             commands::record::auto_scroll_end,
+            commands::record::scroll_dump,
         ])
         // Pencerelerden açılan bağlam menüleri (galeri küçük resimleri) buraya düşüyor;
         // tepsi menüsünün kendi işleyicisi ayrı.
@@ -439,6 +440,17 @@ pub fn run() {
                         return;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(400));
+
+                    // `COPYBOARD_SCROLL_DUMP=<kare>`: eşleştiriciye giden profil akışını
+                    // dosyaya döksün (gerçek sayfadan test fixture'ı üretmek için).
+                    if let Ok(n) = std::env::var("COPYBOARD_SCROLL_DUMP") {
+                        let js = format!("window.__cbDump = {};", n.parse::<u32>().unwrap_or(40));
+                        let (l, hh) = (label.clone(), h.clone());
+                        let _ = h.run_on_main_thread(move || {
+                            if let Some(w) = hh.get_webview_window(&l) { let _ = w.eval(js); }
+                        });
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
 
                     // Seçim + Başlat: araç çubuğu düğmesiyle aynı yol (bkz. qa.rs 9d).
                     let select = format!(

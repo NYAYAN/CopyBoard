@@ -952,6 +952,75 @@ fn flow_tools(app: &tauri::AppHandle, m: &MonitorInfo) {
     remove_card(app);
 }
 
+/// Metin aracının CANLI yazı rengi seçili renkle uyuşuyor mu?
+///
+/// Kullanıcı bildirdi: kırmızı seçiliyken metin kutusuna yazınca yazı BEYAZ
+/// görünüyor, Enter'a basınca kırmızı çiziliyordu — canlı önizleme ile sonuç
+/// uyuşmuyordu. `.text-input-field` CSS'te sabit `color:#fff` idi; düzeltme kutuyu
+/// açarken VE renk değişince `textInput.style.color = state.selectedColor` yapıyor.
+///
+/// Galeriye HİÇBİR ŞEY yazmıyor (kopyalama yok) — dolu galeride de koşulabilir.
+/// Düzeltme olmadan canlı renk beyaz (rgb(255,255,255)) döner; ölçüm ayırt edici.
+fn flow_textcolor(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— metin aracı canlı renk —");
+    let Some(card) = install_card(app, m, "colors") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+    if !check(snip_session(app, &card), "seçim overlay'i açıldı (metin renk)") {
+        remove_card(app);
+        return;
+    }
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+
+    // EDIT 1: KIRMIZI seçiliyken kutuyu aç → canlı yazı kırmızı olmalı.
+    check(pick_tool(app, "text"), "metin aracı etkinleşti");
+    eval(
+        app,
+        "capture-0",
+        "document.querySelector('.color-dot[data-color=\"#ff3b30\"]').click();".to_string(),
+    );
+    sleep(150);
+    eval(app, "capture-0", click_js(qx + qw * 0.15, qy + qh * 0.68));
+    sleep(450);
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        "window.api.sendDebugLog('QAC tc.open=' + getComputedStyle(document.getElementById('text-input')).color);".to_string(),
+    );
+    let c1 = wait_probe("tc.open", 2500).unwrap_or_default();
+    note(&format!("kutu açılışında (kırmızı seçili) canlı renk: {c1}"));
+    check(
+        c1 == "rgb(255, 59, 48)",
+        &format!("açılışta canlı yazı SEÇİLİ renkte (kırmızı), beyaz değil ({c1})"),
+    );
+
+    // EDIT 2: kutu AÇIKKEN yeşile geç → canlı yazı da yeşile dönmeli.
+    eval(
+        app,
+        "capture-0",
+        "document.querySelector('.color-dot[data-color=\"#32d74b\"]').click();".to_string(),
+    );
+    sleep(200);
+    clear_probes();
+    eval(
+        app,
+        "capture-0",
+        "window.api.sendDebugLog('QAC tc.change=' + getComputedStyle(document.getElementById('text-input')).color);".to_string(),
+    );
+    let c2 = wait_probe("tc.change", 2500).unwrap_or_default();
+    note(&format!("renk yeşile değişince canlı renk: {c2}"));
+    check(
+        c2 == "rgb(50, 215, 75)",
+        &format!("kutu açıkken renk değişince canlı yazı da değişti (yeşil) ({c2})"),
+    );
+
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(400);
+    remove_card(app);
+}
+
 /// 2. Renk seçici: bilinen bir çeyreğe tıkla → panoya doğru hex düşsün.
 fn flow_color(app: &tauri::AppHandle, m: &MonitorInfo) {
     note("— renk seçici —");
@@ -2627,7 +2696,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
         .spawn(move || {
             sleep(2500); // açılış otursun
             let wanted: Vec<String> = if which.trim().is_empty() {
-                vec!["snip".into(), "tools".into(), "color".into(), "ocr".into(), "scroll".into(), "multi".into()]
+                vec!["snip".into(), "tools".into(), "textcolor".into(), "color".into(), "ocr".into(), "scroll".into(), "multi".into()]
             } else {
                 which.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect()
             };
@@ -2695,6 +2764,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             let has = |k: &str| wanted.iter().any(|w| w == k);
             if has("snip") { flow_snip(&app, &m, 0); }
             if has("tools") { flow_tools(&app, &m); }
+            if has("textcolor") { flow_textcolor(&app, &m); }
             if has("color") { flow_color(&app, &m); }
             if has("ocr") { flow_ocr(&app, &m); }
             if has("scroll") { flow_scroll(&app, &m); }

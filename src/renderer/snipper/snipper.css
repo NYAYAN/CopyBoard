@@ -453,6 +453,20 @@ button:focus-visible,
     color: var(--overlay-text);
 }
 
-.text-btn:hover {
-    filter: brightness(1.12);
+/* Genel `button:hover` (bg=overlay-hover, color=overlay-text) bu ikon düğmelerinin
+   kimliğini eziyordu: Tamam hover'da moru ve beyaz tiki kaybedip griye dönüyordu.
+   Varyant bazında, daha yüksek özgüllükle geri veriyoruz. */
+.text-btn-ok:hover,
+.text-btn-ok:active {
+    background: color-mix(in srgb, var(--accent) 82%, #000);
+    color: #fff;
+}
+
+.text-btn-cancel:hover {
+    background: var(--overlay-hover);
+    color: var(--overlay-text);
+}
+
+.text-btn-cancel:active {
+    background: var(--overlay-active);
 }

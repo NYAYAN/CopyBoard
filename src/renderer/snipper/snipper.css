@@ -411,22 +411,23 @@ button:focus-visible,
     color: #6e6e6e;
 }
 
-/* Kutunun altındaki Tamam / İptal satırı — Enter/Escape'i bilmeyen kullanıcı için
-   görünür onay. Tam genişliğe yayılıp düğmeleri sağa alıyor. */
+/* Tamam / İptal ikonları metin kutusunun DIŞINDA — hemen altına, sağa hizalı.
+   Kutunun içinde yer kaplamıyorlar (☰ tutamacı gibi kutu dışında konumlu). */
 .text-input-actions {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
     display: flex;
-    align-self: stretch;
-    justify-content: flex-end;
     gap: 6px;
-    padding: 0 6px 6px;
 }
 
 .text-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     padding: 0;
     border-radius: var(--r-xs);
     border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
@@ -435,8 +436,8 @@ button:focus-visible,
 }
 
 .text-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 13px;
+    height: 13px;
     display: block;
 }
 
@@ -446,8 +447,9 @@ button:focus-visible,
     color: #fff;
 }
 
+/* Kutu dışında durduğu için şeffaf değil, kendi yüzey rengiyle görünür. */
 .text-btn-cancel {
-    background: transparent;
+    background: var(--overlay-surface);
     color: var(--overlay-text);
 }
 

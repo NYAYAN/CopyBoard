@@ -1016,6 +1016,44 @@ fn flow_textcolor(app: &tauri::AppHandle, m: &MonitorInfo) {
         &format!("kutu açıkken renk değişince canlı yazı da değişti (yeşil) ({c2})"),
     );
 
+    // EDIT 3: kutu AÇIKKEN başka yere tıklamak onu TAŞIMAMALI (yalnız sürükle
+    // tutamacı taşır). Kullanıcı yazarken tıklayınca kutu fırlıyordu.
+    clear_probes();
+    eval(app, "capture-0",
+        "window.api.sendDebugLog('QAC tb.pos1=' + document.getElementById('text-input-container').style.left);".to_string());
+    let pos1 = wait_probe("tb.pos1", 2500).unwrap_or_default();
+    eval(app, "capture-0", click_js(qx + qw * 0.6, qy + qh * 0.3)); // farklı bir nokta
+    sleep(300);
+    clear_probes();
+    eval(app, "capture-0",
+        "window.api.sendDebugLog('QAC tb.pos2=' + document.getElementById('text-input-container').style.left);".to_string());
+    let pos2 = wait_probe("tb.pos2", 2500).unwrap_or_default();
+    note(&format!("kutu konumu: tıklama öncesi left={pos1}, sonrası left={pos2}"));
+    check(!pos1.is_empty() && pos1 == pos2, &format!("kutu açıkken dışarı tıklamak TAŞIMADI ({pos1} → {pos2})"));
+
+    // EDIT 4: "Tamam" düğmesi metni işleyip kutuyu kapatıyor mu?
+    eval(app, "capture-0", "document.getElementById('text-input').value='QAC';".to_string());
+    sleep(100);
+    eval(app, "capture-0", "document.getElementById('text-ok').click();".to_string());
+    sleep(350);
+    clear_probes();
+    eval(app, "capture-0",
+        "window.api.sendDebugLog('QAC tb.okhide=' + (getComputedStyle(document.getElementById('text-input-container')).display === 'none'));".to_string());
+    let okhide = wait_probe("tb.okhide", 2500).unwrap_or_default();
+    check(okhide == "true", &format!("Tamam düğmesi kutuyu kapattı (gizli={okhide})"));
+
+    // EDIT 5: "İptal" düğmesi kutuyu kapatıyor mu? (yeni kutu aç → iptal)
+    eval(app, "capture-0", click_js(qx + qw * 0.15, qy + qh * 0.68));
+    sleep(300);
+    eval(app, "capture-0", "document.getElementById('text-input').value='XXX';".to_string());
+    eval(app, "capture-0", "document.getElementById('text-cancel').click();".to_string());
+    sleep(350);
+    clear_probes();
+    eval(app, "capture-0",
+        "window.api.sendDebugLog('QAC tb.cancelhide=' + (getComputedStyle(document.getElementById('text-input-container')).display === 'none'));".to_string());
+    let cancelhide = wait_probe("tb.cancelhide", 2500).unwrap_or_default();
+    check(cancelhide == "true", &format!("İptal düğmesi kutuyu kapattı (gizli={cancelhide})"));
+
     on_main(app, |h| crate::capture::close_all(h, None));
     sleep(400);
     remove_card(app);

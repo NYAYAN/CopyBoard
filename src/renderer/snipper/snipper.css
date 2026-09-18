@@ -410,3 +410,39 @@ button:focus-visible,
 .text-input-field::placeholder {
     color: #6e6e6e;
 }
+
+/* Kutunun altındaki Tamam / İptal satırı — Enter/Escape'i bilmeyen kullanıcı için
+   görünür onay. Tam genişliğe yayılıp düğmeleri sağa alıyor. */
+.text-input-actions {
+    display: flex;
+    align-self: stretch;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 0 6px 6px;
+}
+
+.text-btn {
+    font-size: 12px;
+    line-height: 1;
+    padding: 4px 12px;
+    border-radius: var(--r-xs);
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    cursor: pointer;
+    user-select: none;
+    font-family: inherit;
+}
+
+.text-btn-ok {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.text-btn-cancel {
+    background: transparent;
+    color: var(--overlay-text);
+}
+
+.text-btn:hover {
+    filter: brightness(1.12);
+}

@@ -386,6 +386,10 @@ window.addEventListener('mousedown', (e) => {
                 textInputContainer.style.left = e.clientX + 'px'; textInputContainer.style.top = (e.clientY - 20) + 'px';
                 textInputContainer.style.display = 'flex'; textInputContainer.classList.remove('hidden');
                 textInput.style.width = '200px'; textInput.style.height = 'auto'; // Reset size
+                // Canlı yazı, çizilecek metinle AYNI renkte olsun. CSS'te sabit
+                // beyaz duruyordu; kırmızı seçiliyken bile kutuda beyaz görünüp
+                // Enter'a basınca kırmızı çiziliyordu (kullanıcı bildirdi).
+                textInput.style.color = state.selectedColor;
                 setTimeout(() => { textInput.focus(); adjustTextArea(); }, 0);
                 return;
             }
@@ -800,6 +804,8 @@ document.querySelectorAll('.color-dot').forEach(d => {
         drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
         state.selectedColor = d.dataset.color;
         showCurrentColor(d.dataset.color);
+        // Metin kutusu açıkken renk değişirse canlı yazı da anında o renge dönsün.
+        textInput.style.color = d.dataset.color;
         // Update selection border color immediately if selection exists
         if (state.selectionRect) {
             const r = state.selectionRect;

@@ -889,7 +889,8 @@ fn flow_tools(app: &tauri::AppHandle, m: &MonitorInfo) {
     );
     sleep(500);
 
-    // Metin: kutu tıklamayla açılıyor, değer yazılıp Enter ile işleniyor. Renk hâlâ
+    // Metin: kutu tıklamayla açılıyor, değer yazılıp TAMAM (✓) düğmesiyle işleniyor.
+    // Enter artık işlemiyor (yeni satır ekliyor); onay yalnız düğmeyle. Renk hâlâ
     // beyaz, yani yazı mavi çeyrekte tartışmasız ayırt ediliyor.
     check(pick_tool(app, "text"), "metin aracı etkinleşti");
     eval(app, "capture-0", click_js(qx + qw * 0.15, qy + qh * 0.68));
@@ -900,12 +901,12 @@ fn flow_tools(app: &tauri::AppHandle, m: &MonitorInfo) {
         "capture-0",
         "(function(){const t=document.getElementById('text-input');\
           t.value='HHHHHHHH';\
-          t.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));\
+          document.getElementById('text-ok').click();\
           window.api.sendDebugLog('QAC text.done=' + (t.value === '' ? 'islendi' : 'duruyor'));})();"
             .to_string(),
     );
     let done = wait_probe("text.done", 2500).unwrap_or_default();
-    check(done == "islendi", &format!("metin kutusu Enter ile işlendi (okunan: {done})"));
+    check(done == "islendi", &format!("metin kutusu Tamam düğmesiyle işlendi (okunan: {done})"));
 
     arm_clipboard(app);
     eval(app, "capture-0", press_js("btn-copy"));
@@ -1015,6 +1016,18 @@ fn flow_textcolor(app: &tauri::AppHandle, m: &MonitorInfo) {
         c2 == "rgb(50, 215, 75)",
         &format!("kutu açıkken renk değişince canlı yazı da değişti (yeşil) ({c2})"),
     );
+
+    // EDIT 2.5: Enter artık İŞLEMİYOR — textarea'da yeni satır ekliyor, kutu açık
+    // kalıyor. Onay yalnız Tamam (✓) düğmesiyle (kullanıcı isteği).
+    eval(app, "capture-0",
+        "(function(){const t=document.getElementById('text-input'); t.value='satir';\
+          t.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));})();".to_string());
+    sleep(250);
+    clear_probes();
+    eval(app, "capture-0",
+        "window.api.sendDebugLog('QAC tb.enteropen=' + (getComputedStyle(document.getElementById('text-input-container')).display !== 'none'));".to_string());
+    let enteropen = wait_probe("tb.enteropen", 2500).unwrap_or_default();
+    check(enteropen == "true", &format!("Enter kutuyu İŞLEMEDİ, açık kaldı ({enteropen})"));
 
     // EDIT 3: kutu AÇIKKEN başka yere tıklamak onu TAŞIMAMALI (yalnız sürükle
     // tutamacı taşır). Kullanıcı yazarken tıklayınca kutu fırlıyordu.

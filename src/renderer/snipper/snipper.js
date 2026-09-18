@@ -740,10 +740,10 @@ function commitText() {
 }
 
 textInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); e.stopPropagation();
-        commitText();
-    } else if (e.key === 'Escape') {
+    // Enter artık metni İŞLEMİYOR — textarea'da yeni satır ekliyor (varsayılan
+    // davranış). Onay yalnız Tamam (✓) düğmesiyle. Escape ise hızlı iptal.
+    // (Kullanıcı isteği: çok satırlı metin için Enter serbest kalsın.)
+    if (e.key === 'Escape') {
         e.stopPropagation();
         hideTextBox();
     }

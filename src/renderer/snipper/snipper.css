@@ -422,14 +422,22 @@ button:focus-visible,
 }
 
 .text-btn {
-    font-size: 12px;
-    line-height: 1;
-    padding: 4px 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
     border-radius: var(--r-xs);
     border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
     cursor: pointer;
     user-select: none;
-    font-family: inherit;
+}
+
+.text-btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
 }
 
 .text-btn-ok {

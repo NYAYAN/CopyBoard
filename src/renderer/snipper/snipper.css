@@ -462,11 +462,17 @@ button:focus-visible,
     color: #fff;
 }
 
+/* ✕ bir kapatma/vazgeçme eylemi — uygulamanın kapatma düğmesi (#btn-close) gibi
+   hover'da danger rengine dönüyor (griye değil). */
 .text-btn-cancel:hover {
-    background: var(--overlay-hover);
-    color: var(--overlay-text);
+    background: var(--danger-solid);
+    border-color: var(--danger-solid);
+    color: #fff;
 }
 
 .text-btn-cancel:active {
-    background: var(--overlay-active);
+    background: var(--danger-solid);
+    border-color: var(--danger-solid);
+    color: #fff;
+    filter: brightness(0.9);
 }

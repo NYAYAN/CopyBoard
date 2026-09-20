@@ -906,9 +906,9 @@ boyut/tarih/boyut, araç çubuğu, şerit). Widget mor düğmesiyle şeffaf rend
 
 | | Electron | Tauri |
 |---|---|---|
-| macOS | `~/Library/Application Support/copyboard/config.json` | `~/Library/Application Support/com.nurullahyayan.copyboard/config.json` |
-| Windows | `%APPDATA%\copyboard\config.json` | `%APPDATA%\com.nurullahyayan.copyboard\config.json` |
-| Ekran görüntüleri | `.../copyboard/screenshots/*.png` | `.../com.nurullahyayan.copyboard/screenshots/*.png` |
+| macOS | `~/Library/Application Support/copyboard/config.json` | `~/Library/Application Support/com.nurullahyayan.copyboard.tauri/config.json` |
+| Windows | `%APPDATA%\copyboard\config.json` | `%APPDATA%\com.nurullahyayan.copyboard.tauri\config.json` |
+| Ekran görüntüleri | `.../copyboard/screenshots/*.png` | `.../com.nurullahyayan.copyboard.tauri/screenshots/*.png` |
 
 ### 8.2 Göç algoritması (`migrate.rs`, ilk çalıştırmada bir kez)
 

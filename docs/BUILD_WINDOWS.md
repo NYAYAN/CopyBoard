@@ -36,7 +36,7 @@ Debug exe (`src-tauri\target\debug\copyboard.exe`) tek başına çalışır; ara
 gömülüdür, dev sunucusu gerekmez. Yararlı bayraklar (debug): `--qa`, `--record-test=ultra,20`,
 `--copy-test=<metin>`, `--viewer`; release'te de çalışan: `--shot-test`.
 
-Günlük: `%LOCALAPPDATA%\com.nurullahyayan.copyboard\logs\copyboard.log`
+Günlük: `%LOCALAPPDATA%\com.nurullahyayan.copyboard.tauri\logs\copyboard.log`
 
 ## Sık hatalar
 

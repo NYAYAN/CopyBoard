@@ -68,8 +68,8 @@ Windows'ta akış Electron'daki gibi: indir → "İndirme Tamamlandı" → 3-2-1
 
 Kullanıcıdan sorun kaydı isterken:
 
-* macOS: `~/Library/Logs/com.nurullahyayan.copyboard/copyboard.log`
-* Windows: `%LOCALAPPDATA%\com.nurullahyayan.copyboard\logs\copyboard.log`
+* macOS: `~/Library/Logs/com.nurullahyayan.copyboard.tauri/copyboard.log`
+* Windows: `%LOCALAPPDATA%\com.nurullahyayan.copyboard.tauri\logs\copyboard.log`
 
 Dosya 4 MB'a kadar büyür, dolunca sıfırlanır; renderer'ın `console.warn/error`
 çıktıları da buraya düşer.

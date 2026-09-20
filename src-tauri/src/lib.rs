@@ -72,8 +72,8 @@ pub fn run() {
         // görünmez kaldı. Konsola VE dosyaya yazıyor; dosya, kullanıcıda çıkan
         // bir sorunu istemenin tek makul yolu.
         //
-        // Dosya: macOS `~/Library/Logs/com.nurullahyayan.copyboard/copyboard.log`,
-        // Windows `%LOCALAPPDATA%\com.nurullahyayan.copyboard\logs\copyboard.log`.
+        // Dosya: macOS `~/Library/Logs/com.nurullahyayan.copyboard.tauri/copyboard.log`,
+        // Windows `%LOCALAPPDATA%\com.nurullahyayan.copyboard.tauri\logs\copyboard.log`.
         .plugin(
             tauri_plugin_log::Builder::new()
                 // Geliştirmede Debug, paketlenmiş sürümde Info: Debug seviyesi

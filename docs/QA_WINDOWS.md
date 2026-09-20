@@ -6,7 +6,7 @@ bulundu, ne düzeltildi, ne bekliyor. Kontroller üç katmanda yapıldı:
 1. **`--qa` kendini-sınama** (`src-tauri/src/qa.rs`, yalnız debug derlemesi): Rust
    tarafındaki akışları komut işleyicileri üzerinden çalıştırır, sonucu pencere/pano
    durumundan okur. Çalıştırma: `scripts\win-env.cmd npx tauri dev -- -- --qa`, sonuç
-   `%LOCALAPPDATA%\com.nurullahyayan.copyboard\logs\copyboard.log` içinde `QA ✓/✗`.
+   `%LOCALAPPDATA%\com.nurullahyayan.copyboard.tauri\logs\copyboard.log` içinde `QA ✓/✗`.
 2. **Win32 gözlemi**: `EnumWindows`/`IsWindowVisible`/`WindowFromPoint`/`Process.Responding`
    ile gerçek pencere durumu; sentetik tıklama/klavye ile gerçek kullanıcı yolu.
 3. **Kod okuması**: renderer → `api-tauri.js` → komut zinciri.

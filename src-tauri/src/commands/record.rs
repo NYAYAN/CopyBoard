@@ -153,7 +153,33 @@ pub async fn record_start(
             path,
         )
         .map_err(|e| {
-            crate::windows::toast::show(&app, &format!("Kayıt başlatılamadı: {e}"), "error");
+            // macOS'ta ekran kaydı izni yoksa SCStream "declined TCCs" der. Buraya
+            // ULAŞMAMIZ demek `has_screen_recording()` (CGPreflight) baştan "izin var"
+            // dedi demek — CGPreflight bundle id'ye bakıp yanılabiliyor (ör. sorumlu
+            // sürecin iznini görüp true dönmesi). Kullanıcıyı ham hatayla bırakma:
+            // izin akışını burada tetikle — bu, uygulamayı Ekran Kaydı listesine EKLER
+            // (CGRequestScreenCaptureAccess) ve Ayarlar'ı açar. Kullanıcı izni verip
+            // uygulamayı yeniden başlatınca SCStream aynı imzayı görüp kaydı başlatır.
+            #[cfg(target_os = "macos")]
+            let permission_denied = e.contains("declined") && e.contains("TCC");
+            #[cfg(not(target_os = "macos"))]
+            let permission_denied = false;
+
+            if permission_denied {
+                // Yerel diyalog ana thread ister; `record_start` bir ASYNC komut,
+                // yani burası ana thread DEĞİL. Diğer tek çağrı yolu
+                // (`capture::start`) zaten `run_on_main_thread` üzerinden geliyor
+                // (lib.rs) — aynı konvansiyonda kal.
+                #[cfg(target_os = "macos")]
+                {
+                    let h = app.clone();
+                    let _ = app.run_on_main_thread(move || {
+                        crate::capture::request_screen_permission(&h)
+                    });
+                }
+            } else {
+                crate::windows::toast::show(&app, &format!("Kayıt başlatılamadı: {e}"), "error");
+            }
             e
         })?;
 

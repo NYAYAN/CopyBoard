@@ -410,7 +410,15 @@ async function startRecording() {
         document.querySelectorAll('.resize-handle').forEach(h => h.style.display = 'block');
         state.isRecording = false;
         reportToolbarHitArea();   // overlay yeniden tamamen etkileşimli
-        alert('Kayıt başlatılamadı: ' + (e && e.message ? e.message : e));
+        // macOS'ta ekran kaydı izni yoksa ana süreç ZATEN kendi izin diyaloğunu
+        // açıyor (kullanıcıyı Ayarlar'a götüren). Ham İngilizce SCStream hatasını
+        // ikinci bir kutuda daha göstermek kullanıcıyı iki mesajla karşılıyordu —
+        // bildirilen şikâyet tam olarak buydu. O durumda burada sus, diyalog konuşsun.
+        const detail = (e && e.message) ? e.message : String(e ?? '');
+        const permissionDenied = /declined/i.test(detail) && /TCC/.test(detail);
+        if (!permissionDenied) {
+            alert('Kayıt başlatılamadı: ' + detail);
+        }
     }
 }
 

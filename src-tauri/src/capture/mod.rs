@@ -354,7 +354,7 @@ pub fn forget_window(app: &tauri::AppHandle, label: &str) {
 }
 
 #[cfg(target_os = "macos")]
-fn request_screen_permission(app: &tauri::AppHandle) {
+pub(crate) fn request_screen_permission(app: &tauri::AppHandle) {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
     let handle = app.clone();

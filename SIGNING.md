@@ -90,7 +90,7 @@ uygulama** — eski izin ona ait değil, Ayarlar'dan yeniden verilmesi gerekir.
 imzalanırsa gereksinim şu hâle gelir ve izin kalıcı olur:
 
 ```
-designated => identifier "com.nurullahyayan.copyboard" and certificate leaf = H"…"
+designated => identifier "com.nurullahyayan.copyboard.tauri" and certificate leaf = H"…"
 ```
 
 Bunun için $99'lık Apple hesabı gerekmiyor; kendinden imzalı bir sertifika yeter
@@ -131,7 +131,7 @@ codesign -d -r- src-tauri/target/release/bundle/macos/CopyBoard.app
 Çıktı `cdhash` değil şunu demeli:
 
 ```
-designated => identifier "com.nurullahyayan.copyboard" and certificate leaf = H"…"
+designated => identifier "com.nurullahyayan.copyboard.tauri" and certificate leaf = H"…"
 ```
 
 İzni bir kez ver; sonraki derlemeler aynı kimliği taşıdığı için yeniden sormaz.
@@ -144,7 +144,7 @@ yani binary hash'i her seferinde farklı) aynı gereksinimi üretti:
 | | Belirlenmiş gereksinim |
 |---|---|
 | İmzasız (önce) | `cdhash H"029b5567…"` — her derlemede DEĞİŞİR |
-| `CopyBoard Dev` ile (sonra) | `identifier "com.nurullahyayan.copyboard" and certificate leaf = H"998278a1…"` — 3/3 derlemede AYNI |
+| `CopyBoard Dev` ile (sonra) | `identifier "com.nurullahyayan.copyboard.tauri" and certificate leaf = H"998278a1…"` — 3/3 derlemede AYNI |
 
 ### Yerel derlemede DMG neden başarısız oluyor (`-1743`)
 

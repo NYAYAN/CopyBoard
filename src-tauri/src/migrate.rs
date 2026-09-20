@@ -8,9 +8,14 @@
 //!
 //! | | Electron | Tauri |
 //! |---|---|---|
-//! | macOS | `~/Library/Application Support/copyboard` | `~/Library/Application Support/com.nurullahyayan.copyboard` |
-//! | Windows | `%APPDATA%\copyboard` | `%APPDATA%\com.nurullahyayan.copyboard` |
-//! | Linux | `~/.config/copyboard` | `~/.config/com.nurullahyayan.copyboard` |
+//! | macOS | `~/Library/Application Support/copyboard` | `~/Library/Application Support/com.nurullahyayan.copyboard.tauri` |
+//! | Windows | `%APPDATA%\copyboard` | `%APPDATA%\com.nurullahyayan.copyboard.tauri` |
+//! | Linux | `~/.config/copyboard` | `~/.config/com.nurullahyayan.copyboard.tauri` |
+//!
+//! Not: Tauri bundle id'si `…copyboard.tauri` — Electron'un `…copyboard` id'sinden
+//! KASITLI olarak ayrı. İkisi macOS'ta aynı id'yi paylaşınca ekran kaydı (TCC) izni
+//! çakışıyordu: `CGPreflightScreenCaptureAccess` id'ye bakıp "izin var" derken
+//! ScreenCaptureKit imzayı zorlayıp reddediyordu. Ayrı id bunu kalıcı çözer.
 
 use std::path::{Path, PathBuf};
 

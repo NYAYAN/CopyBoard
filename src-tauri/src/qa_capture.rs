@@ -2077,13 +2077,58 @@ fn flow_stalehit(app: &tauri::AppHandle, m: &MonitorInfo) {
         mouse::move_to(mx, my);
     }
     sleep(400);
+
+    // ── ÖLÇÜM GEÇERLİ Mİ ─────────────────────────────────────────────────────
+    // `flow_firstclick` bunları doğruluyor, burada eksikti. Doğrulamadan
+    // "olay ulaşmadı" demek, ÜRÜN hatasıyla koordinat/monitör/odak karışıklığını
+    // ayırt edemez — başarısızlığın nedenini okunamaz kılıyordu.
+    let (hx, hy) = to_screen(m, m.width * 0.5, m.height * 0.5);
+    mouse::move_to(hx, hy);
+    sleep(250);
+    let gercek = on_main(app, crate::geom::cursor_position).flatten();
+    let dogru = gercek
+        .map(|(cx, cy)| cx >= m.x && cx < m.x + m.width && cy >= m.y && cy < m.y + m.height)
+        .unwrap_or(false);
+    note(&format!(
+        "imleç hedeflenen {:?}, gerçekte {gercek:?} → doğru ekranda: {dogru}",
+        (hx.round(), hy.round())
+    ));
+    check(dogru, "imleç ölçülen overlay'in ekranında (ölçüm geçerli)");
+
     clear_probes();
     eval(
         app,
         "capture-0",
-        "window.api.sendDebugLog('QAC sh.move=' + (window.__qacMove ?? -1));".to_string(),
+        "window.api.sendDebugLog('QAC sh.diag=' + innerWidth + 'x' + innerHeight\
+          + ' odak=' + document.hasFocus() + ' gorunur=' + document.visibilityState\
+          + ' dinleyici=' + (typeof window.__qacMove));"
+            .to_string(),
     );
-    let moves: i32 = wait_probe("sh.move", 3000).and_then(|v| v.trim().parse().ok()).unwrap_or(-1);
+    if let Some(d) = wait_probe("sh.diag", 2500) {
+        note(&format!("yeni overlay tanı: {d}"));
+    }
+
+    // ── KOŞULA KADAR BEKLE, TEK ATIŞ ÖRNEKLEME YAPMA ────────────────────────
+    // Burası uzun süre YANLIŞ ALARM verdi: ölçüm 0 okuyup "overlay sağır" diyordu.
+    // Ölçüldü: olaylar ULAŞIYOR, sadece geç işleniyor. Snipper açılışta 3600x2338
+    // ekran görüntüsünü boyuyor (`PERF kare teslim +1939 ms`) ve o sırada sayfanın
+    // ana thread'i meşgul — `mousemove`lar kuyrukta bekliyor. Aynı koşuda ~1 sn
+    // sonra sayaç 0 değil 13 okundu. Tek atış örnekleme boyama penceresine
+    // denk geldiğinde testi ürün hatası yokken düşürüyordu.
+    let mut moves: i32 = -1;
+    for _ in 0..20 {
+        clear_probes();
+        eval(
+            app,
+            "capture-0",
+            "window.api.sendDebugLog('QAC sh.move=' + (window.__qacMove ?? -1));".to_string(),
+        );
+        moves = wait_probe("sh.move", 1000).and_then(|v| v.trim().parse().ok()).unwrap_or(-1);
+        if moves >= 1 {
+            break;
+        }
+        sleep(200);
+    }
     note(&format!("bayat kayıttan sonra fare hareketi = {moves}"));
     check(
         moves >= 1,

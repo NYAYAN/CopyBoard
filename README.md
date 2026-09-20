@@ -2,7 +2,7 @@
 
 > **Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR (Resimden Yazıya Çevirme) Uygulaması**
 
-![Version](https://img.shields.io/badge/version-2.11.0-blue)
+![Version](https://img.shields.io/badge/version-2.13.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-ISC-green)
 
@@ -42,7 +42,7 @@ CopyBoard, günlük iş akışınızı hızlandırmak ve verimliliğinizi artır
 - **Çizim Araçları:**
   - ✏️ **Kalem:** Serbest çizim yapın.
   - ⬜ **Şekiller:** Kare, Daire ve Ok işaretleri ekleyin.
-  - 📝 **Metin:** Görüntü üzerine notlar yazın.
+  - 📝 **Metin:** Görüntü üzerine notlar yazın. Yazı seçili renkte görünür, `Enter` alt satıra geçer, kutuyu `☰` tutamacından taşırsınız; sağ alttaki `✓` ile işler, `✕` ile vazgeçersiniz.
   - 🌫️ **Blur (Bulanıklaştırma):** Hassas bilgileri (şifre, kimlik vb.) sansürleyin.
 - **Kopyalama & Kaydetme:** Görüntüyü direkt panoya kopyalayın (`Ctrl+C`) veya PNG olarak kaydedin.
 

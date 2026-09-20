@@ -16,9 +16,17 @@
     box-sizing: border-box;
 }
 
+/* Pencere `transparent: true` açılıyor ve tüm görünür yüzey .update-container'a ait
+   (köşeleri --r-xl ile yuvarlatılmış). Zemin burada opak kaldığı sürece o yuvarlak
+   köşelerin dışında kalan üçgenler body'nin rengiyle doluyor ve açık temada beyaz
+   bir çentik gibi görünüyordu. Zemini şeffaf bırakınca köşeler gerçekten oyuluyor. */
+html {
+    background: transparent;
+}
+
 body {
     font-family: var(--font-ui);
-    background: var(--surface);
+    background: transparent;
     margin: 0;
     padding: 0;
     overflow: hidden;

@@ -307,6 +307,9 @@ window.addEventListener('mousedown', (e) => {
     if (e.target.closest('.toolbar')) return;
     if (e.target.closest('#text-input-container')) {
         if (e.target === textDragHandle) {
+            // Tutamağı sürüklemek bir metin seçimi başlatmasın. Textarea'nın KENDİSİ
+            // için çağrılmıyor — orada varsayılan davranış odaklanma ve imleç yerleşimi.
+            e.preventDefault();
             state.isDraggingText = true;
             const r = textInputContainer.getBoundingClientRect();
             state.dragOffX = e.clientX - r.left; state.dragOffY = e.clientY - r.top;
@@ -328,9 +331,16 @@ window.addEventListener('mousedown', (e) => {
             if (e.clientX < r.x || e.clientX > r.x + r.w || e.clientY < r.y || e.clientY > r.y + r.h) return;
 
             if (state.activeTool === 'text') {
+                // Kutu ZATEN açıksa dışarı tıklamak onu TAŞIMASIN — yalnız sürükle
+                // tutamacı (☰) taşır. Kullanıcı yazarken bir yere tıkladığında kutu
+                // oraya fırlıyordu. Yeni bir kutu için önce ✓ ile onayla (ya da
+                // ✕/Escape ile kapat), sonra tıkla.
+                if (textInputContainer.style.display === 'flex') return;
                 textInputContainer.style.left = e.clientX + 'px'; textInputContainer.style.top = (e.clientY - 20) + 'px';
                 textInputContainer.style.display = 'flex'; textInputContainer.classList.remove('hidden');
                 textInput.style.width = '200px'; textInput.style.height = 'auto'; // Reset size
+                // Canlı yazı, çizilecek metinle AYNI renkte olsun.
+                textInput.style.color = state.selectedColor;
                 setTimeout(() => { textInput.focus(); adjustTextArea(); }, 0);
                 return;
             }
@@ -649,26 +659,48 @@ function safeGetImage() {
     }
 }
 
+function hideTextBox() {
+    textInputContainer.style.display = 'none';
+    textInput.value = '';
+}
+
+// Metni seçili renkte, seçim dikdörtgenine kırpılmış olarak çiz.
+function commitText() {
+    const v = textInput.value.trim();
+    if (v) {
+        saveState();
+        const sx = state.scaleX != null ? state.scaleX : state.dpr;
+        const sy = state.scaleY != null ? state.scaleY : state.dpr;
+        const scale = (sx + sy) / 2;
+        drawCtx.save();
+        drawCtx.fillStyle = state.selectedColor;
+        drawCtx.font = (20 * scale) + "px Arial";
+        const cp = new Path2D(); cp.rect(state.selectionRect.x * sx, state.selectionRect.y * sy, state.selectionRect.w * sx, state.selectionRect.h * sy);
+        drawCtx.clip(cp);
+        const ir = textInput.getBoundingClientRect(); let x = ir.left + 10, y = ir.top + 22;
+        v.split('\n').forEach(l => { drawCtx.fillText(l, x * sx, y * sy); y += 24; });
+        drawCtx.restore();
+    }
+    hideTextBox();
+}
+
 textInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); e.stopPropagation(); const v = textInput.value.trim();
-        if (v) {
-            saveState();
-            const sx = state.scaleX != null ? state.scaleX : state.dpr;
-            const sy = state.scaleY != null ? state.scaleY : state.dpr;
-            const scale = (sx + sy) / 2;
-            drawCtx.save();
-            drawCtx.fillStyle = state.selectedColor;
-            drawCtx.font = (20 * scale) + "px Arial";
-            const cp = new Path2D(); cp.rect(state.selectionRect.x * sx, state.selectionRect.y * sy, state.selectionRect.w * sx, state.selectionRect.h * sy);
-            drawCtx.clip(cp);
-            const ir = textInput.getBoundingClientRect(); let x = ir.left + 10, y = ir.top + 22;
-            v.split('\n').forEach(l => { drawCtx.fillText(l, x * sx, y * sy); y += 24; });
-            drawCtx.restore();
-        }
-        textInputContainer.style.display = 'none'; textInput.value = '';
-    } else if (e.key === 'Escape') { e.stopPropagation(); textInputContainer.style.display = 'none'; textInput.value = ''; }
+    // Enter artık metni İŞLEMİYOR — textarea'da yeni satır ekliyor (varsayılan
+    // davranış). Onay yalnız ✓ düğmesiyle. Escape ise hızlı iptal.
+    if (e.key === 'Escape') {
+        e.stopPropagation();
+        hideTextBox();
+    }
 });
+
+// Kutunun altındaki ✓ / ✕ düğmeleri. mousedown'da preventDefault — düğmeye basmak
+// textarea'yı blur edip caret'i bozmasın ve overlay'in mousedown'ı (yeni seçim/çizim)
+// tetiklenmesin.
+const textOkBtn = document.getElementById('text-ok');
+const textCancelBtn = document.getElementById('text-cancel');
+[textOkBtn, textCancelBtn].forEach((b) => b && b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); }));
+textOkBtn && textOkBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); commitText(); });
+textCancelBtn && textCancelBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); hideTextBox(); });
 
 // Arrow-key fine-tuning: arrows move the selection 1px, Shift+arrows resize it 1px
 // (right/bottom edge), Ctrl multiplies the step by 10. Standard in snipping tools for
@@ -699,8 +731,9 @@ function nudgeSelection(key, shiftKey, ctrlKey) {
 }
 
 document.addEventListener('keydown', (e) => {
-    // While typing an annotation, leave undo/copy/close to the textarea (and its own
-    // Enter/Escape handler); don't trigger canvas undo, image copy, or window close.
+    // While typing an annotation, leave undo/copy/close to the textarea (Enter is a
+    // newline there now, and Escape is its own cancel); don't trigger canvas undo,
+    // image copy, or window close.
     if (document.activeElement === textInput) return;
     if (e.key === 'Escape') window.api.closeSnipper();
     // Cmd on macOS, Ctrl elsewhere — accept either so Cmd+C/Cmd+Z work natively on Mac.
@@ -745,6 +778,8 @@ document.querySelectorAll('.color-dot').forEach(d => {
         drawCtx.strokeStyle = drawCtx.fillStyle = d.dataset.color;
         state.selectedColor = d.dataset.color;
         showCurrentColor(d.dataset.color);
+        // Metin kutusu açıkken renk değişirse canlı yazı da anında o renge dönsün.
+        textInput.style.color = d.dataset.color;
         // Update selection border color immediately if selection exists
         if (state.selectionRect) {
             const r = state.selectionRect;

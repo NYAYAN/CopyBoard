@@ -1,3 +1,52 @@
+# CopyBoard v2.13.0 Release Notes
+
+Güncelleme ekranı artık sürümünü söylüyor, ve ekran görüntüsü metin aracı yazdığınız
+rengi gösteriyor.
+
+## 🔄 Güncelleme ekranı
+
+- **Ekran "Mevcut Versiyon: -" / "Yeni Versiyon: -" ve sonsuza kadar "Yükleniyor..."
+  diye açılıyordu.** Uygulamayı güncelledikten ya da bilgisayarı yeniden başlattıktan
+  sonraki ilk açılışta gelen pencere boş kalıyor, öylece duruyordu. Sebep bir yarıştı:
+  ana süreç sürüm bilgisini pencerenin `ready-to-show` anında yolluyordu, ama o an
+  `update-dialog.js` henüz çalışmamış oluyor — ölçüldü, `ready-to-show` sayfanın
+  `did-finish-load`'ından **~23 ms önce** geliyor. Mesajı dinleyen kimse olmadığı için
+  mesaj düşüyor ve ikinci bir deneme hiç yapılmıyordu, dolayısıyla ekran kalıcı olarak
+  boş kalıyordu; bir kere kaçırınca dolduracak hiçbir yol yoktu.
+- **Artık bilgi iki yoldan geliyor ve ikisi de yarışa kapalı.** Ana süreç gösterilecek
+  bilgiyi saklıyor; pencere yüklenir yüklenmez onu `get-update-info` ile **kendisi
+  çekiyor**, ayrıca push da `ready-to-show` yerine `did-finish-load`'a taşındı — yani
+  dinleyiciler kurulduktan sonra atılıyor. Ekrana yazan fonksiyon tek ve idempotent,
+  iki yol da varsa aynı veriyi yazmış oluyorlar.
+- **Yuvarlatılmış köşelerin dışı beyaz bir çentik gibi görünüyordu.** Pencere
+  `transparent: true` açılıyor ve görünen bütün yüzey kartın kendisi, ama zemin opak
+  bırakılmıştı (ölçüldü: `rgb(15, 15, 18)`; açık temada beyaza yakın). 16px'lik
+  yarıçapın dışında kalan üçgenleri o zemin dolduruyordu. Zemin şeffaf yapıldı, kart
+  opak kaldı — köşeler artık gerçekten oyuluyor.
+
+## 📝 Ekran görüntüsünde metin aracı
+
+- **Yazı kutuda beyaz görünüyordu, ama kırmızı çiziliyordu.** Varsayılan renk kırmızı
+  olmasına rağmen yazı alanının rengi CSS'te sabit beyaz duruyordu; ne yazdığınızı
+  işlemeden önce hangi renkte olacağını göremiyordunuz. Kutu artık seçili renkte
+  açılıyor ve **paletten renk değiştirdiğinizde yazdığınız metin de anında o renge
+  dönüyor** — kutudaki görüntü ile çizilecek sonuç aynı.
+- **Kutu, ekrandaki her tıklamada oraya fırlıyordu.** Yazarken bir yere tıklamak
+  kutuyu oraya taşıyordu. Artık kutuyu yalnızca sol üstündeki `☰` tutamacı taşıyor;
+  başka bir yere tıklamak onu yerinden oynatmıyor. Yeni bir kutu açmak için önce
+  bulunduğunuzu işleyin ya da kapatın.
+- **`Enter` artık alt satıra geçiyor**, metni işlemiyor. Çok satırlı not yazmanın yolu
+  `Shift+Enter` olmaktan çıktı; onay ayrı ve görünür bir eyleme taşındı.
+- **Onay ve iptal, kutunun dışında iki ikon düğmesi.** Sağ alt köşede, çerçevenin
+  hemen altında: `✓` metni işler, `✕` vazgeçer (`Escape` de vazgeçiyor). Kutunun
+  içinde yer kaplamıyorlar. Hover'da ikisi de kimliğini koruyor — genel düğme
+  kuralı `✓`'in morunu griye çeviriyordu; `✓` hover'da koyulaşıyor, `✕` ise
+  uygulamanın kapatma düğmesi gibi danger rengine dönüyor.
+
+## 🔧 Ayrıca
+
+- README'nin sürüm rozeti 2.11.0'da kalmıştı; 2.13.0'a getirildi.
+
 # CopyBoard v2.12.0 Release Notes
 
 Ekran görüntülerini yan yana karşılaştırma, ve çerçevesiz pencerenin eksik düğmeleri.

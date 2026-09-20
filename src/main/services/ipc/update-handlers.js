@@ -1,9 +1,12 @@
 const { ipcMain, shell } = require('electron');
 const { state } = require('../state');
-const { checkForUpdates, downloadUpdate, installUpdate } = require('../update-manager');
+const { checkForUpdates, downloadUpdate, installUpdate, getPendingUpdateInfo } = require('../update-manager');
 
 // Auto-update controls + the "open this URL externally" bridge used by the update dialog.
 function registerUpdateHandlers() {
+    // Diyalog yüklenince bilgiyi kendisi çeker — 'update-info' push'unu kaçırma
+    // ihtimaline karşı yarışsız yol (bkz. update-manager.js pendingUpdateInfo).
+    ipcMain.handle('get-update-info', () => getPendingUpdateInfo());
     ipcMain.on('check-for-updates', checkForUpdates);
     ipcMain.on('download-update', downloadUpdate);
     ipcMain.on('install-update', installUpdate);

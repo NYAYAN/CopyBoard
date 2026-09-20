@@ -376,10 +376,15 @@ button:focus-visible,
 }
 
 .text-input-field {
+    /* Yazarken görünen renk, Tamam'a basınca ÇİZİLECEK renkle aynı olmalı. Burası
+       sabit beyaz duruyordu: varsayılan kırmızı seçiliyken bile kutuda beyaz yazı
+       görünüyor, onaylayınca kırmızı çiziliyordu. Bu değer yalnız ilk karelik bir
+       taban — kutu her açıldığında ve renk her değiştiğinde JS seçili rengi inline
+       atıyor (bkz. snipper.js). */
     background: transparent;
     border: none;
     padding: 6px 10px;
-    color: #fff;
+    color: #ff3b30;
     font-size: 16px;
     font-family: Arial, sans-serif;
     outline: none;
@@ -396,4 +401,70 @@ button:focus-visible,
 
 .text-input-field::placeholder {
     color: #6e6e6e;
+}
+
+/* Tamam / İptal ikonları metin kutusunun DIŞINDA — hemen altına, sağa hizalı.
+   Kutunun içinde yer kaplamıyorlar (☰ tutamacı gibi kutu dışında konumlu). */
+.text-input-actions {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    display: flex;
+    gap: 6px;
+}
+
+.text-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: var(--r-xs);
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    cursor: pointer;
+    user-select: none;
+}
+
+.text-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+}
+
+.text-btn-ok {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* Kutu dışında durduğu için şeffaf değil, kendi yüzey rengiyle görünür. */
+.text-btn-cancel {
+    background: var(--overlay-surface);
+    color: var(--overlay-text);
+}
+
+/* Genel `button:hover` (bg=overlay-hover, color=overlay-text) bu ikon düğmelerinin
+   kimliğini eziyordu: Tamam hover'da moru ve beyaz tiki kaybedip griye dönüyordu.
+   Varyant bazında, daha yüksek özgüllükle geri veriyoruz. */
+.text-btn-ok:hover,
+.text-btn-ok:active {
+    background: color-mix(in srgb, var(--accent) 82%, #000);
+    color: #fff;
+}
+
+/* ✕ bir kapatma/vazgeçme eylemi — uygulamanın kapatma düğmesi (#btn-close) gibi
+   hover'da danger rengine dönüyor (griye değil). */
+.text-btn-cancel:hover {
+    background: var(--danger-solid);
+    border-color: var(--danger-solid);
+    color: #fff;
+}
+
+.text-btn-cancel:active {
+    background: var(--danger-solid);
+    border-color: var(--danger-solid);
+    color: #fff;
+    filter: brightness(0.9);
 }

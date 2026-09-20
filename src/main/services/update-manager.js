@@ -13,6 +13,14 @@ autoUpdater.autoInstallOnAppQuit = true;
 
 let updateWindow = null;
 
+// Diyaloğa gösterilecek bilgi burada da DURUYOR. Sebebi ölçüldü: pencere
+// 'ready-to-show' anında henüz update-dialog.js'i çalıştırmamış oluyor
+// (ready-to-show, did-finish-load'dan ~23 ms ÖNCE geliyor), yani o anda atılan
+// push mesajını dinleyen kimse yok — ekran "Mevcut Versiyon -" / "Yükleniyor..."
+// diye donup kalıyordu. Artık renderer yüklenir yüklenmez bunu KENDİSİ çekiyor
+// (get-update-info), push de yedek olarak did-finish-load'da atılıyor.
+let pendingUpdateInfo = null;
+
 function createUpdateWindow(updateInfo) {
     if (updateWindow && !updateWindow.isDestroyed()) {
         updateWindow.focus();
@@ -44,24 +52,33 @@ function createUpdateWindow(updateInfo) {
     // Mirror to shared state so other services (e.g. open-url) can close it
     state.updateWindow = updateWindow;
 
+    pendingUpdateInfo = {
+        version: updateInfo.version,
+        currentVersion: app.getVersion(),
+        releaseNotes: updateInfo.releaseNotes,
+        releaseName: updateInfo.releaseName,
+        isMac: process.platform === 'darwin'
+    };
+
     updateWindow.loadFile(path.join(__dirname, '../../renderer/update/update-dialog.html'));
 
     updateWindow.once('ready-to-show', () => {
-        if (updateWindow && !updateWindow.isDestroyed()) {
-            updateWindow.show();
-            updateWindow.webContents.send('update-info', {
-                version: updateInfo.version,
-                currentVersion: app.getVersion(),
-                releaseNotes: updateInfo.releaseNotes,
-                releaseName: updateInfo.releaseName,
-                isMac: process.platform === 'darwin'
-            });
+        if (updateWindow && !updateWindow.isDestroyed()) updateWindow.show();
+    });
+
+    // Yedek push: sayfa TAM yüklendikten sonra, yani dinleyiciler kurulduktan sonra.
+    // Renderer ayrıca get-update-info ile çekiyor; hangisi önce varırsa o doldurur,
+    // ikisi de varsa aynı veriyi iki kez yazmış olur (zararsız).
+    updateWindow.webContents.on('did-finish-load', () => {
+        if (updateWindow && !updateWindow.isDestroyed() && pendingUpdateInfo) {
+            updateWindow.webContents.send('update-info', pendingUpdateInfo);
         }
     });
 
     updateWindow.on('closed', () => {
         updateWindow = null;
         state.updateWindow = null;
+        pendingUpdateInfo = null;
     });
 }
 
@@ -197,8 +214,14 @@ function installUpdate() {
     }
 }
 
+// Renderer'ın çektiği kaynak (bkz. pendingUpdateInfo).
+function getPendingUpdateInfo() {
+    return pendingUpdateInfo;
+}
+
 module.exports = {
     initAutoUpdater,
+    getPendingUpdateInfo,
     checkForUpdates,
     checkForUpdatesSilently,
     downloadUpdate,

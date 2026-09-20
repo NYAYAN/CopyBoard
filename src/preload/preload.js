@@ -126,6 +126,7 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),
     onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (_, info) => callback(info)),
     onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (_, progress) => callback(progress)),
+    getUpdateInfo: () => ipcRenderer.invoke('get-update-info'),
     onUpdateInfo: (callback) => ipcRenderer.on('update-info', (_, info) => callback(info)),
     onUpdateError: (callback) => ipcRenderer.on('update-error', (_, err) => callback(err))
 });

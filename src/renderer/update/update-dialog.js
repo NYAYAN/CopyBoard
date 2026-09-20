@@ -2,8 +2,10 @@ const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? win
 // Update dialog renderer process
 let updateInfo = null;
 
-// Initialize dialog with update info
-window.api.onUpdateInfo((info) => {
+// Bilgiyi ekrana yazan tek yol. İki kaynaktan da çağrılıyor (push + pull), o yüzden
+// idempotent: aynı veriyle ikinci kez çağrılması aynı sonucu yazar.
+function applyUpdateInfo(info) {
+    if (!info) return;
     updateInfo = info;
 
     // Update version numbers
@@ -30,7 +32,17 @@ window.api.onUpdateInfo((info) => {
         İndir (GitHub)
         `;
     }
-});
+}
+
+window.api.onUpdateInfo(applyUpdateInfo);
+
+// Bilgiyi ayrıca main'den ÇEK. Push tek başına güvenilir değildi: pencere
+// 'ready-to-show' anında mesajı atıyor ama bu script o an henüz çalışmamış oluyor
+// (ready-to-show, did-finish-load'dan ~23 ms önce geliyor), dinleyici kurulmadığı
+// için mesaj düşüyor ve ekran "Mevcut Versiyon -" / "Yükleniyor..." diye donuyordu.
+if (window.api.getUpdateInfo) {
+    window.api.getUpdateInfo().then(applyUpdateInfo).catch(() => { });
+}
 
 // Handle update errors
 window.api.onUpdateError((message) => {

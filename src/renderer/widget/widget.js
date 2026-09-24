@@ -518,7 +518,13 @@ function closeAll() {
 }
 
 // --- Drag ---
+// Her sürüklemenin kimliği. Bırakınca son delta ve 'drag-end' arka arkaya gidiyor ve
+// ana süreçte SIRASIZ işlenebiliyor; kimlik, bitmiş bir sürüklemenin geç gelen deltasını
+// ayıklamaya yarıyor (bkz. windows/widget.rs FINISHED_DRAG). Zaman damgası: sürüklemeler
+// ardışık olduğu için benzersiz, webview yeniden yüklendiğinde de çakışmıyor — bir sayaç
+// sıfırlanır ve eski kimliklerle çakışırdı.
 mainBtn.addEventListener('pointerdown', (e) => {
+    const dragId = Date.now();
     isPointerDown = true;
     isDragging = false;
     dragStartX = e.screenX;
@@ -535,7 +541,12 @@ mainBtn.addEventListener('pointerdown', (e) => {
         lastMouseX = moveEvent.clientX; lastMouseY = moveEvent.clientY; haveMousePos = true;
         const deltaX = moveEvent.screenX - dragStartX;
         const deltaY = moveEvent.screenY - dragStartY;
-        if (!isDragging && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) isDragging = true;
+        if (!isDragging && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+            isDragging = true;
+            // Açık panelle sürüklenmesin: pencere sürüklenirken kapalı boyda tutuluyor ve
+            // açık bir menü kırpılırdı. Bırakınca zaten kapatılıyordu.
+            if (isOpen || isHistoryOpen) closeAll();
+        }
 
         if (isDragging) {
             accumulatedDeltaX += deltaX;
@@ -546,7 +557,7 @@ mainBtn.addEventListener('pointerdown', (e) => {
             if (!dragAnimFrame) {
                 dragAnimFrame = requestAnimationFrame(() => {
                     if (accumulatedDeltaX !== 0 || accumulatedDeltaY !== 0) {
-                        window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY });
+                        window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY, id: dragId });
                         accumulatedDeltaX = 0;
                         accumulatedDeltaY = 0;
                     }
@@ -570,9 +581,9 @@ mainBtn.addEventListener('pointerdown', (e) => {
         if (isDragging) {
             // Apply any remaining delta before ending drag
             if (accumulatedDeltaX !== 0 || accumulatedDeltaY !== 0) {
-                window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY });
+                window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY, id: dragId });
             }
-            window.api.widgetAction('drag-end');
+            window.api.widgetAction('drag-end', { id: dragId });
             lastDragEndTime = Date.now();
             isDragging = false;
             // IMPORTANT: Reset renderer state so the panel doesn't think it's still open
@@ -634,21 +645,32 @@ window.api.onUpdateHistory((data) => {
 });
 
 // Apply/remove left-side class based on which edge widget is snapped to
+//
+// ⚠ Sınıf değişince düğme pencerenin ÖBÜR yanına geçiyor, yani tıklanabilir yüzeyin
+// geometrisi değişiyor — ve bunu kimse ana sürece söylemiyordu. İsabet alanları yalnız
+// 'resize' ve 'mousemove'da yeniden bildiriliyordu; pencere geçirgenken mousemove HİÇ
+// gelmiyor (bkz. windows/hit_test.rs), taşınma da boyutu değiştirmediği için resize
+// tetiklenmiyor. Sonuç: tıklanabilir daire eski yanda kalıyor, düğme görünen yerinde
+// tıklanamıyor ve bu kendiliğinden düzelmiyordu. Ölçüldü (2026-09-24): açılışta taraf
+// kayıtlıdan farklı hesaplandığında widget penceresi WS_EX_TRANSPARENT'ta takılı kaldı.
+// Monitör düzeni değişince (ekran adları yeniden numaralanınca) gerçek kullanımda da olur.
 window.api.onWidgetSide((side) => {
     if (side === 'left') {
         document.body.classList.add('left-side');
     } else {
         document.body.classList.remove('left-side');
     }
+    reportHitAreas();
 });
 
-// isUp (true/false) değerine göre sınıf ekle
+// isUp (true/false) değerine göre sınıf ekle — aynı gerekçe: yerleşim değişiyor.
 window.api.onWidgetDirection((isUp) => {
     if (isUp) {
         document.body.classList.add('up-side');
     } else {
         document.body.classList.remove('up-side');
     }
+    reportHitAreas();
 });
 
 // Update widget appearance

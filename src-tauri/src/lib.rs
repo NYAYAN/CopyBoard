@@ -484,6 +484,113 @@ pub fn run() {
                 });
             }
 
+            // Geliştirme kolaylığı: `--widget-race-test` widget sürüklemesinin BIRAKMA anını
+            // üretiyor. Renderer bırakınca iki çağrıyı arka arkaya gönderiyor — kalan
+            // deltayla son bir `drag`, hemen ardından `drag-end` — ve `widget_action` async
+            // olduğu için ikisi ayrı görevlerde, sırasız koşuyor. Düzenek widget'ı görev
+            // çubuğunun içine sürükleyip bu çifti iki iş parçacığından AYNI ANDA gönderiyor
+            // ve sonucu ölçüyor: widget çalışma alanında mı, canlı konum temizlendi mi?
+            #[cfg(debug_assertions)]
+            if std::env::args().any(|a| a == "--widget-race-test") {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(2000));
+                    let Some(win) = h.get_webview_window("widget") else {
+                        println!("WIDGET_RACE: widget penceresi yok (gösterilmiyor olabilir)");
+                        h.exit(0);
+                        return;
+                    };
+                    let store = &h.state::<AppState>().store;
+                    // ⚠ BÜTÜN widget anahtarları saklanıyor. İlk sürüm yalnız `widgetPos`'u
+                    // geri yazıyordu; `drag-end` ise `widgetSide` ve `widgetDockParams`'ı da
+                    // yazıyor. Düzenek gerçek ayar dosyasında çalıştığı için kullanıcının
+                    // widget'ı ekranın ortasına taşındı (açılışta göreli konum başka monitöre
+                    // uygulandı) ve tarafı ters döndü.
+                    let widget_keys = ["widgetPos", "widgetSide", "widgetDockParams"];
+                    let orig: Vec<(&str, Option<serde_json::Value>)> =
+                        widget_keys.iter().map(|k| (*k, store.get_value(k))).collect();
+                    let Some(m) = geom::primary_monitor(&h) else { h.exit(0); return };
+                    let work_bottom = m.work_y + m.work_height;
+                    println!(
+                        "WIDGET_RACE: monitör {}x{}, çalışma alanı altı y={work_bottom} (görev çubuğu {} px)",
+                        m.width, m.height, m.y + m.height - work_bottom
+                    );
+
+                    let (runs, mut stale, mut outside, mut mid_outside) = (40, 0, 0, 0);
+                    for i in 0..runs {
+                        // Gerçek renderer gibi her sürüklemeye benzersiz bir kimlik.
+                        let id = 1_000_000 + i as u64;
+                        // Başlangıç: çalışma alanının altından 150 px yukarıda, sağda.
+                        let (sx, sy) = (m.work_x + m.work_width - 300.0, work_bottom - 150.0);
+                        store.set("widgetPos", serde_json::json!({ "x": sx, "y": sy }));
+                        // Görev çubuğunun İÇİNE: düğmenin üstü çalışma alanının 20 px altı.
+                        windows::widget::handle_action(&h, "drag", Some(serde_json::json!({ "x": 0.0, "y": 170.0, "id": id })));
+                        // Sürüklemenin ORTASINDA widget nerede? Kullanıcının "yarısı kayboluyor"
+                        // dediği an bu: parmak hâlâ basılıyken.
+                        {
+                            let f = win.scale_factor().unwrap_or(1.0);
+                            let y = win.outer_position().map(|p| p.y as f64 / f).unwrap_or(0.0);
+                            if y + 68.0 > work_bottom + 0.5 { mid_outside += 1; }
+                        }
+
+                        // Bırakma anı: son delta + drag-end, AYNI ANDA.
+                        let (a, b) = (h.clone(), h.clone());
+                        let t1 = std::thread::spawn(move || {
+                            windows::widget::handle_action(&a, "drag", Some(serde_json::json!({ "x": 0.0, "y": 6.0, "id": id })));
+                        });
+                        let t2 = std::thread::spawn(move || windows::widget::handle_action(&b, "drag-end", Some(serde_json::json!({ "id": id }))));
+                        let _ = (t1.join(), t2.join());
+                        std::thread::sleep(std::time::Duration::from_millis(60));
+
+                        if windows::widget::debug_live_pos().is_some() { stale += 1; }
+                        let f = win.scale_factor().unwrap_or(1.0);
+                        let y = win.outer_position().map(|p| p.y as f64 / f).unwrap_or(0.0);
+                        if y + 68.0 > work_bottom + 0.5 { outside += 1; }
+                    }
+                    println!(
+                        "WIDGET_RACE: {runs} bırakmada — sürükleme ORTASINDA görev çubuğunda: {mid_outside}, bırakınca görev çubuğunda kaldı: {outside}, canlı konum temizlenmedi: {stale}"
+                    );
+                    // ── Monitörler arası sürükleme hâlâ çalışıyor mu? ──────────────────────
+                    // Sürüklerken sıkıştırma, küçük adımlarla ilerleyen bir sürüklemeyi monitör
+                    // kenarında HAPSETMEMELİ: 3 monitörlü kurulumda widget yan ekrana
+                    // taşınabilmeli.
+                    let monitors = geom::all_monitors(&h);
+                    let right = monitors.iter()
+                        .filter(|o| (o.x - (m.x + m.width)).abs() < 1.0)
+                        .next()
+                        .cloned();
+                    match right {
+                        None => println!("WIDGET_RACE: sağda bitişik monitör yok, geçiş sınaması atlandı"),
+                        Some(r) => {
+                            let id = 9_000_000u64;
+                            let sy = m.work_y + 300.0;
+                            store.set("widgetPos", serde_json::json!({ "x": m.x + m.width - 400.0, "y": sy }));
+                            // 60 adım × 15 px = 900 px sağa: kenarı ~400 px aşar.
+                            for _ in 0..60 {
+                                windows::widget::handle_action(&h, "drag", Some(serde_json::json!({ "x": 15.0, "y": 0.0, "id": id })));
+                            }
+                            windows::widget::handle_action(&h, "drag-end", Some(serde_json::json!({ "id": id })));
+                            std::thread::sleep(std::time::Duration::from_millis(60));
+                            let v = store.get_value("widgetPos");
+                            let x = v.as_ref().and_then(|v| v.get("x")).and_then(|x| x.as_f64()).unwrap_or(0.0);
+                            let crossed = x >= r.x;
+                            println!(
+                                "WIDGET_RACE: yan monitöre geçiş — düğme x={x} (sağ monitör {}..{}): {}",
+                                r.x, r.x + r.width,
+                                if crossed { "GEÇTİ" } else { "KENARDA TAKILDI" }
+                            );
+                        }
+                    }
+
+                    // Depoda silme yok; sınamadan önce hiç olmayan bir anahtar sınama
+                    // değeriyle kalır (geliştirme makinesinde üçü de hep var).
+                    for (k, v) in orig {
+                        if let Some(v) = v { store.set(k, v); }
+                    }
+                    h.exit(0);
+                });
+            }
+
             // Geliştirme kolaylığı: `--shot-save=<yol>[@<monitör>]` o monitörü PNG yazar.
             // Videodaki rengi, AYNI bölgenin bilinen-doğru still görüntüsüyle
             // karşılaştırmak için: renk bozulması varsa iki kaynak ayrışır.

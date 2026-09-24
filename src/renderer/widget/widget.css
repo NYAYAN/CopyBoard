@@ -17,6 +17,19 @@
     box-sizing: border-box;
 }
 
+/* ⚠ html'in boyu ŞART. body'nin `height: 100%`i html'in yüzdesi ve html'e boy verilmezse
+   `auto`ya düşüyor; body'nin bütün çocukları `absolute` olduğu için body'nin boyu ~0,
+   `.widget-container` da yalnız padding'i kadar (24 px) kalıyordu. Aşağı modda bu şans
+   eseri görünmüyor — düğme üstten başlayıp aşağı taşıyor. Ama yukarı modda (`.up-side`,
+   widget görev çubuğuna yakınken) `justify-content: flex-end` düğmeyi 24 px'lik kutunun
+   DİBİNE yaslıyor: düğme -36..12'ye düşüyor, pencerede yalnız alt 12 px'i görünüyor ve
+   isabet dairesi de çoğunlukla pencerenin dışında kalıyordu. Yukarı açılan menü de
+   tamamen pencerenin üstünde (-154..-46) kalıyordu — yukarı açma hiç çalışmamıştı.
+   Ölçüldü (2026-09-24): düzeltmeyle yukarı modda düğme 9..57, aşağı modda değişiklik yok. */
+html {
+    height: 100%;
+}
+
 body {
     position: relative;
     width: 100%;

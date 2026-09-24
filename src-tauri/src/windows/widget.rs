@@ -41,13 +41,52 @@ pub fn scale(app: &tauri::AppHandle) -> f64 {
 /// Sürükleme SIRASINDAKİ düğme konumu — yalnız bellekte. Electron `'drag'`de
 /// `state.widgetPos`u güncelleyip diski yalnız `'drag-end'`de yazıyordu; portta her
 /// kare `config.json`a iniyordu (saniyede onlarca senkron disk yazması).
-static LIVE_POS: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
+/// Sürükleme sürerken iki konum: (GÖSTERİLEN, HAM).
+///
+/// Ham konum imleci izliyor ve deltaları sınırsız biriktiriyor; gösterilen konum onun
+/// çalışma alanına sıkıştırılmış hâli. İkisi ayrı olmak zorunda: yalnız sıkıştırılmış
+/// konumu biriktiren ilk sürüm widget'ı monitör kenarında HAPSEDİYORDU — kenardan
+/// 10 px içeride tutulan düğmeye eklenen her küçük delta yine aynı yere sıkıştırılıyor,
+/// widget yan monitöre hiç geçemiyordu (ölçüldü: `--widget-race-test`, x=2481'de takıldı,
+/// sağ monitör 2560'ta başlıyor). Ham konum sınırı aşınca yan monitörün çalışma alanı
+/// devreye giriyor. Diğer bütün işlemler (`saved_pos`) GÖSTERİLEN konumu görüyor.
+static LIVE_POS: std::sync::Mutex<Option<((f64, f64), (f64, f64))>> = std::sync::Mutex::new(None);
+
+/// En son BİTEN sürüklemenin kimliği.
+///
+/// Renderer bırakınca kalan deltayla son bir `drag` ve hemen ardından `drag-end`
+/// gönderiyor; `widget_action` async olduğu için ikisi ayrı görevlerde SIRASIZ koşuyor.
+/// `drag-end` önce işlendiğinde geç gelen delta, az önce temizlenen canlı konumu yeniden
+/// dolduruyordu — onu temizleyecek bir `drag-end` bir daha gelmiyordu ve sonraki her
+/// işlem (aç, kapat, yeniden ölçekle) bayat konumdan hesaplanıyordu. Ölçüldü:
+/// `--widget-race-test` ile 40 bırakmanın 3-12'sinde. Kimliği biten bir sürüklemenin
+/// gecikmiş deltası artık yok sayılıyor; denetim ve yazma `LIVE_POS` kilidi altında.
+///
+/// ⚠ Ölçüt EŞİTLİK, "en büyükten küçük" değil. Tek bir renderer'dan sürüklemeler ardışık
+/// (yeni `pointerdown` öncekinin `pointerup`ından önce gelemez), dolayısıyla geç
+/// gelebilecek tek mesaj az önce BİTEN sürüklemeninki. Sıralı bir ölçüt, widget
+/// webview'u yeniden yüklendiğinde renderer'ın kimlik sayacı sıfırlandığı için bütün
+/// yeni sürüklemeleri yok sayardı. Kimlik renderer'da zaman damgası: yeniden yüklemede
+/// de çakışmıyor.
+static FINISHED_DRAG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Kayıtlı düğme konumu (sürükleme sürüyorsa bellekteki canlı konum).
+/// Test erişimi: sürükleme sonrası canlı konum temizlenmiş mi? (`--widget-race-test`)
+#[cfg(debug_assertions)]
+pub fn debug_live_pos() -> Option<(f64, f64)> {
+    LIVE_POS.lock().unwrap().map(|(shown, _raw)| shown)
+}
+
 fn saved_pos(app: &tauri::AppHandle) -> (f64, f64) {
-    if let Some(live) = *LIVE_POS.lock().unwrap() {
-        return live;
+    if let Some((shown, _raw)) = *LIVE_POS.lock().unwrap() {
+        return shown;
     }
+    stored_pos(app)
+}
+
+/// Yalnız depodaki konum (canlı sürükleme konumuna bakmadan). `LIVE_POS` kilidi
+/// tutulurken çağrılabilsin diye ayrı: `saved_pos` aynı kilidi yeniden almaya çalışırdı.
+fn stored_pos(app: &tauri::AppHandle) -> (f64, f64) {
     let store = &app.state::<AppState>().store;
     let v = store.get_value("widgetPos");
     let x = v.as_ref().and_then(|v| v.get("x")).and_then(|x| x.as_f64());
@@ -241,18 +280,59 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
             let _ = crate::platform::order_front(&window);
         }
         "drag" => {
-            let dx = data.as_ref().and_then(|d| d.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let dy = data.as_ref().and_then(|d| d.get("y")).and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let (nx, ny) = (bx + dx, by + dy);
-            // Diske DEĞİL belleğe: kalıcı yazma `drag-end`de (`finish_drag`).
-            *LIVE_POS.lock().unwrap() = Some((nx.round(), ny.round()));
-            let h = window.inner_size().ok().and_then(|z| window.scale_factor().ok().map(|f| z.height as f64 / f))
-                .unwrap_or(COLLAPSED_H * s);
-            let _ = geom::place(&window, window_x(nx, &side, s), ny, FULL_W * s, h);
-            let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
-            let _ = crate::platform::order_front(&window);
+            let num = |k: &str| data.as_ref().and_then(|d| d.get(k)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let (dx, dy) = (num("x"), num("y"));
+            let id = drag_id(&data);
+            let btn = BTN_W * s;
+            let col_h = COLLAPSED_H * s;
+            // Kimlik denetimi, canlı konumun okunması ve yazılması TEK kilit altında:
+            // `drag-end` de aynı kilidi alıyor, biri ötekinin ortasına giremiyor.
+            let placed = {
+                let mut live = LIVE_POS.lock().unwrap();
+                if id != 0 && id == FINISHED_DRAG.load(std::sync::atomic::Ordering::Acquire) {
+                    None // bu sürükleme bitti; gecikmiş delta
+                } else {
+                    // Delta HAM konuma ekleniyor (bkz. LIVE_POS): sıkıştırılmış konuma
+                    // eklenseydi widget monitör kenarında takılırdı.
+                    let (rx, ry) = live.map(|(_shown, raw)| raw).unwrap_or_else(|| stored_pos(app));
+                    let (tx, ty) = (rx + dx, ry + dy);
+                    // Sürükleme SIRASINDA da çalışma alanında tut. Yalnız bırakınca
+                    // sıkıştırılıyordu: aşağı sürüklenen widget'ın yarısı görev çubuğunun
+                    // ALTINA giriyor (ölçüldü: 40/40), bırakınca da yukarı zıplıyordu.
+                    // Monitör SIKIŞTIRILMAMIŞ hedeften seçiliyor — sınırı geçen sürükleme
+                    // yan monitöre atlayabilsin.
+                    let (cx, cy) = match geom::monitor_nearest_point(app, tx + btn / 2.0, ty + col_h / 2.0) {
+                        Some(m) => geom::clamp_to_work_area(&m, tx, ty, btn, col_h, MARGIN),
+                        None => (tx, ty),
+                    };
+                    // Diske DEĞİL belleğe: kalıcı yazma `drag-end`de (`finish_drag`).
+                    *live = Some(((cx.round(), cy.round()), (tx, ty)));
+                    Some((cx, cy))
+                }
+            };
+            if let Some((nx, ny)) = placed {
+                // Sürüklenirken pencere DAİMA kapalı boyda: açık bir panel yukarı açılmışsa
+                // penceresinin üstü düğmenin üstündeydi ve "üst = düğme" yerleşimi paneli
+                // aşağı savurup ekranın dışına taşıyordu. Renderer da sürükleme başlayınca
+                // paneli kapatıyor (widget.js).
+                let _ = geom::place(&window, window_x(nx, &side, s), ny, FULL_W * s, col_h);
+                let _ = crate::platform::set_window_level(&window, WindowLevel::ScreenSaver);
+                let _ = crate::platform::order_front(&window);
+            }
         }
-        "drag-end" => finish_drag(app, &window, s),
+        "drag-end" => {
+            let id = drag_id(&data);
+            let pos = {
+                let mut live = LIVE_POS.lock().unwrap();
+                if id != 0 {
+                    FINISHED_DRAG.store(id, std::sync::atomic::Ordering::Release);
+                }
+                // HAM konum: `finish_drag` monitörü imlecin gerçekten bulunduğu yerden
+                // seçip kendisi sıkıştırıyor ve kenara yapıştırıyor.
+                live.take().map(|(_shown, raw)| raw)
+            };
+            finish_drag(app, &window, s, pos);
+        }
         "open-list" => crate::windows::main_window::show(app),
         "note-front-app" => crate::platform::note_front_app(),
         "quickpaste" => super::quickpaste::toggle(app),
@@ -264,11 +344,16 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
     }
 }
 
+/// Renderer'ın her sürüklemeye verdiği kimlik (yoksa 0 — eski renderer, denetim yok).
+fn drag_id(data: &Option<serde_json::Value>) -> u64 {
+    data.as_ref().and_then(|d| d.get("id")).and_then(|v| v.as_u64()).unwrap_or(0)
+}
+
 /// Sürükleme bitti: kenarlara yapıştır, ekranda tut, göreli konumu kaydet.
-fn finish_drag(app: &tauri::AppHandle, window: &tauri::WebviewWindow, s: f64) {
-    let (bx, by) = saved_pos(app);
-    // Canlı konum bundan sonra store'a yazılıyor; bellekteki kopya artık gereksiz.
-    *LIVE_POS.lock().unwrap() = None;
+///
+/// `pos`: çağıranın `LIVE_POS` kilidi altında ALDIĞI canlı konum (yoksa depodaki).
+fn finish_drag(app: &tauri::AppHandle, window: &tauri::WebviewWindow, s: f64, pos: Option<(f64, f64)>) {
+    let (bx, by) = pos.unwrap_or_else(|| stored_pos(app));
     let btn = BTN_W * s;
     let col_h = COLLAPSED_H * s;
 

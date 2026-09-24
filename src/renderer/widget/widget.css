@@ -46,8 +46,8 @@ body {
 }
 
 /* ── History / Favorites panel ──────────────────────────────────────────────── */
-/* 350×400 is load-bearing: window-manager sizes the widget window around these numbers
-   (HIS_H / FULL_W) when the panel is open. */
+/* 350×400 is load-bearing: the main process sizes the widget window around these numbers
+   when the panel is open (windows/widget.rs HISTORY_H = 10 + 400 + 10, FULL_W). */
 .history-panel {
     position: absolute;
     right: 68px;
@@ -395,6 +395,21 @@ body {
     align-items: center;
     gap: var(--sp-5);
     padding: var(--sp-5);
+    /* Düzen geçişinden sonra içerik yumuşakça geri gelsin (aşağıya bakın). */
+    transition: opacity 120ms var(--ease-standard);
+}
+
+/* ── Düzen geçişi ───────────────────────────────────────────────────────────── */
+/* Taraf ya da yön değişince pencere şekil değiştiriyor ve webview yeni şekle birkaç kare
+   geç çiziyor; o karelerde düğme yanlış yerde görünmesin diye içerik bir an gizleniyor
+   (`relayout`). Açılışta da ilk düzen gelene kadar (`layout-pending`). İkisini de
+   widget.js kaldırıyor; kaldırılınca opaklık yukarıdaki geçişle geri geliyor. */
+.layout-pending .widget-container,
+.layout-pending .history-panel,
+.relayout .widget-container,
+.relayout .history-panel {
+    opacity: 0 !important;
+    transition: none !important;
 }
 
 .widget-btn {

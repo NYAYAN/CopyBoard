@@ -141,13 +141,23 @@
     // durumu erken yayınlarsa mesaj SESSİZCE DÜŞER — bu hata toast'ta, görüntüleyicide
     // ve güncelleme diyaloğunda ayrı ayrı çıktı. Dinleyici gerçekten kurulduktan
     // sonra ana sürece haber veriyoruz; ilk durum ancak o zaman geliyor.
+    //
+    // ⚠ Bir pencerede BİRDEN FAZLA `ready()` dinleyicisi olabiliyor (widget: geçmiş, ayar,
+    // düzen) ve el sıkışması HEPSİ kurulunca gitmeli. `listen` Rust'ta async bir komut,
+    // kayıtlar sırasız tamamlanıyor: ilk kurulanda haber vermek, ana sürecin öbürlerinin
+    // ilk olayını dinleyicileri kurulmadan yayınlaması demekti. Açılışta aynı turda
+    // kaydedilenler `readyWaits`te toplanıyor; ilk kayıt çözüldüğünde hepsi orada.
     let readySent = false;
+    const readyWaits = [];
     function ready(listenPromise) {
-        return listenPromise.then(() => {
-            if (readySent) return;   // pencere başına bir kez yeter
-            readySent = true;
-            send('window_ready');
-        });
+        readyWaits.push(listenPromise);
+        return listenPromise
+            .then(() => Promise.all(readyWaits))
+            .then(() => {
+                if (readySent) return;   // pencere başına bir kez yeter
+                readySent = true;
+                send('window_ready');
+            });
     }
 
     // ── Henüz taşınmamış kanallar ───────────────────────────────────────────
@@ -367,6 +377,10 @@
             zoom: (opts && opts.zoom) || 1,
             noteFrontApp: !!(opts && opts.noteFrontApp),
         }),
+        // Tauri ana süreci taraf ve yönü TEK olayla yolluyor ('widget-layout'): şekil
+        // değişimi renderer'ın onayını bekliyor (bkz. windows/widget.rs `emit_layout`).
+        // Ayrı olaylar Electron ana süreci için duruyor; Tauri bunları artık yollamıyor.
+        onWidgetLayout: (cb) => ready(on('widget-layout', cb)),
         onWidgetSide: (cb) => on('widget-side', cb),
         onWidgetDirection: (cb) => on('widget-direction', cb),
         onWidgetConfig: (cb) => ready(on('widget-config', cb)),

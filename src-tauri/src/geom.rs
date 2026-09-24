@@ -225,12 +225,30 @@ fn dist_to_rect(x: f64, y: f64, m: &MonitorInfo) -> f64 {
 /// > `WM_DPICHANGED` gönderir, tao pencereyi yeni DPI'a oturtur), SONRA mantıksal
 /// > boyut — o anda `scale_factor()` artık yeni monitörünkidir.
 pub fn place(window: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> Result<(), String> {
+    place_anchored(window, x, y, w, h, x, y)
+}
+
+/// [`place`] gibi; ama Windows'ta mantıksal → fiziksel çevrimin ölçeği pencerenin sol üst
+/// köşesinden değil `(ax, ay)` noktasının monitöründen alınıyor.
+///
+/// Widget için: pencere düğmeden büyük ve düğmenin yanına/yukarısına taşıyor, sol üst
+/// köşesi komşu monitöre düşebiliyor; widget'ın koordinatları ise DÜĞMENİN monitörünün
+/// mantıksal uzayında. Köşeden seçilen ölçek, karışık DPI'da düğmeyi kaydırırdı.
+pub fn place_anchored(
+    window: &tauri::WebviewWindow,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    ax: f64,
+    ay: f64,
+) -> Result<(), String> {
     let size = LogicalSize::new(w, h);
 
     #[cfg(target_os = "windows")]
     {
         use tauri::Manager;
-        let scale = monitor_nearest_point(window.app_handle(), x, y)
+        let scale = monitor_nearest_point(window.app_handle(), ax, ay)
             .map(|m| m.scale)
             .unwrap_or_else(|| window.scale_factor().unwrap_or(1.0));
         let pos = PhysicalPosition::new((x * scale).round() as i32, (y * scale).round() as i32);
@@ -245,6 +263,8 @@ pub fn place(window: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> R
 
     #[cfg(not(target_os = "windows"))]
     {
+        // macOS'ta global uzay tek biçimli nokta ızgarası: çapaya gerek yok.
+        let _ = (ax, ay);
         let pos = tauri::LogicalPosition::new(x, y);
         window
             .set_size(size)

@@ -32,6 +32,8 @@ pub mod theme;
 pub mod tray;
 pub mod updater;
 mod videos;
+#[cfg(all(debug_assertions, target_os = "windows"))]
+mod widget_flash_test;
 pub mod windows;
 
 use tauri::Manager;
@@ -516,6 +518,15 @@ pub fn run() {
                         m.width, m.height, m.y + m.height - work_bottom
                     );
 
+                    // DÜĞMENİN üst kenarı (pencerenin değil): yukarı modda pencere düğmenin
+                    // üstüne doğru uzun ve düğme onun DİBİNDE (bkz. widget.rs `window_rect`).
+                    let s = windows::widget::scale(&h);
+                    let button_top = |w: &tauri::WebviewWindow| -> f64 {
+                        let f = w.scale_factor().unwrap_or(1.0);
+                        let y = w.inner_position().map(|p| p.y as f64 / f).unwrap_or(0.0);
+                        let wh = w.inner_size().map(|z| z.height as f64 / f).unwrap_or(0.0);
+                        if windows::widget::debug_is_up() { y + wh - 68.0 * s } else { y }
+                    };
                     let (runs, mut stale, mut outside, mut mid_outside) = (40, 0, 0, 0);
                     for i in 0..runs {
                         // Gerçek renderer gibi her sürüklemeye benzersiz bir kimlik.
@@ -527,11 +538,7 @@ pub fn run() {
                         windows::widget::handle_action(&h, "drag", Some(serde_json::json!({ "x": 0.0, "y": 170.0, "id": id })));
                         // Sürüklemenin ORTASINDA widget nerede? Kullanıcının "yarısı kayboluyor"
                         // dediği an bu: parmak hâlâ basılıyken.
-                        {
-                            let f = win.scale_factor().unwrap_or(1.0);
-                            let y = win.outer_position().map(|p| p.y as f64 / f).unwrap_or(0.0);
-                            if y + 68.0 > work_bottom + 0.5 { mid_outside += 1; }
-                        }
+                        if button_top(&win) + 68.0 * s > work_bottom + 0.5 { mid_outside += 1; }
 
                         // Bırakma anı: son delta + drag-end, AYNI ANDA.
                         let (a, b) = (h.clone(), h.clone());
@@ -540,12 +547,11 @@ pub fn run() {
                         });
                         let t2 = std::thread::spawn(move || windows::widget::handle_action(&b, "drag-end", Some(serde_json::json!({ "id": id }))));
                         let _ = (t1.join(), t2.join());
-                        std::thread::sleep(std::time::Duration::from_millis(60));
+                        // Düzen değiştiyse pencere renderer'ın `relayout-ready` onayını bekliyor.
+                        std::thread::sleep(std::time::Duration::from_millis(250));
 
                         if windows::widget::debug_live_pos().is_some() { stale += 1; }
-                        let f = win.scale_factor().unwrap_or(1.0);
-                        let y = win.outer_position().map(|p| p.y as f64 / f).unwrap_or(0.0);
-                        if y + 68.0 > work_bottom + 0.5 { outside += 1; }
+                        if button_top(&win) + 68.0 * s > work_bottom + 0.5 { outside += 1; }
                     }
                     println!(
                         "WIDGET_RACE: {runs} bırakmada — sürükleme ORTASINDA görev çubuğunda: {mid_outside}, bırakınca görev çubuğunda kaldı: {outside}, canlı konum temizlenmedi: {stale}"
@@ -589,6 +595,14 @@ pub fn run() {
                     }
                     h.exit(0);
                 });
+            }
+
+            // Geliştirme kolaylığı: `--widget-flash-test` widget açılıp kapanırken ve düzen
+            // değişirken ekranı kare hızında okuyup düğmenin bir an yanlış yerde görünüp
+            // görünmediğini ölçüyor (bkz. widget_flash_test.rs).
+            #[cfg(all(debug_assertions, target_os = "windows"))]
+            if std::env::args().any(|a| a == "--widget-flash-test") {
+                widget_flash_test::run(handle.clone());
             }
 
             // Geliştirme kolaylığı: `--shot-save=<yol>[@<monitör>]` o monitörü PNG yazar.

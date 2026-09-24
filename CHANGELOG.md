@@ -1,3 +1,50 @@
+# CopyBoard v2.13.1 Release Notes
+
+Yüzen widget görev çubuğuna yakınken bozuluyordu: yarım görünüyor, menüsü açılırken
+sıçrıyor, sürüklenirken görev çubuğunun altına giriyordu. Düzeltmeler Tauri dalında
+yapılanların Electron'a uyarlanmış hâli; her biri önce eski kodda, sonra yenisinde
+`--widget-flash-test` ile ekrandan ölçüldü (ekran ~144 kare/sn okunuyor, düğmenin
+rengi izleniyor).
+
+## 🎯 Yüzen widget
+
+- **Yukarı modda düğme pencerenin dışındaydı.** `html`'in boyu yoktu; body ~0 px
+  kalıyor ve `.up-side`'ın `justify-content: flex-end`'i düğmeyi −36..12'ye itiyordu.
+  Ekranda yalnız alt 11 px'i görünüyordu; menü (−358..−46) ve geçmiş paneli
+  (−410..−10) tamamen dışarıdaydı. `html { height: 100% }`.
+- **Menü açılırken flaş.** Yukarı modda açmak pencereyi büyütüp ~336 px yukarı
+  taşıyordu. İçerik pencerenin sol üst köşesine bağlı ve yeni şekle geç çiziliyor:
+  düğme 3 açılışın 2'sinde bir kare 336 px yukarıda görünüyor, kapanışta 2 kare hiç
+  görünmüyordu. Yukarı modda pencere artık HER durumda 420 px boyunda; açma/kapama
+  pencereye dokunmuyor, yalnız CSS değişiyor. Yön yalnız düğme yer değiştirince
+  hesaplanıyor (bırakma, açılış, monitör ve ölçek değişimi).
+- **Düzen geçişinde sıçrama.** Taraf (sağ↔sol) ya da yön (yukarı↔aşağı) değişince
+  pencere şekil değiştiriyor ve düğme bir kare ~350 px sıçrıyordu. Artık el sıkışmayla
+  oluyor: renderer içeriği gizleyip onay veriyor (`widget-layout` → `relayout-ready`),
+  pencere ancak o zaman yeni şekline giriyor, içerik yeni boya ulaşınca 120 ms'de geri
+  geliyor. Electron'da onaydan sonra 3 ekran karesi bekleniyor: gizli kare ekrana
+  pencere taşındıktan ~7 ms sonra çıkıyordu. Şimdi taşınmadan 18-26 ms önce ekranda;
+  44 geçişte 0 sıçrama.
+- **Sürüklerken görev çubuğunun altına giriyordu** (40 bırakmanın 40'ında). Sürüklerken
+  de çalışma alanına sıkıştırılıyor. Ham ve gösterilen konum ayrı tutuluyor: yalnız
+  sıkıştırılmış konumu biriktirmek widget'ı monitör kenarında hapsederdi; yan monitöre
+  geçiş sürüyor.
+- **Menü açıkken sürükleyince zıplıyordu (−339 px).** Konum pencerenin `getBounds()`'undan
+  türetiliyordu; yukarı modda menü açıkken pencerenin üstü düğmenin ~336 px üstünde.
+  Artık konum düğmenin koordinatlarında ve sürükleme başlayınca açık panel kapanıyor.
+- **Durağan imleçle tıklama.** Widget imlecin altında taşınınca (bırakınca kenara
+  yapışma, düzen geçişi) renderer'ın bildiği son fare konumu bayatlıyor ve düğme fare
+  oynayana kadar tıklama-geçirgen kalıyordu. Ana süreç düzen bildiriminde imlecin
+  konumunu da yolluyor.
+- **Geçmiş panelinin 10 px'i kırpılıyordu.** Pencere 400 → 420 px (10 + 400 + 10).
+
+## 🔧 Geliştirme
+
+- `--widget-flash-test` (yalnız geliştirmede, Windows): flaş, düzen geçişi tekrarları,
+  geometri, görev çubuğuna sürükleme, yan monitöre geçiş ve durağan imleç bölümleri
+  (`test/widget-flash-test.js`). Widget ayarlarını uygulama açılmadan saklayıp geri
+  yazıyor.
+
 # CopyBoard v2.13.0 Release Notes
 
 Güncelleme ekranı artık sürümünü söylüyor, ve ekran görüntüsü metin aracı yazdığınız

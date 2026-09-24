@@ -99,6 +99,14 @@ if (!gotTheLock) {
       createQuickPasteWindow();
     } catch (e) { console.error('QuickPaste init failed:', e); }
 
+    // Geliştirme: `--widget-flash-test` widget'ın görev çubuğu yanında açılıp kapanırken,
+    // düzen değiştirirken ve sürüklenirken ekranda nasıl göründüğünü ölçüyor ve çıkıyor
+    // (bkz. test/widget-flash-test.js). Paketli sürümde yok; dosya pakete de girmiyor.
+    // Widget'tan ÖNCE: düzenek widget ayarlarını, widget kurulurken yeniden yazılmadan saklıyor.
+    if (!app.isPackaged && process.argv.includes('--widget-flash-test')) {
+      require('../../test/widget-flash-test').run();
+    }
+
     // Initialize Widget if enabled in settings
     if (state.showWidget) {
       try {

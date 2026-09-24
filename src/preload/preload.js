@@ -76,6 +76,9 @@ contextBridge.exposeInMainWorld('api', {
 
     // Widget
     widgetAction: (action, data) => ipcRenderer.send('widget-action', action, data),
+    // Taraf + yön tek olayda; şekil değişimi renderer'ın onayını bekliyor (bkz. window-manager
+    // sendWidgetLayout). Ayrı olaylar yalnız eski ana süreç için duruyor, artık yollanmıyor.
+    onWidgetLayout: (callback) => ipcRenderer.on('widget-layout', (_, layout) => callback(layout)),
     onWidgetSide: (callback) => ipcRenderer.on('widget-side', (_, side) => callback(side)),
     onWidgetDirection: (callback) => ipcRenderer.on('widget-direction', (_, isUp) => callback(isUp)),
     onWidgetConfig: (callback) => ipcRenderer.on('widget-config', (_, config) => callback(config)),

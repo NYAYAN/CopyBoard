@@ -281,6 +281,137 @@ function toggleWidget(show) {
     }
 }
 
+// ── Yüzen widget ────────────────────────────────────────────────────────────
+// `widgetPos` DÜĞMENİN ölçeklenmemiş mantıksal konumu, pencerenin değil. Pencere düğmeden
+// geniş (panel + düğmeler) ve panelin düğmenin hangi yanında açılacağı `widgetSide`'a bağlı:
+//     sağ tarafta: pencere.x = düğme.x - panel genişliği
+//     sol tarafta: pencere.x = düğme.x
+// Yukarı modda (`widgetUp`) pencere düğmenin üstüne doğru uzun ve düğme onun DİBİNDE.
+//
+// Ölçüler widget.css ile aynı sayılar; pencere bunların `widgetScale` katı, sayfa da aynı
+// oranda zoom'lu çiziliyor.
+const WIDGET_PANEL_W = 350;
+const WIDGET_BTN_W = 68;
+const WIDGET_FULL_W = WIDGET_PANEL_W + WIDGET_BTN_W; // 418
+const WIDGET_COLLAPSED_H = 68;
+// Menü sütunu: 70 px ofset + 6 × 42 px öğe + 5 × 12 px boşluk = 382, artı alt pay.
+const WIDGET_EXPANDED_H = 404;
+// Geçmiş paneli: 10 px ofset + 400 px panel + 10 px pay. ⚠ 400'dü, yani panelin KENDİ boyu:
+// `top: 10px`le başlayan panelin alt 10 px'i (kenarlığı ve yuvarlak köşeleri) pencerenin
+// dışında kalıp kırpılıyordu; yukarı modda (`bottom: 10px`) aynı şekilde üstü.
+const WIDGET_HISTORY_H = 420;
+// Yukarı moddaki pencere boyu — kapalıyken de, menü ya da geçmiş açıkken de AYNI
+// (bkz. widgetWindowRect). En uzun içerik kadar.
+const WIDGET_TALL_H = WIDGET_HISTORY_H;
+const WIDGET_SNAP = 60;
+const WIDGET_MARGIN = 10;
+// Düzen geçişinde renderer'ın onayından sonra pencereyi yeni şekline sokmadan önce beklenen
+// ekran karesi (bkz. 'relayout-ready').
+const WIDGET_RELAYOUT_SETTLE_FRAMES = 3;
+
+// Sürükleme sürerken düğmenin HAM konumu ({ id, x, y }); sürükleme yokken null.
+//
+// Ham konum imleci izliyor ve deltaları sınırsız biriktiriyor; `state.widgetPos` onun
+// çalışma alanına sıkıştırılmış, GÖSTERİLEN hâli. İkisi ayrı olmak zorunda: yalnız
+// sıkıştırılmış konumu biriktirmek widget'ı monitör kenarında HAPSEDİYOR — kenardan 10 px
+// içeride tutulan düğmeye eklenen her küçük delta yine aynı yere sıkıştırılıyor ve widget
+// yan monitöre hiç geçemiyordu (Tauri'de ölçüldü). Ham konum sınırı aşınca yan monitörün
+// çalışma alanı devreye giriyor.
+let widgetDrag = null;
+
+// Ölçeklenmiş (pencere) ölçüsü.
+function widgetPx(v) {
+    return Math.round(v * (state.widgetScale || 100) / 100);
+}
+
+// Düğmeyi (w × h) monitörün kullanılabilir alanında, kenarlardan `margin` içeride tutar.
+function clampToWorkArea(wa, x, y, w, h, margin) {
+    const maxX = Math.max(wa.x + margin, wa.x + wa.width - w - margin);
+    const maxY = Math.max(wa.y + margin, wa.y + wa.height - h - margin);
+    return {
+        x: Math.min(Math.max(x, wa.x + margin), maxX),
+        y: Math.min(Math.max(y, wa.y + margin), maxY),
+    };
+}
+
+// Düğmenin monitörü: merkezine en yakın olan.
+function widgetDisplayAt(pos) {
+    return screen.getDisplayNearestPoint({
+        x: Math.round(pos.x + widgetPx(WIDGET_BTN_W) / 2),
+        y: Math.round(pos.y + widgetPx(WIDGET_COLLAPSED_H) / 2),
+    });
+}
+
+// Düğmenin altında panellere yer yoksa true: paneller yukarı açılır.
+function isWidgetUpOn(workArea, buttonY) {
+    return (workArea.y + workArea.height) - buttonY < widgetPx(WIDGET_HISTORY_H);
+}
+
+// Pencerenin dikdörtgeni; `openH` açık panelin ölçeklenmemiş boyu.
+//
+// Aşağı modda pencere düğmeden başlıyor ve açılınca AŞAĞI uzuyor: üst kenar sabit, içerik
+// yerinde. Yukarı modda eskiden açarken hem büyütülüp hem ~336 px YUKARI taşınıyordu
+// (düğmenin altı sabit). Ama içerik pencerenin SOL ÜST köşesine bağlı ve yeni şekle geç
+// çiziliyor: o karede eski, kapalı içerik yukarıdaki yeni üst kenarda göründü — düğme
+// açılışta bir an 336 px yukarı sıçrıyor, kapanışta bir an kayboluyordu (ölçüldü,
+// --widget-flash-test). Şimdi yukarı modda pencere kapalıyken de açık boyunda — fazlası
+// saydam ve tıklama-geçirgen (setIgnoreMouseEvents, bkz. widget.js) — ve açmak/kapamak
+// pencereye HİÇ dokunmuyor, yalnız CSS değişiyor. Şekil yalnız düzen (taraf/yön) değişince
+// değişiyor; o geçişi de renderer içeriği gizleyerek örtüyor ('relayout-ready').
+function widgetWindowRect(pos, side, up, openH) {
+    const x = side === 'left' ? pos.x : pos.x - widgetPx(WIDGET_PANEL_W);
+    const h = widgetPx(up ? WIDGET_TALL_H : openH);
+    return {
+        x: Math.round(x),
+        y: Math.round(up ? pos.y + widgetPx(WIDGET_COLLAPSED_H) - h : pos.y),
+        width: widgetPx(WIDGET_FULL_W),
+        height: h,
+    };
+}
+
+// Pencereyi düğmenin konumuna ve düzene göre yerleştirir, üstte tutar.
+function placeWidget(openH) {
+    const win = state.widgetWindow;
+    win.setBounds(widgetWindowRect(state.widgetPos, state.widgetSide || 'right', !!state.widgetUp, openH));
+    win.setAlwaysOnTop(true, 'screen-saver', 1);
+    win.moveTop();
+}
+
+// Renderer'a düzeni (taraf + yön) bildirir.
+//  relayout: pencere ŞEKİL DEĞİŞTİRECEK ama henüz dokunulmadı. Renderer içeriği gizleyip yeni
+//            sınıfları uyguluyor ve 'relayout-ready' diyor; pencere ancak o zaman yeni şekline
+//            giriyor. Yoksa içeriğin geç çizildiği karede düğme 350 px yanda ya da ~350 px
+//            yukarıda/aşağıda görünürdü (ölçüldü: taraf değişiminde bir kare +353 px).
+//  h:        pencerenin (şimdiki ya da birazdan olacak) CSS yüksekliği; renderer gizlediği
+//            içeriği görünüm alanı bu boya ulaşınca açıyor.
+//  cursor:   imlecin pencereye göre CSS konumu. Pencere durağan imlecin altında taşınınca
+//            renderer'ın bildiği son fare konumu bayatlıyor (bkz. widget.js).
+function sendWidgetLayout(relayout, openH) {
+    const win = state.widgetWindow;
+    const up = !!state.widgetUp;
+    const b = win.getBounds();
+    const zoom = win.webContents.getZoomFactor() || 1;
+    const c = screen.getCursorScreenPoint();
+    win.webContents.send('widget-layout', {
+        side: state.widgetSide || 'right',
+        up,
+        relayout,
+        h: up ? WIDGET_TALL_H : openH,
+        cursor: { x: (c.x - b.x) / zoom, y: (c.y - b.y) / zoom },
+    });
+}
+
+// Yönü düğmenin şimdiki yerinden yeniden hesaplar, pencereyi kapalı şekline sokar ve düzeni
+// bildirir. Yön YALNIZ düğme yer değiştirince hesaplanıyor — bırakınca (finishWidgetDrag),
+// açılışta, monitör ve ölçek değişince (burası) — çünkü pencerenin ŞEKLİ ona bağlı: açarken
+// hesaplamak açma anında şekil değiştirmek demekti ve giderilen flaş tam olarak buydu.
+// Seyrek olaylar; buradaki şekil değişimi örtülmüyor.
+function refreshWidgetLayout() {
+    state.widgetUp = isWidgetUpOn(widgetDisplayAt(state.widgetPos).workArea, state.widgetPos.y);
+    placeWidget(WIDGET_COLLAPSED_H);
+    sendWidgetLayout(false, WIDGET_COLLAPSED_H);
+}
+
 function createWidgetWindow() {
     // widgetPos stores the unscaled BUTTON logical position. widgetSide tracks left/right.
     state.widgetPos = store.get('widgetPos') || { x: screen.getPrimaryDisplay().workAreaSize.width - 80, y: 100 };
@@ -288,17 +419,15 @@ function createWidgetWindow() {
 
     // Ensure the saved position is visible on current displays
     ensureWidgetInBounds();
-
-    const s = (state.widgetScale || 100) / 100;
-    const TOTAL_WIDTH = Math.round(418 * s); // 350 panel + 68 buttons scaled
-    const COLLAPSED_HEIGHT = Math.round(68 * s);
-    const panelScaled = Math.round(350 * s);
+    widgetDrag = null;
+    state.widgetUp = isWidgetUpOn(widgetDisplayAt(state.widgetPos).workArea, state.widgetPos.y);
+    const rect = widgetWindowRect(state.widgetPos, state.widgetSide, state.widgetUp, WIDGET_COLLAPSED_H);
 
     state.widgetWindow = new BrowserWindow({
-        width: TOTAL_WIDTH,
-        height: COLLAPSED_HEIGHT,
-        x: state.widgetSide === 'left' ? state.widgetPos.x : state.widgetPos.x - panelScaled,
-        y: state.widgetPos.y,
+        width: rect.width,
+        height: rect.height,
+        x: rect.x,
+        y: rect.y,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -343,20 +472,23 @@ function createWidgetWindow() {
     }, 10000);
 
     state.widgetWindow.on('closed', () => {
+        widgetDrag = null;
         if (state._widgetTopInterval) {
             clearInterval(state._widgetTopInterval);
             state._widgetTopInterval = null;
         }
     });
 
-    // Notify renderer of the saved side and config once it has loaded
+    // Notify renderer of the layout and config once it has loaded
     state.widgetWindow.webContents.on('did-finish-load', () => {
-        state.widgetWindow.webContents.setZoomFactor(s);
+        // Şimdiki ölçek: sayfa sonradan yeniden yüklenirse de pencereyle aynı oranda çizilsin.
+        state.widgetWindow.webContents.setZoomFactor((state.widgetScale || 100) / 100);
         if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
             state.widgetWindow.showInactive();
             state.widgetWindow.moveTop();
         }
-        notifySide();
+        // İlk düzen: renderer içeriği bu gelene kadar gizli tutuyor (`layout-pending`).
+        refreshWidgetLayout();
         state.widgetWindow.webContents.send('widget-config', {
             transparent: state.widgetTransparent,
             color: state.widgetColor,
@@ -365,149 +497,127 @@ function createWidgetWindow() {
     });
 }
 
-function getWindowX() {
-    const s = (state.widgetScale || 100) / 100;
-    const panelScaled = Math.round(350 * s);
-    // Right side: buttons at right edge → window.x = buttonX - panelScaled
-    // Left side:  buttons at left edge → window.x = buttonX
-    return state.widgetSide === 'left'
-        ? state.widgetPos.x
-        : state.widgetPos.x - panelScaled;
-}
+// Sürükleme bitti: kenarlara yapıştır, ekranda tut, göreli konumu kaydet. `raw`: düğmenin
+// sıkıştırılmamış bırakma konumu — monitör düğmenin gerçekten bırakıldığı yerden seçiliyor.
+function finishWidgetDrag(raw) {
+    const BTN_W = widgetPx(WIDGET_BTN_W);
+    const COL_H = widgetPx(WIDGET_COLLAPSED_H);
+    // Sürükleme boyunca geçerli olan düzen: değişip değişmediğine bakılacak.
+    const prevSide = state.widgetSide || 'right';
+    const prevUp = !!state.widgetUp;
 
-function notifySide() {
-    if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
-        state.widgetWindow.webContents.send('widget-side', state.widgetSide || 'right');
+    const display = widgetDisplayAt(raw);
+    const db = display.workArea;
+
+    let finalBtnX = raw.x;
+    let finalY = raw.y;
+
+    // Snapping Thresholds (60px)
+    if (Math.abs(finalBtnX - db.x) < WIDGET_SNAP) finalBtnX = db.x + WIDGET_MARGIN;
+    else if (Math.abs(finalBtnX - (db.x + db.width - BTN_W)) < WIDGET_SNAP) finalBtnX = db.x + db.width - BTN_W - WIDGET_MARGIN;
+
+    if (Math.abs(finalY - db.y) < WIDGET_SNAP) finalY = db.y + WIDGET_MARGIN;
+    else if (Math.abs(finalY - (db.y + db.height - COL_H)) < WIDGET_SNAP) finalY = db.y + db.height - COL_H - WIDGET_MARGIN;
+
+    // General clamping to keep it on-screen
+    const clamped = clampToWorkArea(db, finalBtnX, finalY, BTN_W, COL_H, WIDGET_MARGIN);
+    finalBtnX = Math.round(clamped.x);
+    finalY = Math.round(clamped.y);
+
+    const newSide = (finalBtnX < db.x + db.width / 2) ? 'left' : 'right';
+
+    state.widgetSide = newSide;
+    state.widgetPos = { x: finalBtnX, y: finalY };
+    store.set('widgetPos', state.widgetPos);
+    store.set('widgetSide', newSide);
+
+    // Relative coordinates (0.0 to 1.0)
+    store.set('widgetDockParams', {
+        displayId: display.id,
+        relX: (finalBtnX - db.x) / (db.width - BTN_W),
+        relY: (finalY - db.y) / (db.height - COL_H),
+        side: newSide
+    });
+
+    state.widgetUp = isWidgetUpOn(db, finalY);
+    if (newSide === prevSide && state.widgetUp === prevUp) {
+        // Şekil aynı: yalnız taşınma (kenara yapışma), içerik pencereyle birlikte gidiyor.
+        placeWidget(WIDGET_COLLAPSED_H);
+        sendWidgetLayout(false, WIDGET_COLLAPSED_H);
+    } else {
+        // Şekil değişiyor (kısa ↔ uzun ya da sağ ↔ sol). Pencere, renderer içeriği gizleyip
+        // 'relayout-ready' diyene kadar son sürükleme konumunda bekliyor; renderer o onayı bir
+        // emniyet süresiyle de gönderiyor, yani burada beklemek takılmıyor.
+        sendWidgetLayout(true, WIDGET_COLLAPSED_H);
     }
 }
 
 function handleWidgetAction(action, data) {
     if (!state.widgetWindow || state.widgetWindow.isDestroyed()) return;
 
-    const s = (state.widgetScale || 100) / 100;
-    const winX = getWindowX();
-
-    // Scaled dimensions
-    const FULL_W = Math.round(418 * s);
-    const COL_H = Math.round(68 * s);
-    // Menu column: 70px offset + 6 × 42px items + 5 × 12px gaps = 382, plus bottom slack.
-    const EXP_H = Math.round(404 * s);
-    const HIS_H = Math.round(400 * s);
-    const PANEL_W = Math.round(350 * s);
-    const BTN_W = Math.round(68 * s);
-
-    const baseY = state.widgetPos ? Math.round(state.widgetPos.y) : 100;
-
-    // Decide whether panels open upward (when there isn't enough room below the
-    // button) and notify the renderer so it can mirror the layout in CSS.
-    const calculateDirection = () => {
-        const display = screen.getDisplayNearestPoint(state.widgetPos);
-        const db = display.workArea;
-        const spaceBelow = (db.y + db.height) - state.widgetPos.y;
-        const isUp = spaceBelow < HIS_H;
-        state.widgetWindow.webContents.send('widget-direction', isUp);
-        return isUp;
+    // Açma/kapama: yön burada HESAPLANMIYOR (bkz. refreshWidgetLayout). Yukarı modda
+    // dikdörtgen her durumda aynı, yani bu çağrı pencereyi yerinden oynatmıyor. Bildirim yalnız
+    // emniyet: renderer'ın sınıfları bir şekilde kaçtıysa menü yanlış yöne açılmasın.
+    const resize = (openH) => {
+        placeWidget(openH);
+        sendWidgetLayout(false, openH);
     };
 
-    // Top-align the window when opening down; bottom-align the button (window
-    // grows upward) when opening up — so the button never moves on screen.
-    const topYFor = (height, isUp) => isUp ? Math.round(baseY + COL_H - height) : baseY;
-
-    if (action === 'expand') {
-        const isUp = calculateDirection();
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: topYFor(EXP_H, isUp), width: FULL_W, height: EXP_H });
+    if (action === 'expand' || action === 'collapse-history') {
+        resize(WIDGET_EXPANDED_H);
     } else if (action === 'expand-history') {
-        const isUp = calculateDirection();
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: topYFor(HIS_H, isUp), width: FULL_W, height: HIS_H });
-    } else if (action === 'collapse-history') {
-        const isUp = calculateDirection();
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: topYFor(EXP_H, isUp), width: FULL_W, height: EXP_H });
+        resize(WIDGET_HISTORY_H);
     } else if (action === 'collapse') {
-        state.widgetWindow.setBounds({ x: Math.round(winX), y: baseY, width: FULL_W, height: COL_H });
-    }
-
-    // Always re-assert topmost after bound changes in widget mode
-    if (['expand', 'expand-history', 'collapse-history', 'collapse'].includes(action)) {
-        if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
-            state.widgetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-            state.widgetWindow.moveTop();
+        resize(WIDGET_COLLAPSED_H);
+    } else if (action === 'relayout-ready') {
+        // Renderer içeriği gizledi ve yeni düzeni uyguladı (bkz. sendWidgetLayout): pencere
+        // şimdi yeni şekline girebilir. Renderer o anki durumunu da söylüyor ki açık bir panel
+        // kapalı boya sıkıştırılmasın.
+        //
+        // ⚠ Hemen değil, birkaç kare sonra. Renderer iki kare bekleyip onay veriyor ama gizli
+        // kare ekrana (GPU → DWM) ondan bir-iki kare sonra çıkıyor; setBounds ise bir sonraki
+        // DWM karesinde görünüyor. Pencere o arada taşınırsa eski, görünür içerik yeni yerde
+        // çiziliyor. Ölçüldü (--widget-flash-test): gizli kare pencere taşındıktan ~7 ms SONRA
+        // ekrandaydı ve bir koşuda dört geçişin birinde düğme bir kare 353 px yanda göründü.
+        const s = data && data.state;
+        const openH = s === 'history' ? WIDGET_HISTORY_H : s === 'expanded' ? WIDGET_EXPANDED_H : WIDGET_COLLAPSED_H;
+        const hz = widgetDisplayAt(state.widgetPos).displayFrequency;
+        setTimeout(() => {
+            if (state.widgetWindow && !state.widgetWindow.isDestroyed()) resize(openH);
+        }, WIDGET_RELAYOUT_SETTLE_FRAMES * 1000 / (hz > 0 ? hz : 60));
+    } else if (action === 'drag') {
+        // Yeni sürükleme: ham konum düğmenin şimdiki yerinden başlıyor. Renderer'ın mesajları
+        // sıralı geliyor (ipcRenderer.send → ipcMain.on), yani Tauri'deki gibi bitmiş bir
+        // sürüklemenin geç kalan deltası yok; kimlik yalnız bırakması hiç gelmemiş bir
+        // sürüklemenin (ör. pencere sürüklenirken gizlendi) ham konumunu sonrakine taşımıyor.
+        const id = data && data.id;
+        if (!widgetDrag || (id !== undefined && id !== widgetDrag.id)) {
+            widgetDrag = { id, x: state.widgetPos.x, y: state.widgetPos.y };
         }
-    }
-
-    if (action === 'drag') {
-        const bounds = state.widgetWindow.getBounds();
-        const currentSide = state.widgetSide || 'right';
-        const currentBtnX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
-
-        let newBtnX = currentBtnX + (data.x || 0);
-        let newY = bounds.y + (data.y || 0);
-
-        // Allow free dragging between monitors (window will follow)
-        const newWinX = (currentSide === 'left') ? newBtnX : newBtnX - PANEL_W;
-        state.widgetPos = { x: newBtnX, y: newY };
-        state.widgetWindow.setBounds({ x: newWinX, y: newY, width: FULL_W, height: bounds.height });
-        // Re-assert topmost after bounds change
-        state.widgetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-        state.widgetWindow.moveTop();
-
+        // Delta HAM konuma ekleniyor (bkz. widgetDrag): sıkıştırılmış konuma eklenseydi widget
+        // monitör kenarında takılırdı.
+        widgetDrag.x += (data && data.x) || 0;
+        widgetDrag.y += (data && data.y) || 0;
+        // Sürükleme SIRASINDA da çalışma alanında tut. Yalnız bırakınca sıkıştırılıyordu:
+        // aşağı sürüklenen düğmenin yarısı görev çubuğunun ALTINA giriyor, bırakınca yukarı
+        // zıplıyordu (ölçüldü: 40/40). Monitör SIKIŞTIRILMAMIŞ hedeften seçiliyor — sınırı
+        // geçen sürükleme yan monitöre atlayabilsin.
+        const shown = clampToWorkArea(widgetDisplayAt(widgetDrag).workArea, widgetDrag.x, widgetDrag.y,
+            widgetPx(WIDGET_BTN_W), widgetPx(WIDGET_COLLAPSED_H), WIDGET_MARGIN);
+        // Diske DEĞİL belleğe: kalıcı yazma 'drag-end'de.
+        state.widgetPos = { x: Math.round(shown.x), y: Math.round(shown.y) };
+        // Konum DÜĞMENİN koordinatlarında tutuluyor. Eskiden pencerenin getBounds()'undan
+        // türetiliyordu: yukarı modda menü açıkken pencerenin üstü düğmenin ~336 px üstündeydi
+        // ve bırakınca widget oraya zıplıyordu (ölçüldü: −339 px). Sürüklenirken pencere düzenin
+        // KAPALI şeklinde (renderer da sürükleme başlayınca paneli kapatıyor, widget.js). Düzen
+        // — dolayısıyla şekil — sürükleme boyunca SABİT: taraf ve yön bırakınca yeniden
+        // hesaplanıyor; sürüklerken şekil değiştirmek düğmeyi her eşik geçişinde bir an yanlış
+        // yerde gösterirdi.
+        placeWidget(WIDGET_COLLAPSED_H);
     } else if (action === 'drag-end') {
-        const bounds = state.widgetWindow.getBounds();
-        const currentSide = state.widgetSide || 'right';
-        const btnX = (currentSide === 'left') ? bounds.x : bounds.x + PANEL_W;
-
-        const display = screen.getDisplayNearestPoint({
-            x: Math.round(btnX + BTN_W / 2),
-            y: Math.round(bounds.y + COL_H / 2)
-        });
-        const db = display.workArea;
-
-        let finalBtnX = btnX;
-        let finalY = bounds.y;
-
-        // Snapping Thresholds (60px)
-        const SNAP_THRESHOLD = 60;
-        const MARGIN = 10;
-
-        const distLeft = Math.abs(finalBtnX - db.x);
-        const distRight = Math.abs(finalBtnX - (db.x + db.width - BTN_W));
-        const distTop = Math.abs(finalY - db.y);
-        const distBottom = Math.abs(finalY - (db.y + db.height - COL_H));
-
-        if (distLeft < SNAP_THRESHOLD) finalBtnX = db.x + MARGIN;
-        else if (distRight < SNAP_THRESHOLD) finalBtnX = db.x + db.width - BTN_W - MARGIN;
-
-        if (distTop < SNAP_THRESHOLD) finalY = db.y + MARGIN;
-        else if (distBottom < SNAP_THRESHOLD) finalY = db.y + db.height - COL_H - MARGIN;
-
-        // General clamping to keep it on-screen
-        if (finalBtnX < db.x) finalBtnX = db.x + MARGIN;
-        if (finalBtnX > db.x + db.width - BTN_W) finalBtnX = db.x + db.width - BTN_W - MARGIN;
-        if (finalY < db.y) finalY = db.y + MARGIN;
-        if (finalY > db.y + db.height - COL_H) finalY = db.y + db.height - COL_H - MARGIN;
-
-        const newSide = (finalBtnX < db.x + db.width / 2) ? 'left' : 'right';
-
-        state.widgetSide = newSide;
-        state.widgetPos = { x: finalBtnX, y: finalY };
-        store.set('widgetPos', state.widgetPos);
-        store.set('widgetSide', newSide);
-
-        // Relative coordinates (0.0 to 1.0)
-        const relX = (finalBtnX - db.x) / (db.width - BTN_W);
-        const relY = (finalY - db.y) / (db.height - COL_H);
-
-        store.set('widgetDockParams', {
-            displayId: display.id,
-            relX,
-            relY,
-            side: newSide
-        });
-
-        const targetWindowX = (newSide === 'left') ? finalBtnX : finalBtnX - PANEL_W;
-        state.widgetWindow.setBounds({ x: Math.round(targetWindowX), y: Math.round(finalY), width: FULL_W, height: COL_H });
-        calculateDirection();
-        notifySide();
-
+        const raw = widgetDrag ? { x: widgetDrag.x, y: widgetDrag.y } : state.widgetPos;
+        widgetDrag = null;
+        finishWidgetDrag(raw);
     } else if (action === 'open-list') {
         showMain();
     } else if (action === 'note-front-app') {
@@ -534,15 +644,10 @@ function handleWidgetAction(action, data) {
 
 function updateWidgetScale(scaleValue) {
     if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
-        const s = scaleValue / 100;
-        state.widgetWindow.webContents.setZoomFactor(s);
-
-        // Refresh bounds with new scale by simulating a collapse (or current mode)
-        const FULL_W = Math.round(418 * s);
-        const COL_H = Math.round(68 * s);
-        const winX = getWindowX();
-
-        state.widgetWindow.setBounds({ x: winX, y: state.widgetPos.y, width: FULL_W, height: COL_H });
+        state.widgetWindow.webContents.setZoomFactor(scaleValue / 100);
+        // Pencere yeni ölçekte, kapalı şeklinde. Yön eşiği de ölçekle değişiyor
+        // (WIDGET_HISTORY_H × ölçek): yeniden hesaplanıyor.
+        refreshWidgetLayout();
     }
 }
 
@@ -616,18 +721,8 @@ function handleDisplayChange() {
     const runSync = () => {
         if (state.widgetWindow && !state.widgetWindow.isDestroyed()) {
             ensureWidgetInBounds();
-            const s = (state.widgetScale || 100) / 100;
-            const FULL_W = Math.round(418 * s);
-            const COL_H = Math.round(68 * s);
-            const winX = getWindowX();
-
-            state.widgetWindow.setBounds({
-                x: Math.round(winX),
-                y: Math.round(state.widgetPos.y),
-                width: FULL_W,
-                height: COL_H
-            });
-            notifySide();
+            // Konum değişmiş olabilir: yönü yeniden hesaplıyor, yerleştiriyor, düzeni bildiriyor.
+            refreshWidgetLayout();
         }
     };
 
@@ -731,6 +826,11 @@ function hideQuickPaste() {
     }
 }
 
+// Yalnız --widget-flash-test: bırakınca sürüklemenin ham konumu temizlenmiş mi?
+function debugWidgetDrag() {
+    return widgetDrag;
+}
+
 module.exports = {
     showMain,
     toggleMain,
@@ -744,5 +844,6 @@ module.exports = {
     closeAllCaptureWindows,
     createQuickPasteWindow,
     toggleQuickPaste,
-    hideQuickPaste
+    hideQuickPaste,
+    debugWidgetDrag
 };

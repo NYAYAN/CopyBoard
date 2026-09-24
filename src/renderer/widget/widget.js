@@ -169,6 +169,21 @@ document.addEventListener('mousemove', (e) => {
     refreshIgnore();
 }, { passive: true });
 
+// Pencere imlecin ALTINDA taşınıp şekil değiştirince (bırakınca kenara yapışma, düzen geçişi,
+// açma/kapama) imleç dursa da pencereye göre konumu değişiyor ve yukarıdaki son konum
+// bayatlıyor: yukarı moda geçişte düğme uzun pencerenin dibine iniyor, bayat konum boş alanda
+// kalıyor ve düğmenin üstündeki durağan imleç tıklayamıyordu. Ana süreç her düzen bildiriminde
+// imlecin güncel konumunu da yolluyor. Bu dinleyici aşağıdaki düzen dinleyicisinden ÖNCE
+// kaydediliyor: karar (`applyLayoutClasses` → `updateMouseEvents`) güncel konumla veriliyor.
+if (window.api.onWidgetLayout) {
+    window.api.onWidgetLayout(({ cursor }) => {
+        if (!cursor) return;
+        lastMouseX = cursor.x;
+        lastMouseY = cursor.y;
+        haveMousePos = true;
+    });
+}
+
 // --- Tooltip ---
 const tooltip = document.createElement('div');
 tooltip.className = 'history-tooltip';
@@ -521,7 +536,14 @@ function closeAll() {
 }
 
 // --- Drag ---
+// Her sürüklemenin kimliği. Bırakınca son delta ve 'drag-end' arka arkaya gidiyor. Tauri'de
+// ana süreçte SIRASIZ işlenebiliyor; kimlik, bitmiş bir sürüklemenin geç gelen deltasını
+// ayıklamaya yarıyor (bkz. windows/widget.rs FINISHED_DRAG). Electron'da mesajlar sıralı;
+// kimlik orada yeni bir sürüklemenin başladığını söylüyor (bkz. window-manager.js). Zaman
+// damgası: sürüklemeler ardışık olduğu için benzersiz, webview yeniden yüklendiğinde de
+// çakışmıyor — bir sayaç sıfırlanır ve eski kimliklerle çakışırdı.
 mainBtn.addEventListener('pointerdown', (e) => {
+    const dragId = Date.now();
     isPointerDown = true;
     isDragging = false;
     dragStartX = e.screenX;
@@ -538,7 +560,12 @@ mainBtn.addEventListener('pointerdown', (e) => {
         lastMouseX = moveEvent.clientX; lastMouseY = moveEvent.clientY; haveMousePos = true;
         const deltaX = moveEvent.screenX - dragStartX;
         const deltaY = moveEvent.screenY - dragStartY;
-        if (!isDragging && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) isDragging = true;
+        if (!isDragging && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+            isDragging = true;
+            // Açık panelle sürüklenmesin: pencere sürüklenirken kapalı boyda tutuluyor ve
+            // açık bir menü kırpılırdı. Bırakınca zaten kapatılıyordu.
+            if (isOpen || isHistoryOpen) closeAll();
+        }
 
         if (isDragging) {
             accumulatedDeltaX += deltaX;
@@ -549,7 +576,7 @@ mainBtn.addEventListener('pointerdown', (e) => {
             if (!dragAnimFrame) {
                 dragAnimFrame = requestAnimationFrame(() => {
                     if (accumulatedDeltaX !== 0 || accumulatedDeltaY !== 0) {
-                        window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY });
+                        window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY, id: dragId });
                         accumulatedDeltaX = 0;
                         accumulatedDeltaY = 0;
                     }
@@ -573,9 +600,9 @@ mainBtn.addEventListener('pointerdown', (e) => {
         if (isDragging) {
             // Apply any remaining delta before ending drag
             if (accumulatedDeltaX !== 0 || accumulatedDeltaY !== 0) {
-                window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY });
+                window.api.widgetAction('drag', { x: accumulatedDeltaX, y: accumulatedDeltaY, id: dragId });
             }
-            window.api.widgetAction('drag-end');
+            window.api.widgetAction('drag-end', { id: dragId });
             lastDragEndTime = Date.now();
             isDragging = false;
             // IMPORTANT: Reset renderer state so the panel doesn't think it's still open
@@ -637,23 +664,117 @@ window.api.onUpdateHistory((data) => {
     }
 });
 
-// Apply/remove left-side class based on which edge widget is snapped to
+// --- Düzen: taraf (sol/sağ) + yön (yukarı/aşağı) ---
+//
+// ⚠ Sınıf değişince düğme pencerenin ÖBÜR yanına (ya da dibine) geçiyor, yani tıklanabilir
+// yüzeyin geometrisi değişiyor. Yakalama/geçirgenlik kararı ise yalnız fare hareket edince
+// yeniden veriliyordu (`refreshIgnore`): imleç dururken düzen değişirse karar eski geometriye
+// göre kalıyor, düğme görünen yerinde tıklanamıyor ya da boş alan tıklamayı yutuyordu.
+// Her düzen değişiminde yeniden değerlendiriliyor (imlecin güncel konumu için yukarıya bakın).
+function applyLayoutClasses(side, isUp) {
+    document.body.classList.toggle('left-side', side === 'left');
+    document.body.classList.toggle('up-side', !!isUp);
+    updateMouseEvents();
+}
+
+// Düzen olayı olmayan ana süreç (Electron 2.13 ve öncesi) taraf ve yönü ayrı olaylarla yolluyor.
 window.api.onWidgetSide((side) => {
-    if (side === 'left') {
-        document.body.classList.add('left-side');
-    } else {
-        document.body.classList.remove('left-side');
-    }
+    applyLayoutClasses(side, document.body.classList.contains('up-side'));
+});
+window.api.onWidgetDirection((isUp) => {
+    applyLayoutClasses(document.body.classList.contains('left-side') ? 'left' : 'right', isUp);
 });
 
-// isUp (true/false) değerine göre sınıf ekle
-window.api.onWidgetDirection((isUp) => {
-    if (isUp) {
-        document.body.classList.add('up-side');
-    } else {
-        document.body.classList.remove('up-side');
+// Ana süreç ikisini tek olayda yolluyor ('widget-layout') ve ŞEKİL DEĞİŞİMİ bu sayfanın
+// onayını bekliyor.
+//
+// Pencerenin şekli düzene bağlı: yukarı modda pencere düğmenin üstüne doğru uzun (paneller
+// orada açılıyor), aşağı modda düğmeden başlıyor; taraf da pencerenin düğmenin hangi yanına
+// taştığını belirliyor. Webview içeriği pencerenin sol üst köşesine bağlı ve yeni şekle
+// birkaç kare GEÇ çiziliyor — o karelerde düğme ~350 px yanda ya da yukarıda görünürdü.
+// Bu yüzden değişim üç adımda: içerik gizlenir + yeni sınıflar uygulanır → gizli kare ekrana
+// çıkınca ana süreç pencereyi yeni şekline sokar ('relayout-ready') → görünüm alanı yeni
+// boya ulaşınca içerik geri gelir. Açılışta da ilk düzen gelene kadar içerik gizli
+// (widget.html'deki `layout-pending`): varsayılan sağ/aşağı düzen, yukarı moddaki uzun
+// pencerede düğmeyi ~350 px yukarıda çizerdi.
+//
+// Her gizleme bir emniyet süresiyle açılıyor: hiçbir olay kaybı widget'ı görünmez bırakmasın.
+// Açılışta daha uzun: soğuk başlangıçta ilk düzen geç gelebilir ve erken açılmak, yukarı
+// modda düğmeyi tam da önlenen yerde (~350 px yukarıda) gösterirdi.
+const STARTUP_REVEAL_FALLBACK_MS = 1500;
+const RELAYOUT_REVEAL_FALLBACK_MS = 700;
+let layoutRevealTimer = null;
+let layoutResizeWait = null;
+
+function cancelLayoutResizeWait() {
+    if (layoutResizeWait) window.removeEventListener('resize', layoutResizeWait);
+    layoutResizeWait = null;
+}
+
+function revealLayout() {
+    clearTimeout(layoutRevealTimer);
+    layoutRevealTimer = null;
+    cancelLayoutResizeWait();
+    document.body.classList.remove('layout-pending', 'relayout');
+}
+
+function armLayoutRevealFallback(ms) {
+    clearTimeout(layoutRevealTimer);
+    layoutRevealTimer = setTimeout(revealLayout, ms);
+}
+
+// Görünüm alanı `h` boyuna ulaşınca (webview yeni şekle çiziyor) bir kare daha bekleyip aç.
+// Yalnız taraf değiştiyse boy zaten aynı: taşınma ana süreçte bu olaydan ÖNCE yapıldı.
+function revealWhenSized(h) {
+    const sized = () => !(h > 0) || Math.abs(window.innerHeight - h) < 2;
+    cancelLayoutResizeWait();
+    if (sized()) {
+        requestAnimationFrame(revealLayout);
+        return;
     }
-});
+    layoutResizeWait = () => {
+        if (!sized()) return;
+        window.removeEventListener('resize', layoutResizeWait);
+        layoutResizeWait = null;
+        requestAnimationFrame(revealLayout);
+    };
+    window.addEventListener('resize', layoutResizeWait);
+}
+
+if (window.api.onWidgetLayout) {
+    armLayoutRevealFallback(STARTUP_REVEAL_FALLBACK_MS); // ilk düzen hiç gelmezse de görünür ol
+    window.api.onWidgetLayout(({ side, up, relayout, h }) => {
+        if (relayout) {
+            // Önceki bir geçişin boy beklemesi bu gizlemeyi erken açmasın.
+            cancelLayoutResizeWait();
+            document.body.classList.add('relayout');
+            applyLayoutClasses(side, up);
+            armLayoutRevealFallback(RELAYOUT_REVEAL_FALLBACK_MS);
+            // İki kare: ilki gizli kareyi çiziyor, ikincisi onun ekrana çıktığını garanti
+            // ediyor. Pencere bundan ÖNCE şekil değiştirirse eski içerik yeni yerde görünür.
+            let acked = false;
+            const ack = () => {
+                if (acked) return;
+                acked = true;
+                window.api.widgetAction('relayout-ready', {
+                    state: isHistoryOpen ? 'history' : (isOpen ? 'expanded' : 'collapsed'),
+                });
+            };
+            requestAnimationFrame(() => requestAnimationFrame(ack));
+            setTimeout(ack, 150); // pencere gizliyken rAF durur; yine de ilerlesin
+            return;
+        }
+        applyLayoutClasses(side, up);
+        if (document.body.classList.contains('relayout')) {
+            revealWhenSized(h);
+        } else if (document.body.classList.contains('layout-pending')) {
+            requestAnimationFrame(revealLayout);
+        }
+    });
+} else {
+    // Düzen olayı yok (Electron 2.13 ve öncesi): beklenecek bir şey yok.
+    document.body.classList.remove('layout-pending');
+}
 
 // Update widget appearance
 window.api.onWidgetConfig((config) => {

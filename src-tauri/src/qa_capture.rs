@@ -2139,6 +2139,113 @@ fn flow_stalehit(app: &tauri::AppHandle, m: &MonitorInfo) {
     sleep(500);
 }
 
+/// Widget'ı monitörler ARASINDA gerçek fareyle sürükler.
+///
+/// Neden var: kullanıcı bildirdi — widget MacBook ekranından harici monitöre
+/// sürüklenirken sürekli "flash back" ediyor, bırakınca MacBook'a geri dönüyordu.
+/// Ölçüldü: konum renderer'ın `screenX/screenY`sinden türetiliyordu ve macOS'ta o
+/// değerler pencerenin O ANKİ EKRANINA göre çözülüyor; sınır geçilirken origin
+/// monitör yüksekliği kadar kayıp delta sıçrıyor ve konum iki ekran arasında
+/// salınıyordu (TEK sürüklemede 362 monitör değişimi, bırakma yanlış ekranda).
+///
+/// Bu akış hatayı kullanıcının yaptığı hareketle birebir üretiyor: gerçek CGEvent
+/// sürüklemesi, gerçek widget, iki gerçek monitör.
+///
+/// ## ⚠ Bilinen sınırlama: yakalama adımı kararsız
+///
+/// Sentetik basma bazen widget'a ulaşmıyor — ölçüldü: AYNI kodla koşuların
+/// yaklaşık yarısında `finish_drag` hiç çalışmadı, widget hazırlık konumunda kaldı.
+/// Kök neden henüz bulunmadı; en güçlü şüpheli, tıklama-geçirgenliğini açan
+/// hit-test yoklaması (30 ms) ile basma anı arasındaki yarış. Bu yüzden "yakaladı mı"
+/// AYRI bir kontrol: yakalayamayan koşu ürün hatası sayılmıyor, "ölçüm geçersiz"
+/// diyor. Yakaladığı koşularda ayırt ediyor — düzeltmeli kod 2/2 doğru ekranda,
+/// eski kod 1/1 yanlış ekranda (MacBook'a düştü). Tek bir kırmızıyı ürün hatası
+/// saymadan önce "yakaladı" satırına bak.
+#[cfg(target_os = "macos")]
+fn flow_widgetdrag(app: &tauri::AppHandle) {
+    note("— widget: monitörler arası GERÇEK sürükleme —");
+
+    let monitors = crate::geom::all_monitors(app);
+    if monitors.len() < 2 {
+        note("tek monitör — akış atlandı (bu hata yalnız çok monitörde çıkıyor)");
+        return;
+    }
+    let Some(primary) = crate::geom::primary_monitor(app) else {
+        check(false, "birincil monitör okunamadı");
+        return;
+    };
+    let Some(other) = monitors.iter().find(|m| m.name != primary.name).cloned() else {
+        check(false, "ikinci monitör bulunamadı");
+        return;
+    };
+    note(&format!(
+        "birincil {:?} ({:.0},{:.0} {:.0}x{:.0} ×{:.2})",
+        primary.name, primary.x, primary.y, primary.width, primary.height, primary.scale
+    ));
+    note(&format!(
+        "hedef    {:?} ({:.0},{:.0} {:.0}x{:.0} ×{:.2})",
+        other.name, other.x, other.y, other.width, other.height, other.scale
+    ));
+
+    on_main(app, |h| crate::windows::widget::toggle(h, true));
+    sleep(900);
+
+    // 1) Hazırlık — SÜRÜKLEMESİZ. Önceki sürüm hazırlığı da sürüklemeyle yapıyordu;
+    //    widget önceki koşudan harici monitörde kalınca o sürükleme tutmuyor ve test
+    //    "yanlış monitör" diyordu — ürün hatası yokken. Başlangıç durumu, test edilen
+    //    davranışa bağlı olmamalı.
+    let (px, py) = to_screen(&primary, primary.width * 0.5, primary.height * 0.55);
+    on_main(app, move |h| crate::windows::widget::debug_drop_at(h, px, py));
+    sleep(700);
+    let Some((sx, sy, btn)) = on_main(app, crate::windows::widget::debug_button_rect) else {
+        check(false, "widget konumu okunamadı");
+        return;
+    };
+    let start_on = crate::geom::monitor_nearest_point(app, sx + btn / 2.0, sy + btn / 2.0);
+    if !check(
+        start_on.as_ref().map(|m| m.name == primary.name).unwrap_or(false),
+        "hazırlık: widget birincil monitörde",
+    ) {
+        return;
+    }
+
+    // 2) Yakalama: imleci ÖNCE düğmenin üstüne getir ve BEKLE. Widget tıklama-geçirgen;
+    //    tıklanabilirliği hit-test izleyicisi imleci 30 ms'de bir yoklayarak açıyor.
+    //    Hemen basmak, pencere henüz geçirgenken basmak olur (bkz. `real_click_element`).
+    let (gx, gy) = (sx + btn / 2.0, sy + btn / 2.0);
+    mouse::move_to(gx, gy);
+    sleep(400);
+
+    // 3) ASIL ÖLÇÜM: harici monitöre gerçek sürükleme — İNSAN HIZINDA.
+    //    120 adım × 25 ms ≈ 3 sn. Hızlı sürükleme (24 adım) eski kodu BAŞKA bir
+    //    yoldan düşürüyordu: imleç küçük pencereden çıkıp pencere geçirgen olunca
+    //    olaylar kesiliyor, widget kayboluyordu. Kullanıcının bildirdiği belirti ise
+    //    SINIRDA salınım + yanlış ekranda bırakma; onu üretmek için eski kodun
+    //    MacBook'ta imleci takip edebildiği bir hız gerekiyor.
+    let (ox, oy) = to_screen(&other, other.width * 0.5, other.height * 0.5);
+    mouse::drag(gx, gy, ox, oy, 120);
+    sleep(1000);
+    let Some((fx, fy, fb)) = on_main(app, crate::windows::widget::debug_button_rect) else {
+        check(false, "widget konumu okunamadı");
+        return;
+    };
+    let end_on = crate::geom::monitor_nearest_point(app, fx + fb / 2.0, fy + fb / 2.0);
+    note(&format!(
+        "hedeflenen ({ox:.0},{oy:.0}) → widget ({fx:.0},{fy:.0}) · monitör {:?}",
+        end_on.as_ref().and_then(|m| m.name.clone())
+    ));
+
+    // İki AYRI iddia: yakalama hatası ile ürün hatası birbirine karışmasın.
+    let moved = (fx - sx).abs() > 5.0 || (fy - sy).abs() > 5.0;
+    if !check(moved, "sürükleme widget'ı YAKALADI (konum değişti) — değilse ölçüm geçersiz") {
+        return;
+    }
+    check(
+        end_on.as_ref().map(|m| m.name == other.name).unwrap_or(false),
+        "widget sürüklendiği monitörde KALDI (geri zıplamadı)",
+    );
+}
+
 /// Global kısayollar: GERÇEK tuş vuruşuyla.
 ///
 /// Kısayollar Carbon `RegisterEventHotKey` ile kaydediliyor
@@ -2869,7 +2976,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("solo") || has("cross") || has("stalehit") {
+            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("solo") || has("cross") || has("stalehit") || has("widgetdrag") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -2890,6 +2997,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     }
                     if has("solo") { flow_solo(&app); }
                     if has("cross") { flow_cross(&app); }
+                    if has("widgetdrag") { flow_widgetdrag(&app); }
                     if has("stalehit") { flow_stalehit(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
                 }

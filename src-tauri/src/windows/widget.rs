@@ -79,6 +79,12 @@ static LIVE_POS: std::sync::Mutex<Option<((f64, f64), (f64, f64))>> = std::sync:
 /// de çakışmıyor.
 static FINISHED_DRAG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Sürüklemenin tutma farkı: (sürükleme kimliği, imleç − düğme konumu).
+///
+/// Konum artık renderer deltasından değil İMLEÇTEN türetiliyor; aradaki sabit fark
+/// sürükleme başında bir kez ölçülüp burada tutuluyor.
+static DRAG_GRAB: std::sync::Mutex<Option<(u64, (f64, f64))>> = std::sync::Mutex::new(None);
+
 /// Paneller yukarı mı açılıyor (düğmenin altında yer yok)?
 ///
 /// Pencerenin ŞEKLİ buna bağlı (bkz. [`window_rect`]), o yüzden yalnız düğme YER
@@ -91,6 +97,25 @@ static UP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(fa
 #[cfg(debug_assertions)]
 pub fn debug_live_pos() -> Option<(f64, f64)> {
     LIVE_POS.lock().unwrap().map(|(shown, _raw)| shown)
+}
+
+/// Test erişimi: düğmenin şu anki sol-üst köşesi ve kenar uzunluğu (NOKTA uzayı).
+/// Harness sürüklemeye tam düğmenin üstünden başlayabilsin diye.
+#[cfg(debug_assertions)]
+pub fn debug_button_rect(app: &tauri::AppHandle) -> (f64, f64, f64) {
+    let s = scale(app);
+    let (bx, by) = saved_pos(app);
+    (bx, by, BTN_W * s)
+}
+
+/// Test erişimi: widget'ı (bx, by)'ye "bırakılmış gibi" yerleştirir — sürüklemesiz.
+/// Harness'ın başlangıç durumu, test ettiği davranışa (monitörler arası sürükleme)
+/// bağlı olmasın diye. Ana thread'den çağrılmalı.
+#[cfg(debug_assertions)]
+pub fn debug_drop_at(app: &tauri::AppHandle, bx: f64, by: f64) {
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    let s = scale(app);
+    finish_drag(app, &window, s, Some((bx, by)));
 }
 
 /// Test erişimi: pencere yukarı modun (uzun) şeklinde mi? Düğme o zaman pencerenin DİBİNDE.
@@ -373,6 +398,8 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
             let id = drag_id(&data);
             let btn = BTN_W * s;
             let col_h = COLLAPSED_H * s;
+            // İmleç kilitten ÖNCE okunuyor: OS sorgusunu kilit altında yapma.
+            let cursor = geom::cursor_position(app);
             // Kimlik denetimi, canlı konumun okunması ve yazılması TEK kilit altında:
             // `drag-end` de aynı kilidi alıyor, biri ötekinin ortasına giremiyor.
             let placed = {
@@ -380,10 +407,40 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
                 if id != 0 && id == FINISHED_DRAG.load(std::sync::atomic::Ordering::Acquire) {
                     None // bu sürükleme bitti; gecikmiş delta
                 } else {
-                    // Delta HAM konuma ekleniyor (bkz. LIVE_POS): sıkıştırılmış konuma
-                    // eklenseydi widget monitör kenarında takılırdı.
-                    let (rx, ry) = live.map(|(_shown, raw)| raw).unwrap_or_else(|| stored_pos(app));
-                    let (tx, ty) = (rx + dx, ry + dy);
+                    // ── KONUM İMLEÇTEN, RENDERER DELTASINDAN DEĞİL ──────────────
+                    //
+                    // Ölçüldü: renderer'ın `screenX/screenY`si macOS'ta pencerenin O ANKİ
+                    // EKRANINA göre çözülüyor. Pencere iki monitör arasında geçerken origin
+                    // bir anda monitör yüksekliği kadar kayıyor (bu makinede 1440 nokta);
+                    // delta o kadar sıçrıyor, konum öbür ekrana atlıyor, oradan sıkıştırmayla
+                    // geri çekiliyor ve salınım başlıyor. TEK sürüklemede 362 monitör
+                    // değişimi ölçüldü ve bırakma yanlış ekranda bitiyordu — kullanıcının
+                    // "sürüklerken sürekli flash back, bırakınca MacBook'a dönüyor" dediği bu.
+                    //
+                    // `geom::cursor_position` karışık DPI için doğrulanmış TEK BİÇİMLİ nokta
+                    // uzayında — monitör dikdörtgenleriyle aynı uzay. Tutma farkı sürükleme
+                    // başında bir kez ölçülüyor, sonrası saf imleç takibi.
+                    let (tx, ty) = match cursor {
+                        Some((cux, cuy)) => {
+                            let mut grab = DRAG_GRAB.lock().unwrap();
+                            match *grab {
+                                Some((gid, (ox, oy))) if id != 0 && gid == id => (cux - ox, cuy - oy),
+                                _ => {
+                                    // Sürüklemenin ilk olayı: farkı sabitle, pencereyi oynatma.
+                                    let (px, py) =
+                                        live.map(|(_shown, raw)| raw).unwrap_or_else(|| stored_pos(app));
+                                    *grab = Some((id, (cux - px, cuy - py)));
+                                    (px, py)
+                                }
+                            }
+                        }
+                        // İmleç okunamazsa eski davranışa düş (delta HAM konuma eklenir).
+                        None => {
+                            let (rx, ry) =
+                                live.map(|(_shown, raw)| raw).unwrap_or_else(|| stored_pos(app));
+                            (rx + dx, ry + dy)
+                        }
+                    };
                     // Sürükleme SIRASINDA da çalışma alanında tut. Yalnız bırakınca
                     // sıkıştırılıyordu: aşağı sürüklenen widget'ın yarısı görev çubuğunun
                     // ALTINA giriyor (ölçüldü: 40/40), bırakınca da yukarı zıplıyordu.
@@ -415,6 +472,7 @@ pub fn handle_action(app: &tauri::AppHandle, action: &str, data: Option<serde_js
                 if id != 0 {
                     FINISHED_DRAG.store(id, std::sync::atomic::Ordering::Release);
                 }
+                *DRAG_GRAB.lock().unwrap() = None;
                 // HAM konum: `finish_drag` monitörü imlecin gerçekten bulunduğu yerden
                 // seçip kendisi sıkıştırıyor ve kenara yapıştırıyor.
                 live.take().map(|(_shown, raw)| raw)
@@ -470,6 +528,9 @@ fn finish_drag(app: &tauri::AppHandle, window: &tauri::WebviewWindow, s: f64, po
     let (fx, fy) = geom::clamp_to_work_area(&m, fx, fy, btn, col_h, MARGIN);
 
     let side = if fx < m.work_x + m.work_width / 2.0 { "left" } else { "right" };
+    // Sürükleme sonucu tek satır: hata bildiriminde "hangi ekrana bıraktım, nereye
+    // oturdu" sorusunu logdan cevaplayabilmek için (çok monitörde tekrar yaşanırsa).
+    log::info!("widget bırakıldı: {:?} ({:.0},{:.0}) taraf={side}", m.name, fx, fy);
     let store = &app.state::<AppState>().store;
     store.set("widgetPos", serde_json::json!({ "x": fx.round(), "y": fy.round() }));
     store.set("widgetSide", side);

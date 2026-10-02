@@ -201,7 +201,8 @@ olarak başımıza geldi: değişken `~/.zshrc`'ye eklendi ama derleme, o düzen
 açılmış bir terminalde çalıştırıldığı için imzasız çıktı ve fark edilmedi.
 
 `scripts/check-signing-identity.sh`, `beforeBundleCommand` olarak paketleme öncesi
-çalışıyor ve üç durumu ayırıyor:
+çalışıyor (yalnız macOS: `src-tauri/tauri.macos.conf.json`; Windows'ta düz `bash`
+WSL'e gidip dağıtım yoksa derlemeyi düşürüyordu) ve üç durumu ayırıyor:
 
 | Durum | Sonuç |
 |---|---|

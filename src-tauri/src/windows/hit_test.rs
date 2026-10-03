@@ -167,74 +167,77 @@ fn start_tracker(app: &tauri::AppHandle) {
 
                 std::thread::sleep(std::time::Duration::from_millis(30));
 
-                let cursor = crate::geom::cursor_position(&handle);
+                // Her tur kendi pool'unda — bkz. `platform::autoreleasepool` (3 GB sızıntı).
+                let cursor = crate::platform::autoreleasepool(|| crate::geom::cursor_position(&handle));
                 if cursor == last_cursor && skipped < FULL_CHECK_EVERY {
                     skipped += 1;
                     continue;
                 }
                 last_cursor = cursor;
                 skipped = 0;
-                for Snapshot { label, areas, zoom, note_front_app: note, applied } in entries {
-                    let Some(window) = handle.get_webview_window(&label) else {
-                        // Kaydı silmek kanıyı da siliyor: `applied` kaydın içinde.
-                        clear(&handle, &label);
-                        continue;
-                    };
-                    if !window.is_visible().unwrap_or(false) {
-                        continue;
-                    }
-                    let over = cursor
-                        .and_then(|(cx, cy)| {
-                            // İSTEMCİ alanının kökeni, dış çerçevenin değil: renderer'ın
-                            // CSS koordinatları buradan başlıyor. Windows'ta gölgeli
-                            // çerçevesiz pencerelerde dış dikdörtgen 8 px sola/1 px yukarı
-                            // taşıyor; `outer_position` ile alanlar o kadar kayıyordu.
-                            let pos = window.inner_position().ok()?;
-                            let sf = window.scale_factor().ok()?;
-                            // Pencereye göreli MANTIKSAL konum → CSS pikseli (zoom'a bölünür)
-                            let x = (cx - pos.x as f64 / sf) / zoom;
-                            let y = (cy - pos.y as f64 / sf) / zoom;
-                            Some(areas.iter().any(|a| a.contains(x, y)))
-                        })
-                        .unwrap_or(false);
+                crate::platform::autoreleasepool(|| {
+                    for Snapshot { label, areas, zoom, note_front_app: note, applied } in entries {
+                        let Some(window) = handle.get_webview_window(&label) else {
+                            // Kaydı silmek kanıyı da siliyor: `applied` kaydın içinde.
+                            clear(&handle, &label);
+                            continue;
+                        };
+                        if !window.is_visible().unwrap_or(false) {
+                            continue;
+                        }
+                        let over = cursor
+                            .and_then(|(cx, cy)| {
+                                // İSTEMCİ alanının kökeni, dış çerçevenin değil: renderer'ın
+                                // CSS koordinatları buradan başlıyor. Windows'ta gölgeli
+                                // çerçevesiz pencerelerde dış dikdörtgen 8 px sola/1 px yukarı
+                                // taşıyor; `outer_position` ile alanlar o kadar kayıyordu.
+                                let pos = window.inner_position().ok()?;
+                                let sf = window.scale_factor().ok()?;
+                                // Pencereye göreli MANTIKSAL konum → CSS pikseli (zoom'a bölünür)
+                                let x = (cx - pos.x as f64 / sf) / zoom;
+                                let y = (cy - pos.y as f64 / sf) / zoom;
+                                Some(areas.iter().any(|a| a.contains(x, y)))
+                            })
+                            .unwrap_or(false);
 
-                    let ignore = !over;
-                    if applied == Some(ignore) {
-                        continue;
-                    }
+                        let ignore = !over;
+                        if applied == Some(ignore) {
+                            continue;
+                        }
 
-                    if let Err(e) = window.set_ignore_cursor_events(ignore) {
-                        log::warn!("{label}: tıklama geçirgenliği ayarlanamadı: {e}");
-                        continue;
+                        if let Err(e) = window.set_ignore_cursor_events(ignore) {
+                            log::warn!("{label}: tıklama geçirgenliği ayarlanamadı: {e}");
+                            continue;
+                        }
+                        // Kanıyı UYGULADIKTAN sonra yaz. Kayıt bu arada silinmiş olabilir
+                        // (pencere kapandı, yeni oturum) — o zaman dokunma, yoksa taze
+                        // kaydın kanısını eski pencerenin durumuyla kirletiriz.
+                        if let Some(e) = handle.state::<Registry>().0.lock().unwrap().get_mut(&label) {
+                            e.applied = Some(ignore);
+                        }
+                        // Yakalama overlay'i INFO seviyesinde: sürüm derlemesinde DEBUG
+                        // yazılmıyor ve "fare hiçbir şey yapmıyor" bildirimlerinde tam da
+                        // bu satır gerekiyordu. Widget gibi diğerleri DEBUG'da kalıyor —
+                        // onlar sürekli geçirgenlik değiştiriyor, günlüğü doldururlardı.
+                        if label.starts_with(crate::windows::capture::PREFIX) {
+                            log::info!(
+                                "{label}: {} (isabet alanı sayısı: {})",
+                                if ignore { "GEÇİRGEN — fare olayları alta geçiyor" } else { "tıklanabilir" },
+                                areas.len()
+                            );
+                        } else {
+                            log::debug!(
+                                "{label}: {}",
+                                if ignore { "geçirgen" } else { "tıklanabilir" }
+                            );
+                        }
+                        // İmleç yüzeye YENİ indi: hâlâ ön uygulama DEĞİLİZ, yani bu,
+                        // kullanıcının hangi uygulamada yazdığını görebileceğimiz son an.
+                        if !ignore && note {
+                            crate::platform::note_front_app();
+                        }
                     }
-                    // Kanıyı UYGULADIKTAN sonra yaz. Kayıt bu arada silinmiş olabilir
-                    // (pencere kapandı, yeni oturum) — o zaman dokunma, yoksa taze
-                    // kaydın kanısını eski pencerenin durumuyla kirletiriz.
-                    if let Some(e) = handle.state::<Registry>().0.lock().unwrap().get_mut(&label) {
-                        e.applied = Some(ignore);
-                    }
-                    // Yakalama overlay'i INFO seviyesinde: sürüm derlemesinde DEBUG
-                    // yazılmıyor ve "fare hiçbir şey yapmıyor" bildirimlerinde tam da
-                    // bu satır gerekiyordu. Widget gibi diğerleri DEBUG'da kalıyor —
-                    // onlar sürekli geçirgenlik değiştiriyor, günlüğü doldururlardı.
-                    if label.starts_with(crate::windows::capture::PREFIX) {
-                        log::info!(
-                            "{label}: {} (isabet alanı sayısı: {})",
-                            if ignore { "GEÇİRGEN — fare olayları alta geçiyor" } else { "tıklanabilir" },
-                            areas.len()
-                        );
-                    } else {
-                        log::debug!(
-                            "{label}: {}",
-                            if ignore { "geçirgen" } else { "tıklanabilir" }
-                        );
-                    }
-                    // İmleç yüzeye YENİ indi: hâlâ ön uygulama DEĞİLİZ, yani bu,
-                    // kullanıcının hangi uygulamada yazdığını görebileceğimiz son an.
-                    if !ignore && note {
-                        crate::platform::note_front_app();
-                    }
-                }
+                });
             }
         })
         .expect("hit-test thread'i başlatılamadı");

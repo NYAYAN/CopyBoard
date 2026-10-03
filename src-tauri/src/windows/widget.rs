@@ -671,10 +671,11 @@ pub fn start_display_watcher(app: &tauri::AppHandle) {
 
     let handle = app.clone();
     std::thread::spawn(move || {
-        let mut last = fingerprint(&handle);
+        // Sonsuz döngü: her tur kendi pool'unda — bkz. `platform::autoreleasepool`.
+        let mut last = crate::platform::autoreleasepool(|| fingerprint(&handle));
         loop {
             std::thread::sleep(std::time::Duration::from_secs(3));
-            let now = fingerprint(&handle);
+            let now = crate::platform::autoreleasepool(|| fingerprint(&handle));
             if now == last {
                 continue;
             }

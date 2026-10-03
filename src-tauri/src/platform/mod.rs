@@ -33,6 +33,34 @@ impl WindowLevel {
     }
 }
 
+/// `f`'yi kendi autorelease pool'u içinde çalıştırır; macOS dışında doğrudan çağırır.
+///
+/// ## Neden var — SONSUZ DÖNGÜLÜ arka plan thread'leri için ŞART
+///
+/// `std::thread` ile açılan bir thread'in autorelease pool'u yok. Objective-C'ye ilk
+/// dokunduğunda çalışma zamanı ona ÖRTÜK bir pool kuruyor ve o pool ancak THREAD
+/// BİTİNCE boşalıyor. Hiç bitmeyen bir yoklama döngüsünde bu, her turda üretilen
+/// her otomatik-bırakılan nesnenin süreç ömrü boyunca birikmesi demek.
+///
+/// Ölçüldü (4 gün açık kalan release, `heap`): 52.460.975 `NSConcreteValue`
+/// (2,5 GB) ve onları tutan 103.898 `@autoreleasepool content` sayfası (426 MB);
+/// toplam ~3 GB'ın %95'i sıkıştırılmış — bir kez ayrılmış, bir daha dokunulmamış.
+/// Kaynak, 30 ms'de bir pencere sorgusu yapan isabet testi döngüsüydü. Etkinlik
+/// Monitörü 3,2 GB gösteriyordu; RSS yalnız 25 MB olduğu için `ps` göremiyordu.
+///
+/// Kural: sonsuz döngüde Objective-C'ye (tao/wry pencere çağrıları dahil) dokunan
+/// her arka plan thread'i, HER TURUNU buna sarmalı.
+pub fn autoreleasepool<T>(f: impl FnOnce() -> T) -> T {
+    #[cfg(target_os = "macos")]
+    {
+        objc2::rc::autoreleasepool(|_| f())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        f()
+    }
+}
+
 /// Pencereyi verilen seviyeye çıkarır. macOS dışında `always_on_top` zaten yeterli.
 pub fn set_window_level(window: &tauri::WebviewWindow, level: WindowLevel) -> Result<(), String> {
     #[cfg(target_os = "macos")]

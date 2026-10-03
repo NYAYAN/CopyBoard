@@ -1,3 +1,17 @@
+# CopyBoard v3.1.1 Release Notes
+
+Uzun süre açık kalan uygulamanın belleği artık zamanla büyümüyor.
+
+## 🐛 Düzeltmeler
+
+- **Bellek günler içinde gigabaytlara çıkıyordu.** Birkaç gün açık kalan uygulama
+  Etkinlik Monitörü'nde 3 GB'ı aşabiliyordu. Yüzen widget'ın imleci izleyen arka plan
+  döngüsü, macOS'un her turda ürettiği geçici nesneleri hiç bırakmıyordu — 4 günde
+  52 milyon nesne birikmişti. Artık her turda bırakılıyor: uygulamanın ana süreci
+  4 günde ~3 GB'a ulaşırken, düzeltmeden sonra ~40 MB'ta sabit kalıyor.
+
+---
+
 # CopyBoard v3.0.0 Release Notes
 
 Uygulamanın ana süreci Electron'dan **Tauri**'ye (Rust) taşındı. Arayüz aynı: ne

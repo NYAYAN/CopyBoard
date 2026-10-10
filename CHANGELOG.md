@@ -1,3 +1,19 @@
+# CopyBoard v3.2.3 Release Notes
+
+Güncelleme penceresi yenilendi. Yeni hâlini bir sonraki güncellemede göreceksiniz.
+
+## ✨ Yeni
+
+- **Yenilenen güncelleme penceresi.** Daha sade bir tasarım: sürüm değişikliği tek satırda, notlar başlık ve açıklama olarak, indirme ilerlemesi yüzde, boyut ve hızla gösteriliyor. Açık ve koyu temaya uyuyor; geri sayımda "Yeniden başlat" ile beklemeden kurabiliyorsunuz.
+- **Tüm sürüm notları.** Güncelleme penceresindeki bağlantı, bütün sürümlerin notlarını büyük bir pencerede açıyor; kurulu sürümden yeni olanlar işaretli. Birden çok sürüm atlanıyorsa güncelleme penceresi bunu söylüyor.
+
+## 🐛 Düzeltmeler
+
+- **Sürüm notlarında maddeler ortadan bölünüyordu.** Uzun bir maddenin devamı ayrı paragrafa düşüyor, cümleler satır ortasında kırılıyordu.
+- **İndirme hataları anlaşılır.** Güncelleme indirilemezse ham teknik metin yerine ne olduğunu söyleyen bir cümle görünüyor.
+
+---
+
 # CopyBoard v3.2.2 Release Notes
 
 ## 🐛 Düzeltmeler

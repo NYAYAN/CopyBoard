@@ -8,9 +8,16 @@ Güncellemeler artık uygulamanın içinden kuruluyor — macOS'ta da.
   geliyor; **Güncelle** deyince paket indiriliyor, imzası doğrulanıyor ve uygulama
   yeni sürümle yeniden açılıyor. DMG indirip uygulamayı Uygulamalar klasörüne
   sürüklemek gerekmiyor. macOS'ta diyalog eskiden GitHub sayfasına yönlendiriyordu.
+  Kurulum bir sorunla yarıda kalırsa mevcut uygulama yerinde kalıyor.
 - **İzinler güncellemeden sonra korunuyor.** Sürümler aynı imza kimliğiyle
   imzalandığı için Ekran Kaydı ve Erişilebilirlik izni her güncellemede yeniden
   istenmiyor.
+
+## 🐛 Düzeltmeler
+
+- **Ekran görüntüsü alırken ara sıra donma.** Yakalama ekranı kapanırken, imleci
+  izleyen arka plan döngüsüyle uygulamanın ana akışı birbirini bekleyip uygulamayı
+  dondurabiliyordu. Artık birbirlerini beklemiyorlar.
 
 ## ⚠️ Son kez elle kurulum
 

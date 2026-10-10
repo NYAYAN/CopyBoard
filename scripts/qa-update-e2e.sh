@@ -181,9 +181,11 @@ check "[ \"\$(echo $NEW_PIDS | wc -w | tr -d ' ')\" = 1 ] && ! echo ' $NEW_PIDS'
   "yeni sürüm ayakta, tek süreç ve eski süreç değil (eski $OLD_PID, şimdi ${NEW_PIDS:-yok})"
 check "[ \"\$(defaults read '$APP/Contents/Info.plist' CFBundleShortVersionString)\" = '$NEW_VER' ]" \
   "paket sürümü $NEW_VER"
-# Eklenti yeni paketi bir `tempfile` dizinine (0700) açıp yerine taşıyor; kökün 0755
-# olmasını arşivin ilk girdisi (`X.app/`, drwxr-xr-x) sağlıyor. Eklenti ya da paketleme
-# değişirse uygulama yalnız sahibine açık kalabilir — bekçi bu.
+# Eklenti yeni paketi bir `tempfile` dizinine (0700) açıp o dizini paketin yerine
+# koyuyor. 2.13.2'den beri kökü kendisi 0755 yapıyor: arşivin kök girdisi 0700'e
+# çevrilip yeniden imzalandığında da 755 ölçüldü. 2.10.1'de bunu yalnız arşivin ilk
+# girdisi (`X.app/`, drwxr-xr-x) sağlıyordu. Eklenti ya da paketleme değişirse uygulama
+# yalnız sahibine açık kalabilir — bekçi bu.
 check "[ \"\$(stat -f %Lp '$APP')\" = 755 ]" "paket kökü 0755 (şimdi $(stat -f %Lp "$APP"))"
 DR_AFTER="$(codesign -d -r- "$APP" 2>&1 | sed -n 's/^designated => //p')"
 check "[ -n \"\$DR_BEFORE\" ] && [ \"\$DR_BEFORE\" = \"\$DR_AFTER\" ] && echo \"\$DR_AFTER\" | grep -q 'certificate leaf'" \

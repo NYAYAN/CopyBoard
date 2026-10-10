@@ -35,18 +35,13 @@ fn decode_data_url(data_url: &str) -> Option<Vec<u8>> {
 /// Burada öyle bir dönüşüm YOK — piksel neyse o. Mevcut kodun en kırılgan kısmı
 /// böylece sadeleşiyor.
 pub fn write_image_to_clipboard(png: &[u8]) -> Result<(), String> {
-    let img = image::load_from_memory(png).map_err(|e| format!("görüntü çözülemedi: {e}"))?;
-    let rgba = img.to_rgba8();
-    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-    arboard::Clipboard::new()
-        .and_then(|mut c| {
-            c.set_image(arboard::ImageData {
-                width: w,
-                height: h,
-                bytes: std::borrow::Cow::Owned(rgba.into_raw()),
-            })
-        })
-        .map_err(|e| format!("panoya yazılamadı: {e}"))
+    // Çağıran çoğu zaman bir tokio iş parçacığı (`copy_png` → `async_runtime::spawn`,
+    // `async` komutlar). Eski yol (arboard → NSImage → `writeObjects:`) her kopyada
+    // ham piksel tamponunu + TIFF'ini süreçte bırakıyordu: 6 gün açık release'te 7
+    // görsel kopyasından ~230 MB (`vmmap`: Malloc Large + Foundation çiftleri; 3600×2338
+    // ekranın tam kopyası 57 MB). `leaks` görmüyordu, çünkü nesneler referanslıydı.
+    // Artık panoya nesne değil VERİ veriliyor — bkz. `platform::clipboard_write_png`.
+    crate::platform::clipboard_write_png(png)
 }
 
 fn copy_png(app: &tauri::AppHandle, png: Vec<u8>) {
@@ -271,5 +266,95 @@ pub async fn ocr_process(app: tauri::AppHandle, data_url: String) {
 pub async fn set_ignore_mouse_events(window: tauri::WebviewWindow, ignore: bool) {
     if let Err(e) = window.set_ignore_cursor_events(ignore) {
         log::warn!("tıklama geçirgenliği ayarlanamadı: {e}");
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod pano_gorsel_sizinti_testleri {
+    //! Panoya görsel yazımı, autorelease pool'u olmayan bir thread'de birikmemeli.
+    //!
+    //! İki ölçüm aynı türden bir thread'de: arboard yolu (kontrol — birikmeli) ve
+    //! üretim yolu `setData` (düz kalmalı). Ölçü, `heap`in saydığı CANLI ≥ 10 MB malloc
+    //! blokları — ayak izi/RSS değil (bkz. `canli_buyuk_blok_sayisi`).
+    //!
+    //! Keşif ölçümü (test süreci içinden `heap`/`vmmap`): arboard'da 3 yazımdan sonra
+    //! 3 `NSBitmapImageRep` + 3 `CGImage` + 3 piksel tamponu (Malloc Large 69,6 MB) +
+    //! TIFF'ler (Foundation 45,8 MB) pano METİNLE DEĞİŞTİKTEN SONRA BİLE duruyordu;
+    //! `setData`'da aynı noktada hiçbiri yoktu. Autorelease pool'una sarmak arboard
+    //! yolunu kurtarmıyordu (pool'lu +61 MB / 4 yazım).
+    //!
+    //! Panoyu DEĞİŞTİRİR; o yüzden `#[ignore]`. Elle:
+    //! `cargo test pano_gorsel -- --ignored --nocapture`
+    use super::*;
+
+    const W: u32 = 2000;
+    const H: u32 = 2000;
+    const N: usize = 4;
+
+    /// Sıkıştırılamayan gürültü: TIFF de piksel tamponu kadar büyük olsun.
+    fn gurultu_png() -> Vec<u8> {
+        let mut x: u32 = 0x9E37_79B9;
+        let raw: Vec<u8> = (0..(W * H * 4) as usize)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                x as u8
+            })
+            .collect();
+        let mut png = Vec::new();
+        use image::ImageEncoder;
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(&raw, W, H, image::ExtendedColorType::Rgba8)
+            .expect("png kodlanamadı");
+        png
+    }
+
+    /// Süreçteki CANLI ≥ 10 MB malloc bloklarının sayısı (`heap`): sahadaki teşhisin
+    /// ölçüsü. Ayak izi / RSS kullanılmıyor — serbest bırakılan büyük bloklar libmalloc'un
+    /// ertelenmiş geri alımı yüzünden saniyelerce ayak izinde kalıyor ve ölçüm
+    /// zamanlamaya bağlı hâle geliyordu (setData yolunda bile sahte +15 MB/yazım).
+    fn canli_buyuk_blok_sayisi() -> usize {
+        let out = std::process::Command::new("heap")
+            .args(["-addresses", "non-object[10000000-]", &std::process::id().to_string()])
+            .output()
+            .expect("heap çalışmadı");
+        String::from_utf8_lossy(&out.stdout).lines().filter(|l| l.starts_with("0x")).count()
+    }
+
+    /// `std::thread` = pool'suz thread. Sayım thread BİTMEDEN alınmalı; bitince örtük
+    /// pool boşalır. Pano sonda metinle temizleniyor: istemci son yazımın verisini
+    /// meşru olarak tutuyor, temizlenince bırakıyor — o sızıntı değil.
+    fn havuzsuz_threadde_fark(yaz: fn(&[u8]) -> Result<(), String>, png: Vec<u8>) -> isize {
+        std::thread::spawn(move || {
+            assert!(crate::platform::clipboard_write_text("copyboard-sızıntı-testi"));
+            let once = canli_buyuk_blok_sayisi() as isize;
+            for _ in 0..N {
+                yaz(&png).expect("panoya yazılamadı");
+            }
+            assert!(crate::platform::clipboard_write_text("copyboard-sızıntı-testi"));
+            canli_buyuk_blok_sayisi() as isize - once
+        })
+        .join()
+        .expect("ölçüm thread'i düştü")
+    }
+
+    #[test]
+    #[ignore = "panoyu değiştirir — elle: cargo test pano_gorsel -- --ignored --nocapture"]
+    fn pano_gorsel_yazimi_havuzsuz_threadde_birikmiyor() {
+        let png = gurultu_png();
+
+        // Isınma: AppKit/CoreGraphics ilk yüklemesi ölçüme karışmasın.
+        write_image_to_clipboard(&png).unwrap();
+
+        let duzeltme = havuzsuz_threadde_fark(write_image_to_clipboard, png.clone());
+        let kontrol = havuzsuz_threadde_fark(crate::platform::clipboard_write_png_arboard, png);
+        eprintln!("{N} yazım, canlı ≥10 MB blok farkı: arboard {kontrol:+}, setData {duzeltme:+}");
+
+        assert!(
+            kontrol >= N as isize - 1,
+            "kontrol ölçümü birikmeliydi ({kontrol:+} blok) — test artık sızıntıyı görmüyor"
+        );
+        assert!(duzeltme <= 0, "setData yazımı blok bırakmamalı: {duzeltme:+}");
     }
 }

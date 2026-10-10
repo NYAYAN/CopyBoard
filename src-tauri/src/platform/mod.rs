@@ -256,6 +256,36 @@ pub fn clipboard_write_text(text: &str) -> bool {
     { arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok() }
 }
 
+/// Panoya PNG görseli yazar.
+///
+/// macOS'ta veri olarak (`NSPasteboard.setData`), bkz. `macos::pasteboard::write_png`
+/// — arboard'ın NSImage yolu her kopyada piksel tamponunu süreçte bırakıyordu.
+/// Öteki platformlarda arboard: PNG çözülüp ham piksel olarak veriliyor.
+pub fn clipboard_write_png(png: &[u8]) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    { macos::pasteboard::write_png(png) }
+    #[cfg(not(target_os = "macos"))]
+    { clipboard_write_png_arboard(png) }
+}
+
+/// arboard yolu: Windows/Linux'ta üretim; macOS'ta yalnız sızıntı testinin kontrol kolu
+/// (`commands::capture::pano_gorsel_sizinti_testleri`).
+#[cfg(any(not(target_os = "macos"), test))]
+pub fn clipboard_write_png_arboard(png: &[u8]) -> Result<(), String> {
+    let img = image::load_from_memory(png).map_err(|e| format!("görüntü çözülemedi: {e}"))?;
+    let rgba = img.to_rgba8();
+    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+    arboard::Clipboard::new()
+        .and_then(|mut c| {
+            c.set_image(arboard::ImageData {
+                width: w,
+                height: h,
+                bytes: std::borrow::Cow::Owned(rgba.into_raw()),
+            })
+        })
+        .map_err(|e| format!("panoya yazılamadı: {e}"))
+}
+
 // ── Yapıştırma ───────────────────────────────────────────────────────────────
 
 /// Odaktaki uygulamaya Cmd/Ctrl+V gönderir.

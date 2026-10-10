@@ -738,12 +738,19 @@ fn follow_cursor_focus(app: tauri::AppHandle, gen: u64) {
                 if cs.focus_gen.load(Ordering::Acquire) != gen {
                     return;
                 }
+                // İmleç kilitten ÖNCE okunuyor. `cursor_position` ana thread'e gidip
+                // yanıtı BEKLİYOR; kilit tutulurken beklenirse, aynı kilidi ana
+                // thread'de bekleyen `finish` ile karşılıklı kilitlenme oluyor ve
+                // uygulama donuyordu (`close_all` ana thread'den de çağrılıyor, ör.
+                // kayıt sırasında global Escape). Tauri 2.12'de `primary_monitor` da
+                // ana thread'e gittiği için yarış 2 koşunun 2'sinde tuttu (`sample`
+                // yığınlarıyla doğrulandı); 2.11'de pencere daha dar ama vardı.
+                let Some((cx, cy)) = geom::cursor_position(&app) else { continue };
                 let target = {
                     let overlays = cs.overlays.lock().unwrap();
                     if overlays.is_empty() {
                         return;
                     }
-                    let Some((cx, cy)) = geom::cursor_position(&app) else { continue };
                     overlays.iter().find(|(_, m)| m.contains(cx, cy)).map(|(l, _)| l.clone())
                 };
                 let Some(label) = target else { continue };

@@ -210,9 +210,17 @@ jobs:
 
       # İmzanın gerçekten istenen kimlikle atıldığını ÖLÇ: sessizce ad-hoc'a düşmüş bir
       # paket, güncelleyen herkesin iznini sıfırlardı ve bu ancak kullanıcıda görülürdü.
+      #
+      # Sertifikanın KENDİSİ de denetleniyor: kurulu uygulamaların izinleri tam bu
+      # sertifikanın parmak izine bağlı. Aynı adla yeniden oluşturulmuş bir "CopyBoard
+      # Dev" de imzalar ama gereksinimi değiştirir — güncelleyen herkesin izni sessizce
+      # sıfırlanırdı. Sertifika bilerek yenilenirse (geçerlilik 2036) bu değer de
+      # güncellenir (SIGNING.md §2).
       - name: macOS imzasını doğrula
         if: runner.os == 'macOS' && env.APPLE_SIGNING_IDENTITY == 'CopyBoard Dev'
         shell: bash
+        env:
+          BEKLENEN_SERTIFIKA: 998278a135090b222129c155ffad1c43598e6ddd
         run: |
           app=$(ls -d src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app | head -1)
           bilgi=$(codesign -dvvv "$app" 2>&1)
@@ -221,6 +229,7 @@ jobs:
           echo "$dr"
           echo "$bilgi" | grep -qx 'Authority=CopyBoard Dev' || { echo "::error::Paket CopyBoard Dev ile imzalanmamış."; exit 1; }
           echo "$dr" | grep -q 'certificate leaf' || { echo "::error::Designated requirement sertifikaya bağlı değil (izinler korunmaz)."; exit 1; }
+          echo "$dr" | grep -qF "certificate leaf = H\"$BEKLENEN_SERTIFIKA\"" || { echo "::error::İmza sertifikası beklenen değil (parmak izi $BEKLENEN_SERTIFIKA): güncelleyen herkesin izni sıfırlanırdı. Doğru .p12'yi COPYBOARD_SIGNING_P12'ye koy."; exit 1; }
 
       - name: Paketleri yükle
         uses: actions/upload-artifact@v7

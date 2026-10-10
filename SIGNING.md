@@ -80,7 +80,9 @@ edilmiyor. Sonuçları:
   `identifier "com.nurullahyayan.copyboard.tauri" and certificate leaf = H"998278a1…"`
   ve sertifika değişmedikçe sürümden sürüme aynı kalıyor. Sertifika **1 Eylül 2036**'ya
   kadar geçerli; yenilenen bir sertifikanın parmak izi farklı olur ve herkesin izni
-  bir kez sıfırlanır.
+  bir kez sıfırlanır. CI parmak izini (`998278a1…`) birebir denetliyor: aynı adla
+  yeniden oluşturulmuş bir sertifikayla yayın DURUR — bilerek yenilenirse
+  `release-tauri.yml`'deki `BEKLENEN_SERTIFIKA` da güncellenir.
 * **CI bu imza olmadan yayın yapmıyor:** güncelleme anahtarı varken sertifika yoksa iş
   duruyor — ad-hoc imzalı bir güncelleme, güncelleyen herkesin iznini sessizce
   sıfırlardı. Paketlemeden sonra imzanın gerçekten CopyBoard Dev ile atıldığı ve

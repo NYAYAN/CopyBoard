@@ -83,6 +83,12 @@ pub fn create(
             content_protected: matches!(mode, "video" | "scroll"),
             background: Some((0, 0, 0, 0)),
             visible: false,
+            // Kayıt ve kaydırmalı yakalama sürerken overlay araç çubuğu dışında geçirgen;
+            // kullanıcı alttaki uygulamaya tıklayınca CopyBoard etkinliğini kaybediyor.
+            // Kapalıyken AppKit, etkin olmayan pencereye ilk tıkı pencereyi etkinleştirmeye
+            // harcıyor ve sayfaya iletmiyordu: kullanıcı "Durdur'a iki kez basınca duruyor"
+            // diyordu (`--qa-capture=recstop`).
+            accept_first_mouse: true,
             ..Default::default()
         },
     )?;

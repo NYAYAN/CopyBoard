@@ -2735,6 +2735,113 @@ fn flow_clickthrough(app: &tauri::AppHandle, m: &MonitorInfo) {
     remove_card(app);
 }
 
+/// Kayıt sürerken CopyBoard etkin DEĞİLKEN Durdur'a TEK gerçek tık kaydı durduruyor mu?
+///
+/// Kullanıcı bildirdi (2026-10-10): "Kayıt durdur 2 kere basınca duruyor". Kayıt
+/// sırasında overlay araç çubuğu dışında geçirgen; kullanıcı alttaki uygulamaya
+/// tıklayınca o uygulama öne geçiyor, CopyBoard etkinliğini kaybediyor. Etkin olmayan
+/// pencereye ilk tık AppKit'te pencereyi etkinleştirmeye harcanıyor ("first mouse") ve
+/// WKWebView'a ulaşmıyor — pencere `acceptsFirstMouse` demediği sürece.
+///
+/// `flow_clickthrough` kaydı JS `.click()` ile durduruyor; sentetik DOM tıklaması
+/// AppKit'ten hiç geçmediği için bu hatayı göremiyordu. Burada GERÇEK fare tıklaması var.
+#[cfg(target_os = "macos")]
+fn flow_recstop(app: &tauri::AppHandle, m: &MonitorInfo) {
+    note("— kayıt: CopyBoard etkin değilken Durdur'a tek gerçek tık —");
+    if !crate::capture::recorder::is_supported() {
+        note("video kaydı bu macOS sürümünde yok — adım atlandı");
+        return;
+    }
+    let Some(card) = install_card(app, m, "colors") else {
+        check(false, "sınama kartı yerleştirilemedi");
+        return;
+    };
+    let before_vids = video_ids(app);
+    let recording =
+        |app: &tauri::AppHandle| app.state::<crate::capture::recorder::RecorderState>().0.lock().unwrap().is_some();
+    let wait_stopped = |app: &tauri::AppHandle| {
+        for _ in 0..30 {
+            sleep(100);
+            if !recording(app) {
+                return true;
+            }
+        }
+        false
+    };
+
+    on_main(app, |h| crate::capture::start(h, "video"));
+    if !check(wait_overlay(app, "capture-0"), "kaydedici overlay'i açıldı") {
+        remove_card(app);
+        return;
+    }
+    lower_main(app);
+    sleep(600);
+
+    // Kayıt bir SEÇİM olmadan başlamıyor — gerçek sürüklemeyle seç.
+    let (qx, qy, qw, qh) = card.quads_rect(6.0);
+    let (dx1, dy1) = to_screen(m, qx, qy);
+    let (dx2, dy2) = to_screen(m, qx + qw, qy + qh);
+    mouse::drag(dx1, dy1, dx2, dy2, 22);
+    sleep(700);
+
+    eval(app, "capture-0", click_el_js("btn-record"));
+    let mut rec = false;
+    for _ in 0..50 {
+        sleep(100);
+        if recording(app) {
+            rec = true;
+            break;
+        }
+    }
+    if !check(rec, "kayıt başladı") {
+        on_main(app, |h| crate::capture::close_all(h, None));
+        sleep(600);
+        remove_card(app);
+        return;
+    }
+    sleep(1500);
+
+    // Kullanıcının gerçek durumu: kayıt sürerken başka bir uygulamada çalışıyor.
+    activate_other_app();
+
+    let Some((bx, by)) = element_center(app, "btn-stop") else {
+        check(false, "Durdur düğmesinin konumu okunamadı");
+        eval(app, "capture-0", click_el_js("btn-stop"));
+        sleep(3000);
+        on_main(app, |h| crate::capture::close_all(h, None));
+        remove_card(app);
+        return;
+    };
+    let (sx, sy) = to_screen(m, bx, by);
+    mouse::move_to(sx, sy);
+    // İsabet testi imleci 30 ms'de bir yokluyor; pencere tıklanabilir olsun.
+    sleep(500);
+    mouse::click(sx, sy);
+    let first = wait_stopped(app);
+    check(first, "Durdur'a TEK gerçek tık kaydı durdurdu (CopyBoard etkin değilken)");
+
+    if !first {
+        // Belirtiyi de ölç: ikinci tık durduruyorsa kullanıcının tarif ettiği tam bu.
+        mouse::click(sx, sy);
+        let second = wait_stopped(app);
+        note(&format!("ikinci gerçek tık kaydı durdurdu mu: {second}"));
+        if !second {
+            eval(app, "capture-0", click_el_js("btn-stop"));
+            wait_stopped(app);
+        }
+    }
+
+    // Mux kapansın, video listeye yazılsın; sonra harness'ın kaydını sil.
+    sleep(2500);
+    for id in video_ids(app).iter().filter(|i| !before_vids.contains(i)) {
+        let id = id.clone();
+        on_main(app, move |h| crate::videos::delete(h, &id, true));
+    }
+    on_main(app, |h| crate::capture::close_all(h, None));
+    sleep(600);
+    remove_card(app);
+}
+
 #[cfg(target_os = "macos")]
 /// Klasördeki TÜM .png dosyaları. Kaydetme paneli akışı dosya adı alanına deneme
 /// metni yazdığı için kaydedilen dosyanın adı `snip_` ile başlamayabiliyor.
@@ -2976,7 +3083,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni
             // istiyorlar ve çalışırken imleci gerçekten hareket ettiriyorlar.
             #[cfg(target_os = "macos")]
-            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("solo") || has("cross") || has("stalehit") || has("widgetdrag") {
+            if has("pointer") || has("save") || has("through") || has("a7") || has("hotkey") || has("firstclick") || has("solo") || has("cross") || has("stalehit") || has("widgetdrag") || has("recstop") {
                 let trusted = crate::platform::macos::permissions::is_trusted_accessibility(false);
                 if !trusted {
                     crate::platform::macos::permissions::is_trusted_accessibility(true);
@@ -3000,6 +3107,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
                     if has("widgetdrag") { flow_widgetdrag(&app); }
                     if has("stalehit") { flow_stalehit(&app, &m); }
                     if has("through") { flow_clickthrough(&app, &m); }
+                    if has("recstop") { flow_recstop(&app, &m); }
                 }
             }
 

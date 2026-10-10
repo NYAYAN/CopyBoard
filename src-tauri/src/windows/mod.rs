@@ -48,6 +48,9 @@ pub struct WindowSpec {
     pub content_protected: bool,
     pub background: Option<(u8, u8, u8, u8)>,
     pub visible: bool,
+    /// macOS: etkin OLMAYAN pencereye ilk tık da sayfaya ulaşsın (`acceptsFirstMouse`).
+    /// Kapalıyken AppKit ilk tıkı pencereyi etkinleştirmeye harcıyor.
+    pub accept_first_mouse: bool,
 }
 
 impl Default for WindowSpec {
@@ -69,6 +72,7 @@ impl Default for WindowSpec {
             content_protected: false,
             background: None,
             visible: false,
+            accept_first_mouse: false,
         }
     }
 }
@@ -139,6 +143,7 @@ pub fn build(app: &tauri::AppHandle, spec: WindowSpec) -> Result<WebviewWindow, 
         .focusable(spec.focusable)
         .transparent(spec.transparent)
         .content_protected(spec.content_protected)
+        .accept_first_mouse(spec.accept_first_mouse)
         .visible(spec.visible);
 
     if spec.always_on_top {

@@ -1,3 +1,13 @@
+# CopyBoard v3.2.2 Release Notes
+
+## 🐛 Düzeltmeler
+
+- **Kaydı durdurmak için iki kez tıklamak gerekiyordu (macOS).** Kayıt sürerken başka
+  bir uygulamaya geçtiyseniz Durdur'a ilk tık boşa gidiyordu: macOS onu yalnızca kayıt
+  penceresini öne almak için kullanıyordu. Artık kayıt ilk tıkta duruyor.
+
+---
+
 # CopyBoard v3.2.1 Release Notes
 
 Uygulamanın içinden gelen ilk güncelleme.

@@ -1,6 +1,6 @@
 [package]
 name = "copyboard"
-version = "3.2.1"
+version = "3.2.2"
 description = "Gelişmiş Pano Yöneticisi, Ekran Görüntüsü Aracı ve OCR Uygulaması"
 authors = ["Nurullah YAYAN"]
 license = "ISC"

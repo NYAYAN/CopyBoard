@@ -93,6 +93,14 @@ doğrulamadan HİÇBİR paketi kurmuyor. Özel anahtar `~/.tauri/copyboard.key`
 * **Windows:** NSIS kurucusu `passive` kipte (yalnız ilerleme çubuğu) çalışıp
   uygulamayı yeniden açıyor.
 
+**Sürüm notları:** diyalog sunulan sürümün notunu (`latest.json` → `notes`) gösteriyor;
+"Tüm sürüm notları" bağlantısı büyük bir pencerede CHANGELOG'daki **bütün** sürümleri
+açıyor. O liste de aynı dosyadan geliyor: `scripts/release-files.mjs` her sürüm bölümünü
+`changelog` alanına (`[{version, notes}]`, en yeniden eskiye) yazıyor — ek istek yok.
+Birden çok sürüm atlanıyorsa diyalog bunu söylüyor ve pencerede hepsi "Yeni" görünüyor.
+Notlar Markdown; madde devam satırları, tablolar ve `**Başlık.** açıklama` düzeni
+destekleniyor (`src/renderer/shared/release-notes.js`, testi `test/release-notes.test.mjs`).
+
 **`createUpdaterArtifacts`** `tauri.conf.json`'da `false`; CI paketlerken
 `--config` ile açıyor. Yerelde açık olsaydı özel anahtarı olmayan her
 `npm run build` imza isteyip düşerdi.

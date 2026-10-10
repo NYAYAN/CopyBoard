@@ -1,14 +1,5 @@
-/* Update dialog. Palette, type and motion come from ../shared/tokens.css; the names
-   below are this window's own vocabulary, re-pointed at those tokens rather than
-   re-declaring the app's colours for a fifth time. */
-:root {
-    --surface: var(--bg-base);
-    --surface-elevated: var(--bg-inset);
-    --border: var(--border-default);
-    --text: var(--text-primary);
-    /* The header is a gradient from the accent to a deeper shade of it. */
-    --accent-dark: color-mix(in srgb, var(--accent) 62%, #000);
-}
+/* Update dialog. Palette, type and motion come from ../shared/tokens.css (both themes);
+   rendered notes are styled by ../shared/release-notes.css. */
 
 * {
     margin: 0;
@@ -16,404 +7,350 @@
     box-sizing: border-box;
 }
 
+/* The window is transparent; the dialog card carries the background, so its rounded
+   corners really are rounded. */
+html,
 body {
-    font-family: var(--font-ui);
-    background: var(--surface);
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    -webkit-font-smoothing: antialiased;
-    height: 100vh;
-    color: var(--text);
+    height: 100%;
+    background: transparent;
 }
 
-.update-container {
-    background: var(--surface);
-    width: 100%;
+body {
+    font-family: var(--font-ui);
+    color: var(--text-primary);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.dialog {
     height: 100%;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    border: 1px solid var(--border);
+    gap: 14px;
+    padding: 20px 20px 18px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-default);
     border-radius: var(--r-xl);
+    overflow: hidden;
 }
 
-.update-header {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-    padding: 20px 20px;
-    text-align: center;
-    color: white;
+.hidden { display: none !important; }
+
+/* ── State visibility ──────────────────────────────────────────────────────── */
+
+.state-available,
+.state-downloading,
+.state-ready,
+.state-error { display: none; }
+
+body[data-state="available"] .state-available,
+body[data-state="downloading"] .state-downloading,
+body[data-state="ready"] .state-ready,
+body[data-state="error"] .state-error { display: flex; }
+
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+
+.head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.icon-wrapper {
+.app-icon {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border-radius: 11px;
+    pointer-events: none;
+}
+
+.head-text { min-width: 0; }
+
+.head h1 {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.head p {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* ── Version ───────────────────────────────────────────────────────────────── */
+
+.version-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.version-pill {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    /* Always white: this sits on the accent gradient, where --fg-rgb (which flips to
-       black in the light theme) would render a muddy dark disc. */
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    margin-bottom: 10px;
-    animation: pulse 2s infinite;
+    gap: 8px;
+    padding: 4px 11px;
+    border-radius: var(--r-full);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
 }
 
-@keyframes pulse {
+.version-pill .new { font-weight: 600; }
 
-    0%,
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
-    }
-
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
-    }
+.version-pill .arrow {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
-.update-icon {
-    width: 16px;
-    height: 16px;
-    stroke-width: 2.5;
+.coverage {
+    font-size: 11.5px;
+    color: var(--text-tertiary);
 }
 
-.app-name {
-    font-size: 13px;
+/* ── Notes ─────────────────────────────────────────────────────────────────── */
+
+.notes {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.notes-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.notes-scroll::-webkit-scrollbar { width: 6px; }
+.notes-scroll::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: var(--r-full);
+}
+
+.link-btn {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
     font-weight: 500;
-    opacity: 0.9;
-    margin-bottom: 2px;
-    letter-spacing: 0.5px;
+    color: var(--accent-text);
+    cursor: pointer;
+    white-space: nowrap;
 }
 
-.update-title {
-    font-size: 15px;
-    font-weight: 700;
-    margin: 0;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-    line-height: 1.3;
+.link-btn svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
-.update-content {
-    padding: 18px 20px;
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
+.link-btn .chev {
+    width: 13px;
+    height: 13px;
+    transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.link-btn:hover .chev { transform: translateX(2px); }
+.link-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; border-radius: var(--r-xs); }
+
+/* ── Downloading ───────────────────────────────────────────────────────────── */
+
+.progress {
     flex-direction: column;
-}
-
-.version-info {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 16px;
-    padding: 12px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-}
-
-.version-badge {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-}
-
-.version-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-secondary);
-    font-weight: 600;
-}
-
-.version-number {
-    font-size: 16px;
-    font-weight: 700;
-    font-family: 'Courier New', monospace;
-}
-
-.version-number.current {
-    color: var(--text-secondary);
-}
-
-.version-number.new {
-    color: var(--accent-hover);
-    background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.version-arrow {
-    font-size: 24px;
-    color: var(--accent-hover);
-    font-weight: bold;
-}
-
-.release-notes {
-    margin-bottom: 16px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.release-notes h3 {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 8px;
-}
-
-.notes-content {
-    /* Sunken panel, not a black one — 25% black behind #1c1c22 release notes made the
-       light theme's notes box a dark plate with dark text on it. */
-    background: rgba(var(--fg-rgb), 0.05);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--text-secondary);
-    flex: 1;
-    overflow-y: auto;
-}
-
-.notes-content strong {
-    color: var(--text);
-    font-weight: 700;
-}
-
-.notes-content::-webkit-scrollbar {
-    width: 6px;
-}
-
-.notes-content::-webkit-scrollbar-track {
-    background: rgba(var(--fg-rgb), 0.05);
-    border-radius: 3px;
-}
-
-.notes-content::-webkit-scrollbar-thumb {
-    background: rgba(var(--fg-rgb), 0.15);
-    border-radius: 3px;
-}
-
-.notes-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(var(--fg-rgb), 0.28);
-}
-
-/* Styles for GitHub rendered HTML */
-.release-html-content p {
-    margin-bottom: 8px;
-}
-
-.release-html-content p:last-child {
-    margin-bottom: 0;
-}
-
-.release-html-content ul,
-.release-html-content ol {
-    margin-top: 4px;
-    margin-bottom: 8px;
-    padding-left: 20px;
-}
-
-.release-html-content li {
-    margin-bottom: 4px;
-}
-
-.release-html-content hr {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 10px 0;
-}
-
-.release-html-content code {
-    background: rgba(var(--fg-rgb), 0.1);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
-    color: var(--text);
-}
-
-.release-html-content table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 6px 0 10px;
-    font-size: 11px;
-}
-
-.release-html-content th,
-.release-html-content td {
-    border: 1px solid var(--border);
-    padding: 5px 8px;
-    text-align: left;
-}
-
-.release-html-content th {
-    background: rgba(var(--fg-rgb), 0.06);
-    color: var(--text);
-    font-weight: 600;
-}
-
-.release-html-content h1,
-.release-html-content h2,
-.release-html-content h3,
-.release-html-content h4,
-.release-html-content h5,
-.release-html-content h6 {
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 700;
-    margin: 10px 0 4px;
-    line-height: 1.3;
-}
-
-.release-html-content>:first-child {
-    margin-top: 0;
-}
-
-.release-html-content a {
-    color: var(--accent-hover);
-    text-decoration: none;
-}
-
-.release-html-content a:hover {
-    text-decoration: underline;
-}
-
-.release-html-content blockquote {
-    margin: 6px 0;
-    padding-left: 10px;
-    border-left: 2px solid var(--border);
-    color: var(--text-secondary);
-}
-
-.download-progress {
-    margin-bottom: 16px;
-    padding: 12px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    transition: all 0.3s ease;
-}
-
-.download-progress.hidden {
-    display: none;
-}
-
-.progress-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.progress-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-.progress-percent {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--accent-hover);
+    gap: 8px;
 }
 
 .progress-bar {
-    width: 100%;
-    height: 8px;
-    background: rgba(var(--fg-rgb), 0.1);
-    border-radius: 4px;
+    height: 6px;
+    border-radius: var(--r-full);
+    background: var(--bg-inset);
     overflow: hidden;
-    margin-bottom: 8px;
 }
 
 .progress-fill {
+    width: 0;
     height: 100%;
-    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
-    border-radius: 4px;
-    transition: width 0.3s ease;
-    width: 0%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width var(--dur-med) var(--ease-standard);
 }
 
-.progress-details {
+.progress-meta {
     display: flex;
     justify-content: space-between;
-    font-size: 11px;
+    gap: 8px;
+    font-size: 12px;
     color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
-.update-actions {
-    display: flex;
-    gap: 10px;
-    padding: 20px;
+/* ── Ready (countdown) ─────────────────────────────────────────────────────── */
+
+.ready {
+    align-items: center;
+    gap: 12px;
 }
 
-.btn {
-    flex: 1;
-    padding: 11px 20px;
-    border: none;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
+.countdown {
+    width: 38px;
+    height: 38px;
+    flex: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    transition: all 0.2s ease;
-    outline: none;
+    border: 2px solid var(--accent);
+    border-radius: var(--r-full);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent-text);
+    font-variant-numeric: tabular-nums;
 }
+
+.ready-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.ready-sub {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* ── Error ─────────────────────────────────────────────────────────────────── */
+
+.error-box {
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 11px;
+    border-radius: var(--r-md);
+    background: var(--danger-soft);
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--danger);
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* The raw message, for a bug report — small and quiet under the readable one. */
+.error-detail {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: var(--text-tertiary);
+    overflow-wrap: anywhere;
+    max-height: 4.2em;
+    overflow-y: auto;
+}
+
+.error-detail:empty { display: none; }
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+
+.foot {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.trust {
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--text-tertiary);
+}
+
+.trust svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.actions { gap: 8px; }
+
+.btn {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 12px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border-default);
+    background: var(--bg-raised);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap; /* a long translation must not wrap the label */
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+
+.btn:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.btn:active { background: var(--surface-active); }
+.btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+
+.btn.primary {
+    flex: 1.35;
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--text-on-accent);
+}
+
+.btn.primary:hover { background: var(--accent-hover); border-color: transparent; }
 
 .btn svg {
     width: 16px;
     height: 16px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
-.btn:focus-visible {
-    outline: 2px solid var(--accent-hover);
-    outline-offset: 2px;
-}
-
-.btn-secondary {
-    background: rgba(var(--fg-rgb), 0.08);
-    color: var(--text);
-}
-
-.btn-secondary:hover {
-    background: rgba(var(--fg-rgb), 0.14);
-    transform: translateY(-1px);
-}
-
-.btn-secondary:active {
-    transform: translateY(0);
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(137, 87, 229, 0.4);
-}
-
-.btn-primary:hover {
-    box-shadow: 0 6px 20px rgba(137, 87, 229, 0.55);
-    transform: translateY(-2px);
-}
-
-.btn-primary:active {
-    transform: translateY(0);
-}
-
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none !important;
-}
+.btn[disabled] { opacity: 0.6; cursor: default; }

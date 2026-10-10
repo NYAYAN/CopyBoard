@@ -406,5 +406,9 @@
         // önce dinle, SONRA "hazırım" de.
         onUpdateInfo: (cb) => ready(on('update-info', cb)),
         onUpdateError: (cb) => on('update-error', cb),
+        // "Tüm sürüm notları" penceresi: diyalogdaki bağlantı açıyor, pencere bilgiyi
+        // `onUpdateInfo` ile aynı el sıkışmasıyla çekiyor.
+        openReleaseNotes: () => send('open_release_notes'),
+        onReleaseNotesInfo: (cb) => ready(on('release-notes-info', cb)),
     };
 })();

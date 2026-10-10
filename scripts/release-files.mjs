@@ -30,6 +30,12 @@
 // gidiyor. Bölüm yoksa yayın DURUYOR: 3.1.0 notsuz çıkmıştı ve kullanıcı güncelleme
 // diyaloğunda neyin değiştiğini göremezdi.
 //
+// TÜM SÜRÜMLER: `latest.json`'ın `changelog`'u CHANGELOG'daki her sürüm bölümünü taşıyor
+// (`[{version, notes}]`, en yeniden eskiye; etiketlenen sürümden yenisi dahil değil).
+// Diyaloğun "Tüm sürüm notları" penceresi ve "bu güncelleme N sürümü kapsıyor" bilgisi
+// buradan — ek bir istek yok, güncelleme kontrolü zaten bu dosyayı indiriyor. Eklenti
+// bilinmeyen alanı yok sayıyor; uygulama `Update::raw_json`'dan okuyor.
+//
 // Kullanım:
 //   node scripts/release-files.mjs <indirilen> <çıkış> <etiket> <not-dosyası>
 //   (depo adı GITHUB_REPOSITORY'den; yoksa NYAYAN/CopyBoard)
@@ -79,6 +85,35 @@ function releaseNotes(ver) {
   }
   const text = body.join("\n").trim();
   return text || null;
+}
+
+/** "3.2.1" karşılaştırması: <0, 0, >0. */
+function compareVersions(a, b) {
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+
+/** CHANGELOG.md'deki TÜM sürüm bölümleri, en yeniden eskiye; boş bölümler atlanır. */
+function changelogEntries(upTo) {
+  const lines = readFileSync("CHANGELOG.md", "utf8").split("\n");
+  const entries = [];
+  let current = null;
+  for (const line of lines) {
+    const m = /^# CopyBoard v(\d+\.\d+\.\d+) Release Notes$/.exec(line.trim());
+    if (m) {
+      current = { version: m[1], body: [], done: false };
+      entries.push(current);
+    } else if (current && !current.done) {
+      if (line.trim() === "---") current.done = true;
+      else current.body.push(line);
+    }
+  }
+  return entries
+    .map((e) => ({ version: e.version, notes: e.body.join("\n").trim() }))
+    .filter((e) => e.notes && compareVersions(e.version, upTo) <= 0)
+    .sort((a, b) => compareVersions(b.version, a.version));
 }
 
 const files = existsSync(source) ? walk(source) : [];
@@ -148,10 +183,11 @@ if (withUpdater) {
   for (const arch of dmgArch) {
     platforms[`darwin-${arch}-app`] = entry(kinds.app[0], appUrl);
   }
-  const manifest = { version, notes, pub_date: new Date().toISOString(), platforms };
+  const changelog = changelogEntries(version);
+  const manifest = { version, notes, pub_date: new Date().toISOString(), platforms, changelog };
   writeFileSync(join(out, "latest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   published.push("latest.json");
-  console.log(`latest.json: ${Object.keys(platforms).join(", ")}`);
+  console.log(`latest.json: ${Object.keys(platforms).join(", ")} · changelog ${changelog.length} sürüm`);
 } else {
   console.log(
     "::warning::Paketler imzasız (TAURI_SIGNING_PRIVATE_KEY tanımlı değil): latest.json yazılmadı, " +

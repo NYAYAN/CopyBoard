@@ -126,6 +126,11 @@ fn open_dialog(app: &tauri::AppHandle, update: &tauri_plugin_updater::Update) {
         // Diyalog ikisini de tanıyor.
         "releaseNotes": update.body.clone().unwrap_or_default(),
         "releaseName": update.version,
+        // Tüm sürümlerin notları, en yeniden eskiye: `[{version, notes}]` (bkz.
+        // scripts/release-files.mjs). "Tüm sürüm notları" penceresi ve diyaloğun "bu
+        // güncelleme N sürümü kapsıyor" bilgisi buradan. Eski bir latest.json'da yok
+        // (null) — pencere o zaman yalnız sunulan sürümü gösteriyor.
+        "changelog": update.raw_json.get("changelog").filter(|c| c.is_array()).cloned(),
     });
     PENDING.lock().unwrap().replace(update.version.clone());
 
@@ -151,6 +156,34 @@ static DOWNLOADED: Mutex<Option<(tauri_plugin_updater::Update, Vec<u8>)>> = Mute
 pub fn update_dialog_ready(app: &tauri::AppHandle) {
     if let Some(info) = INFO.lock().unwrap().clone() {
         crate::windows::emit_to(app, crate::windows::update::LABEL, "update-info", info);
+    }
+}
+
+/// `--qa-capture=updateui` (yalnız hata ayıklama derlemesi): gerçek bir `Update` olmadan
+/// diyaloğu verilen bilgiyle aç. Bilgi pencereden ÖNCE yazılıyor: renderer hazır olunca
+/// `update_dialog_ready` onu çekiyor.
+#[cfg(debug_assertions)]
+pub fn qa_open_dialog(app: &tauri::AppHandle, info: serde_json::Value) {
+    *INFO.lock().unwrap() = Some(info);
+    if let Err(e) = crate::windows::update::ensure(app) {
+        log::error!("güncelleme penceresi açılamadı: {e}");
+    }
+}
+
+/// "Tüm sürüm notları" penceresi dinleyicilerini kurdu — `window_ready` üzerinden.
+/// Diyaloğa giden bilginin aynısı (sürümler + `changelog`).
+pub fn release_notes_ready(app: &tauri::AppHandle) {
+    if let Some(info) = INFO.lock().unwrap().clone() {
+        crate::windows::emit_to(app, crate::windows::release_notes::LABEL, "release-notes-info", info);
+    }
+}
+
+/// Diyaloğun "Tüm sürüm notları" bağlantısı. `async`: senkron komut ana thread'de
+/// koşuyor ve Windows'ta oradan pencere kurmak kilitlenebiliyor.
+#[tauri::command]
+pub async fn open_release_notes(app: tauri::AppHandle) {
+    if let Err(e) = crate::windows::release_notes::ensure(&app) {
+        log::error!("sürüm notları penceresi açılamadı: {e}");
     }
 }
 

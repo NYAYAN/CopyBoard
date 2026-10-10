@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; connect-src ipc: http://ipc.localhost asset: http://asset.localhost; img-src 'self' data: blob: asset: http://asset.localhost; style-src 'self'; script-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sürüm notları</title>
+    <link rel="stylesheet" href="../shared/tokens.css">
+    <link rel="stylesheet" href="../shared/release-notes.css">
+    <link rel="stylesheet" href="release-notes.css">
+    <script src="../shared/api-tauri.js"></script>
+    <script src="../shared/theme.js"></script>
+</head>
+
+<body>
+    <div class="win">
+        <header class="head" data-tauri-drag-region>
+            <svg class="head-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6h11M9 12h11M9 18h11M5 6h.01M5 12h.01M5 18h.01" />
+            </svg>
+            <div class="head-text" data-tauri-drag-region>
+                <h1 data-tauri-drag-region>Sürüm notları</h1>
+                <p id="subtitle" data-tauri-drag-region></p>
+            </div>
+            <button class="icon-btn" id="closeBtn" type="button" aria-label="Kapat" title="Kapat">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            </button>
+        </header>
+        <div class="body">
+            <nav class="versions" id="versionList" aria-label="Sürümler"></nav>
+            <main class="content" id="content">
+                <p class="loading">Yükleniyor…</p>
+            </main>
+        </div>
+    </div>
+
+    <script src="../shared/i18n.js"></script>
+    <script src="../shared/release-notes.js"></script>
+    <script src="release-notes.js"></script>
+</body>
+
+</html>

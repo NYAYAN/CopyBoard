@@ -6,79 +6,102 @@
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; connect-src ipc: http://ipc.localhost asset: http://asset.localhost; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' blob: asset: http://asset.localhost; style-src 'self'; script-src 'self';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Güncelleme Mevcut</title>
+    <title>Güncelleme</title>
     <link rel="stylesheet" href="../shared/tokens.css">
+    <link rel="stylesheet" href="../shared/release-notes.css">
     <link rel="stylesheet" href="update-dialog.css">
     <script src="../shared/api-tauri.js"></script>
     <script src="../shared/theme.js"></script>
 </head>
 
-<body>
-    <div class="update-container">
-        <div class="update-header">
-            <div class="icon-wrapper">
-                <svg class="update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 12a9 9 0 11-6.219-8.56" />
-                    <path d="M13 2L9 6l4 4" />
-                </svg>
+<!-- data-state: available | downloading | ready | error — the stylesheet shows the
+     sections that belong to the current state. -->
+<body data-state="available">
+    <div class="dialog">
+        <header class="head" data-tauri-drag-region>
+            <img class="app-icon" src="../shared/icon.png" alt="" data-tauri-drag-region>
+            <div class="head-text" data-tauri-drag-region>
+                <h1 id="title" data-tauri-drag-region>Güncelleme hazır</h1>
+                <p id="subtitle" data-tauri-drag-region>CopyBoard yeni sürüme geçebilir</p>
             </div>
-            <div class="app-name">CopyBoard</div>
-            <h1 class="update-title">Yeni Güncelleme Mevcut!</h1>
+        </header>
+
+        <div class="version-row">
+            <div class="version-pill">
+                <span id="currentVersion">-</span>
+                <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+                <span class="new" id="newVersion">-</span>
+            </div>
+            <span class="coverage hidden" id="coverage"></span>
         </div>
 
-        <div class="update-content">
-            <div class="version-info">
-                <div class="version-badge">
-                    <span class="version-label">Mevcut Versiyon:</span>
-                    <span class="version-number current" id="currentVersion">-</span>
-                </div>
-                <div class="version-arrow">→</div>
-                <div class="version-badge">
-                    <span class="version-label">Yeni Versiyon:</span>
-                    <span class="version-number new" id="newVersion">-</span>
-                </div>
+        <section class="notes">
+            <div class="notes-scroll">
+                <div class="rn-content notes-content" id="notesContent">Yükleniyor…</div>
             </div>
-
-            <div class="release-notes" id="releaseNotes">
-                <h3>Yenilikler:</h3>
-                <div class="notes-content" id="notesContent">
-                    Yükleniyor...
-                </div>
-            </div>
-
-            <div class="download-progress hidden" id="downloadProgress">
-                <div class="progress-info">
-                    <span class="progress-label">İndiriliyor...</span>
-                    <span class="progress-percent" id="progressPercent">0%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
-                </div>
-                <div class="progress-details">
-                    <span id="downloadSpeed">-</span>
-                    <span id="downloadSize">-</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="update-actions">
-            <button class="btn btn-secondary" id="laterBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <button class="link-btn hidden" id="allNotesBtn" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 6h11M9 12h11M9 18h11M5 6h.01M5 12h.01M5 18h.01" />
                 </svg>
-                Daha Sonra
+                <span>Tüm sürüm notları</span>
+                <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 6l6 6-6 6" />
+                </svg>
             </button>
-            <button class="btn btn-primary" id="updateBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Şimdi Güncelle
-            </button>
+        </section>
+
+        <section class="progress state-downloading" id="downloadProgress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-meta">
+                <span><span id="progressPercent">%0</span> · <span id="downloadSize">-</span></span>
+                <span id="downloadSpeed"></span>
+            </div>
+        </section>
+
+        <section class="ready state-ready" id="readyPanel">
+            <div class="countdown" id="countdown" aria-live="polite">3</div>
+            <div>
+                <div class="ready-title">Yeniden başlatılıyor</div>
+                <div class="ready-sub">CopyBoard birazdan yeniden açılacak</div>
+            </div>
+        </section>
+
+        <div class="error-box state-error" role="alert">
+            <p id="errorText"></p>
+            <p class="error-detail" id="errorDetail"></p>
         </div>
+
+        <footer class="foot">
+            <p class="trust state-available">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" />
+                    <path d="M9 12l2 2 4-4" />
+                </svg>
+                <span>İmzası doğrulanır, sonra uygulama yeniden açılır</span>
+            </p>
+            <div class="actions state-available state-error">
+                <button class="btn" id="laterBtn" type="button">Daha sonra</button>
+                <button class="btn primary" id="updateBtn" type="button">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14" />
+                    </svg>
+                    <span id="updateBtnText">Güncelle</span>
+                </button>
+            </div>
+            <div class="actions state-ready">
+                <button class="btn" id="cancelBtn" type="button">Vazgeç</button>
+                <button class="btn primary" id="restartBtn" type="button">Yeniden başlat</button>
+            </div>
+        </footer>
     </div>
 
     <script src="../shared/i18n.js"></script>
-<script src="update-dialog.js"></script>
+    <script src="../shared/release-notes.js"></script>
+    <script src="update-dialog.js"></script>
 </body>
 
 </html>

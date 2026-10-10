@@ -176,6 +176,7 @@ pub fn run() {
             updater::check_for_updates,
             updater::download_update,
             updater::install_update,
+            updater::open_release_notes,
             commands::ready::window_ready,
             commands::record::set_video_quality,
             commands::record::set_audio_mic,

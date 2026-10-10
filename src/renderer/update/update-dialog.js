@@ -1,23 +1,54 @@
 const t = (s, v) => (typeof window !== 'undefined' && window.CopyBoardI18n ? window.CopyBoardI18n.t(s, v) : s);
-// Update dialog renderer process
-let updateInfo = null;
+const Notes = window.CopyBoardNotes;
 
-// Initialize dialog with update info
+// States (body[data-state]): available → downloading → ready, or error. The stylesheet
+// shows the sections of the current state; this file only switches it and fills text.
+let updateInfo = null;
+let countdownTimer = null;
+
+const $ = (id) => document.getElementById(id);
+const setState = (s) => { document.body.dataset.state = s; };
+
+const lang = (window.api && window.api.i18n && window.api.i18n.lang) || 'tr';
+const locale = lang === 'en' ? 'en-US' : 'tr-TR';
+const num = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
+
+function formatMB(bytes) {
+    return num.format(bytes / 1048576);
+}
+
+// Turkish writes the percent sign first ("%48").
+function formatPercent(p) {
+    const n = Math.max(0, Math.min(100, Math.round(p)));
+    return lang === 'en' ? `${n}%` : `%${n}`;
+}
+
+function setHeader(title, subtitle) {
+    $('title').textContent = title;
+    $('subtitle').textContent = subtitle;
+}
+
+Notes.interceptLinks($('notesContent'), (href) => window.api.openExternal(href));
+
 window.api.onUpdateInfo((info) => {
     updateInfo = info;
+    $('currentVersion').textContent = info.currentVersion;
+    $('newVersion').textContent = info.version;
 
-    // Update version numbers
-    document.getElementById('currentVersion').textContent = `v${info.currentVersion}`;
-    document.getElementById('newVersion').textContent = `v${info.version}`;
+    // The notes shown here are the TARGET version's. When several versions are being
+    // skipped, say so; the full list is one click away in the large window.
+    const newer = Notes.newerThan(info.changelog, info.currentVersion);
+    if (newer.length > 1) {
+        $('coverage').textContent = t('Bu güncelleme {n} sürümü kapsıyor', { n: newer.length });
+        $('coverage').classList.remove('hidden');
+    }
+    const target = newer.find((e) => Notes.compareVersions(e.version, info.version) === 0);
+    const notes = info.releaseNotes || (target && target.notes) || '';
+    Notes.renderInto($('notesContent'), notes, t('Yeni özellikler ve iyileştirmeler.'));
 
-    // Update release notes
-    const notesContent = document.getElementById('notesContent');
-    if (info.releaseNotes) {
-        // Parse markdown-style release notes to HTML
-        const formattedNotes = formatReleaseNotes(info.releaseNotes);
-        notesContent.innerHTML = formattedNotes;
-    } else {
-        notesContent.textContent = t('Yeni özellikler ve iyileştirmeler.');
+    // The bridge has no window for it under Electron (this renderer is shared).
+    if (typeof window.api.openReleaseNotes === 'function') {
+        $('allNotesBtn').classList.remove('hidden');
     }
 
     // Electron only: Squirrel.Mac can't apply an unsigned update, so the Electron main
@@ -25,264 +56,114 @@ window.api.onUpdateInfo((info) => {
     // never sends it — its updater checks the minisign signature and swaps the .app in
     // place on macOS too (src-tauri/src/updater.rs).
     if (info.isMac) {
-        const updateBtn = document.getElementById('updateBtn');
-        updateBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-        İndir (GitHub)
-        `;
+        $('updateBtnText').textContent = t('İndir (GitHub)');
     }
+    setState('available');
 });
 
-// Handle update errors
-window.api.onUpdateError((message) => {
-    const updateBtn = document.getElementById('updateBtn');
-    const laterBtn = document.getElementById('laterBtn');
-    const progressLabel = document.querySelector('.progress-label');
+$('allNotesBtn').addEventListener('click', () => window.api.openReleaseNotes());
 
-    // Reset UI
-    updateBtn.disabled = false;
-    laterBtn.disabled = false;
-
-    // Show error in button or progress area
-    updateBtn.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-    Tekrar Dene
-    `;
-
-    if (progressLabel) {
-        progressLabel.textContent = `Hata: ${message}`;
-        progressLabel.style.color = '#ff5555';
-    } else {
-        alert('Güncelleme hatası: ' + message);
-    }
-});
-
-// Render GitHub release notes safely.
-// electron-updater delivers GitHub release notes as HTML — the <content type="html">
-// of the releases Atom feed (see GitHubProvider getNoteValue), NOT markdown. So we
-// PARSE that HTML and rebuild it from a strict whitelist: text becomes text nodes,
-// only known-safe elements survive, and the ONLY attribute kept is an http(s)/mailto
-// href on links. Scripts, event handlers, styles, src, etc. are all dropped.
-// releaseNotes is untrusted network input, so nothing from it is ever assigned as
-// live HTML — elements are created by name and text via createTextNode.
-function formatReleaseNotes(notes) {
-    if (!notes) return t('Yeni özellikler ve iyileştirmeler.');
-
-    const ALLOWED = new Set([
-        'P', 'BR', 'HR', 'STRONG', 'B', 'EM', 'I', 'CODE', 'PRE',
-        'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-        'BLOCKQUOTE', 'A', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN'
-    ]);
-
-    const sanitize = (src, dst) => {
-        src.childNodes.forEach((node) => {
-            if (node.nodeType === Node.TEXT_NODE) {
-                dst.appendChild(document.createTextNode(node.nodeValue));
-            } else if (node.nodeType === Node.ELEMENT_NODE && ALLOWED.has(node.tagName)) {
-                const el = document.createElement(node.tagName);
-                if (node.tagName === 'A') {
-                    const href = node.getAttribute('href') || '';
-                    if (/^(https?:|mailto:)/i.test(href)) {
-                        el.setAttribute('href', href);
-                        el.setAttribute('target', '_blank');
-                        el.setAttribute('rel', 'noreferrer noopener');
-                    }
-                }
-                sanitize(node, el);
-                dst.appendChild(el);
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Blocked tag: drop the tag itself but keep its sanitized contents.
-                sanitize(node, dst);
-            }
-        });
-    };
-
-    try {
-        // Tauri's updater hands over latest.json's `notes`: the version's CHANGELOG.md section,
-        // Markdown (scripts/release-files.mjs); electron-updater gave HTML. If the text carries
-        // no tags at all, render the common Markdown shapes first — the sanitizer below still
-        // rebuilds everything from the whitelist, so nothing here is trusted either.
-        const looksLikeHtml = /<\s*[a-z][\s\S]*>/i.test(String(notes));
-        const html = looksLikeHtml ? String(notes) : markdownToHtml(String(notes));
-        const parsed = new DOMParser().parseFromString(html, 'text/html');
-        const container = document.createElement('div');
-        container.className = 'release-html-content';
-        sanitize(parsed.body, container);
-        return container.outerHTML;
-    } catch (e) {
-        const div = document.createElement('div');
-        div.className = 'release-html-content';
-        div.textContent = String(notes); // inert plain-text fallback
-        return div.outerHTML;
-    }
-}
-
-// Minimal Markdown → HTML for release bodies: headings, bullet lists, paragraphs, bold,
-// inline code and links. Text is escaped first; the result only ever reaches the DOM
-// through the whitelist sanitizer in formatReleaseNotes.
-function markdownToHtml(md) {
-    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const inline = (s) => esc(s)
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
-
-    const out = [];
-    let list = null;      // 'ul' | 'ol' while inside a list
-    let para = [];
-    const flushPara = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
-    const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
-
-    for (const raw of md.replace(/\r\n?/g, '\n').split('\n')) {
-        const line = raw.trimEnd();
-        let m;
-        if (!line.trim()) { flushPara(); closeList(); continue; }
-        if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) {
-            flushPara(); closeList();
-            const lvl = Math.min(m[1].length + 2, 6); // #→h3: the dialog is small
-            out.push('<h' + lvl + '>' + inline(m[2]) + '</h' + lvl + '>');
-        } else if ((m = /^\s*[-*+]\s+(.*)$/.exec(line))) {
-            flushPara();
-            if (list !== 'ul') { closeList(); list = 'ul'; out.push('<ul>'); }
-            out.push('<li>' + inline(m[1]) + '</li>');
-        } else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(line))) {
-            flushPara();
-            if (list !== 'ol') { closeList(); list = 'ol'; out.push('<ol>'); }
-            out.push('<li>' + inline(m[1]) + '</li>');
-        } else if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) {
-            flushPara(); closeList(); out.push('<hr>');
-        } else {
-            closeList();
-            para.push(inline(line.trim()));
-        }
-    }
-    flushPara(); closeList();
-    return out.join('');
-}
-
-// Update download progress
-window.api.onDownloadProgress((progressObj) => {
-    const progressContainer = document.getElementById('downloadProgress');
-    const progressFill = document.getElementById('progressFill');
-    const progressPercent = document.getElementById('progressPercent');
-    const downloadSpeed = document.getElementById('downloadSpeed');
-    const downloadSize = document.getElementById('downloadSize');
-
-    // Show progress container
-    progressContainer.classList.remove('hidden');
-
-    // Update progress bar
-    const percent = Math.round(progressObj.percent);
-    progressFill.style.width = `${percent}%`;
-    progressPercent.textContent = `${percent}%`;
-
-    // Update speed and size
-    if (progressObj.bytesPerSecond) {
-        downloadSpeed.textContent = formatBytes(progressObj.bytesPerSecond) + '/s';
-    }
-
-    if (progressObj.transferred && progressObj.total) {
-        downloadSize.textContent = `${formatBytes(progressObj.transferred)} / ${formatBytes(progressObj.total)}`;
-    }
-
-    // Disable buttons during download
-    document.getElementById('updateBtn').disabled = true;
-    document.getElementById('laterBtn').disabled = true;
-});
-
-// Update downloaded - ready to install
-window.api.onUpdateDownloaded(() => {
-    const updateBtn = document.getElementById('updateBtn');
-    const progressLabel = document.querySelector('.progress-label');
-
-    // Update UI
-    progressLabel.textContent = t('İndirme Tamamlandı!');
-    document.getElementById('progressFill').style.width = '100%';
-    document.getElementById('progressPercent').textContent = '100%';
-
-    // Change button text — disabled, smaller font
-    updateBtn.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-    </svg>
-    Yeniden Başlat ve Güncelle
-  `;
-    updateBtn.disabled = true;
-    updateBtn.style.fontSize = '11px';
-
-    // Auto-install after 3 seconds — display (3),(2),(1) then install (no "(0)" frame, no 4th second)
-    let countdown = 3;
-    updateBtn.textContent = `Yeniden Başlatılıyor... (${countdown})`;
-    const countdownInterval = setInterval(() => {
-        countdown--;
-        if (countdown <= 0) {
-            clearInterval(countdownInterval);
-            window.api.installUpdate();
-            return;
-        }
-        updateBtn.textContent = `Yeniden Başlatılıyor... (${countdown})`;
-    }, 1000);
-
-    // Allow user to cancel auto-install
-    document.getElementById('laterBtn').disabled = false;
-    document.getElementById('laterBtn').onclick = () => {
-        clearInterval(countdownInterval);
-        window.close();
-    };
-});
-
-// Format bytes to human readable
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-}
-
-// Button event listeners
-document.getElementById('updateBtn').addEventListener('click', () => {
+function startDownload() {
     if (updateInfo && updateInfo.isMac) {
         // Electron only (see onUpdateInfo): its macOS build can't self-update, and its
         // releases are tagged `v<version>`.
-        const releaseUrl = `https://github.com/NYAYAN/CopyBoard/releases/tag/v${updateInfo.version}`;
-        window.api.openExternal(releaseUrl);
+        window.api.openExternal(`https://github.com/NYAYAN/CopyBoard/releases/tag/v${updateInfo.version}`);
         window.close();
         return;
     }
-
-    // Start download
+    setHeader(
+        t('{version} indiriliyor', { version: (updateInfo && updateInfo.version) || '' }),
+        t('İndirme bitince imzası doğrulanacak')
+    );
+    $('progressFill').style.width = '0%';
+    $('progressPercent').textContent = formatPercent(0);
+    $('downloadSize').textContent = '';
+    $('downloadSpeed').textContent = '';
+    setState('downloading');
     window.api.downloadUpdate();
+}
 
-    // Update button state
-    const btn = document.getElementById('updateBtn');
-    btn.disabled = true;
-    btn.innerHTML = `
-    <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M21 12a9 9 0 11-6.219-8.56"/>
-    </svg>
-    İndiriliyor...
-  `;
+$('updateBtn').addEventListener('click', startDownload);
+$('laterBtn').addEventListener('click', () => window.close());
+
+window.api.onDownloadProgress((p) => {
+    if (document.body.dataset.state !== 'downloading') setState('downloading');
+    $('progressFill').style.width = `${Math.max(0, Math.min(100, p.percent || 0))}%`;
+    $('progressPercent').textContent = formatPercent(p.percent || 0);
+    if (p.total) {
+        $('downloadSize').textContent = `${formatMB(p.transferred || 0)} / ${formatMB(p.total)} MB`;
+    }
+    if (p.bytesPerSecond) {
+        $('downloadSpeed').textContent = lang === 'en'
+            ? `${formatMB(p.bytesPerSecond)} MB/s`
+            : `${formatMB(p.bytesPerSecond)} MB/sn`;
+    }
 });
 
-document.getElementById('laterBtn').addEventListener('click', () => {
+function install() {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+    $('restartBtn').disabled = true;
+    $('cancelBtn').disabled = true;
+    window.api.installUpdate();
+}
+
+// Downloaded and verified: count 3, 2, 1, then install (no "0" frame). "Restart" installs
+// at once; "Cancel" stops the countdown and closes the dialog.
+window.api.onUpdateDownloaded(() => {
+    setHeader(t('Güncelleme indirildi'), t('İmzası doğrulandı'));
+    setState('ready');
+    let left = 3;
+    $('countdown').textContent = String(left);
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) {
+            install();
+            return;
+        }
+        $('countdown').textContent = String(left);
+    }, 1000);
+});
+
+$('restartBtn').addEventListener('click', install);
+$('cancelBtn').addEventListener('click', () => {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
     window.close();
 });
 
-// Add spinning animation for loading icon
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  .spin {
-    animation: spin 1s linear infinite;
-  }
-`;
-document.head.appendChild(style);
+// A raw transport/OS error ("error sending request for url (…): operation timed out")
+// becomes a sentence the user can act on; the raw text stays underneath, small, for a
+// bug report. Messages the backend already wrote for people ("Güncelleme bulunamadı.")
+// are shown as they are.
+function describeError(raw) {
+    const text = String(raw || '').trim();
+    if (!/https?:\/\/|error|failed|os error|\(/i.test(text)) return { main: text || t('Beklenmeyen bir hata oluştu.'), detail: '' };
+    const s = text.toLowerCase();
+    let main = t('Beklenmeyen bir hata oluştu.');
+    if (/signature|minisign|verif/.test(s)) main = t('Paketin imzası doğrulanamadı; güvenliğiniz için kurulmadı.');
+    else if (/timed out|timeout/.test(s)) main = t('Bağlantı zaman aşımına uğradı.');
+    else if (/dns|resolve|connect|network|offline|unreachable/.test(s)) main = t('Sunucuya bağlanılamadı. İnternet bağlantınızı denetleyin.');
+    else if (/not found|404/.test(s)) main = t('Güncelleme dosyası bulunamadı.');
+    return { main, detail: text };
+}
+
+window.api.onUpdateError((message) => {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+    setHeader(t('Güncelleme indirilemedi'), t('Yeniden deneyebilirsiniz'));
+    const { main, detail } = describeError(message);
+    $('errorText').textContent = main;
+    $('errorDetail').textContent = detail;
+    $('updateBtnText').textContent = t('Tekrar dene');
+    $('restartBtn').disabled = false;
+    $('cancelBtn').disabled = false;
+    setState('error');
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const s = document.body.dataset.state;
+    if (s === 'available' || s === 'error') window.close();
+});

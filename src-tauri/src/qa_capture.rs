@@ -2735,6 +2735,152 @@ fn flow_clickthrough(app: &tauri::AppHandle, m: &MonitorInfo) {
     remove_card(app);
 }
 
+/// CHANGELOG.md → `[{version, notes}]`, en yeniden eskiye — `release-files.mjs`'in
+/// `changelog` alanının aynısı (yalnız bu sınama için; derlemeye gömülü).
+fn changelog_entries(text: &str) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    let mut cur: Option<(String, Vec<&str>, bool)> = None;
+    let push = |c: Option<(String, Vec<&str>, bool)>, out: &mut Vec<serde_json::Value>| {
+        if let Some((version, body, _)) = c {
+            let notes = body.join("\n").trim().to_string();
+            if !notes.is_empty() {
+                out.push(serde_json::json!({ "version": version, "notes": notes }));
+            }
+        }
+    };
+    for line in text.lines() {
+        let t = line.trim();
+        if let Some(v) = t.strip_prefix("# CopyBoard v").and_then(|r| r.strip_suffix(" Release Notes")) {
+            push(cur.take(), &mut out);
+            cur = Some((v.to_string(), Vec::new(), false));
+        } else if let Some((_, body, done)) = cur.as_mut() {
+            if *done {
+                continue;
+            }
+            if t == "---" {
+                *done = true;
+            } else {
+                body.push(line);
+            }
+        }
+    }
+    push(cur.take(), &mut out);
+    out
+}
+
+/// Güncelleme diyaloğu + "Tüm sürüm notları" penceresi, GERÇEK WebKit'te ve gerçek IPC ile:
+/// bilgi diyaloğa ulaşıyor mu, notlar doğru çiziliyor mu (madde bölünmüyor, başlık simgesi
+/// var), bağlantı büyük pencereyi açıyor mu, pencere bütün sürümleri çiziyor mu. Fare ve
+/// izin istemiyor — ayrı bir test kimliğiyle kurulu uygulamanın yanında koşabilir.
+fn flow_updateui(app: &tauri::AppHandle) {
+    note("— güncelleme diyaloğu ve Tüm sürüm notları penceresi —");
+    let changelog = changelog_entries(include_str!("../../CHANGELOG.md"));
+    let n = changelog.len();
+    let Some(target) = changelog.first().cloned() else {
+        check(false, "CHANGELOG'da sürüm bölümü yok");
+        return;
+    };
+    let version = target["version"].as_str().unwrap_or_default().to_string();
+    let current = "3.1.1";
+    let newer = changelog
+        .iter()
+        .filter(|e| {
+            let v: Vec<u64> = e["version"].as_str().unwrap_or("0.0.0").split('.').map(|p| p.parse().unwrap_or(0)).collect();
+            v > vec![3, 1, 1]
+        })
+        .count();
+    let info = serde_json::json!({
+        "version": version,
+        "currentVersion": current,
+        "releaseNotes": target["notes"],
+        "releaseName": version,
+        "changelog": changelog,
+    });
+    on_main(app, move |h| crate::updater::qa_open_dialog(h, info));
+    if !check(wait_overlay(app, crate::windows::update::LABEL), "güncelleme diyaloğu açıldı") {
+        return;
+    }
+    sleep(1200);
+
+    clear_probes();
+    eval(
+        app,
+        crate::windows::update::LABEL,
+        r#"(function(){ try {
+  const n = document.getElementById('notesContent'); const q = (s) => n.querySelectorAll(s).length;
+  const h = n.querySelector('h4');
+  window.api.sendDebugLog('QAC ui.dialog=' + JSON.stringify({
+    state: document.body.dataset.state, li: q('li'), p: q('p'), br: q('br'), titles: q('li > strong:first-child'),
+    kind: h ? (h.dataset.kind || '') : '', emoji: h ? /\p{Extended_Pictographic}/u.test(h.textContent) : null,
+    link: !document.getElementById('allNotesBtn').classList.contains('hidden'),
+    coverage: document.getElementById('coverage').textContent, pill: document.getElementById('newVersion').textContent }));
+} catch (e) { window.api.sendDebugLog('QAC ui.dialog=HATA ' + e); } })();"#
+            .to_string(),
+    );
+    let d: serde_json::Value = wait_probe("ui.dialog", 3000)
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    note(&format!("diyalog: {d}"));
+    check(d["state"] == "available", "diyalog 'mevcut' durumunda");
+    check(d["pill"] == version.as_str(), &format!("sürüm hapı {version}"));
+    check(d["li"].as_u64().unwrap_or(0) >= 1 && d["p"] == 0 && d["br"] == 0, "not maddeleri bölünmeden çizildi (madde var, kopuk paragraf ve <br> yok)");
+    check(d["titles"] == d["li"], "her madde başlık + açıklama düzeninde");
+    check(d["kind"] == "fix" && d["emoji"] == false, "bölüm başlığında emoji yerine simge türü (fix)");
+    check(d["link"] == true, "Tüm sürüm notları bağlantısı görünür");
+    check(
+        d["coverage"].as_str().unwrap_or_default().contains(&newer.to_string()),
+        &format!("birden çok sürüm bilgisi ({newer} sürüm)"),
+    );
+
+    // Bağlantı → gerçek komut → yeni pencere → el sıkışması → olay.
+    eval(app, crate::windows::update::LABEL, "document.getElementById('allNotesBtn').click();".to_string());
+    if !check(wait_overlay(app, crate::windows::release_notes::LABEL), "Tüm sürüm notları penceresi açıldı") {
+        on_main(app, |h| {
+            if let Some(w) = h.get_webview_window(crate::windows::update::LABEL) {
+                let _ = w.close();
+            }
+        });
+        return;
+    }
+    sleep(1500);
+    clear_probes();
+    eval(
+        app,
+        crate::windows::release_notes::LABEL,
+        r#"(function(){ try {
+  const c = document.getElementById('content');
+  const active = document.querySelector('.ver-item.active');
+  window.api.sendDebugLog('QAC ui.notes=' + JSON.stringify({
+    sections: c.querySelectorAll('section.release').length, items: document.querySelectorAll('.ver-item').length,
+    active: active ? active.dataset.version : '', newBadges: c.querySelectorAll('.badge.new').length,
+    installed: [...c.querySelectorAll('.badge:not(.new)')].map((b) => b.textContent).join(','),
+    tables: c.querySelectorAll('table').length, subtitle: document.getElementById('subtitle').textContent,
+    w: window.innerWidth, h: window.innerHeight }));
+} catch (e) { window.api.sendDebugLog('QAC ui.notes=HATA ' + e); } })();"#
+            .to_string(),
+    );
+    let r: serde_json::Value = wait_probe("ui.notes", 3000)
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    note(&format!("sürüm notları: {r}"));
+    check(r["sections"] == n && r["items"] == n, &format!("bütün sürümler çizildi ({n})"));
+    check(r["active"] == version.as_str(), "en yeni sürüm etkin");
+    check(r["newBadges"] == newer, &format!("kurulu sürümden yeni {newer} sürüm 'Yeni' etiketli"));
+    check(r["installed"].as_str().unwrap_or_default().contains("Kurulu"), "kurulu sürüm 'Kurulu' etiketli");
+    check(r["tables"].as_u64().unwrap_or(0) >= 1, "eski notlardaki tablo çizildi");
+    check(r["subtitle"].as_str().unwrap_or_default().contains(current), "başlıkta kurulu sürüm");
+    check(r["w"].as_u64().unwrap_or(0) >= 700, "büyük pencere boyutu");
+
+    on_main(app, |h| {
+        for l in [crate::windows::release_notes::LABEL, crate::windows::update::LABEL] {
+            if let Some(w) = h.get_webview_window(l) {
+                let _ = w.close();
+            }
+        }
+    });
+    sleep(600);
+}
+
 /// Kayıt sürerken CopyBoard etkin DEĞİLKEN Durdur'a TEK gerçek tık kaydı durduruyor mu?
 ///
 /// Kullanıcı bildirdi (2026-10-10): "Kayıt durdur 2 kere basınca duruyor". Kayıt
@@ -3078,6 +3224,7 @@ pub fn run(app: tauri::AppHandle, which: String) {
             if has("color") { flow_color(&app, &m); }
             if has("ocr") { flow_ocr(&app, &m); }
             if has("scroll") { flow_scroll(&app, &m); }
+            if has("updateui") { flow_updateui(&app); }
             // İkinci monitör: overlay'in DOĞRU ekrana, doğru ölçekle oturduğu ancak
             // orada seçim yapılıp piksel okunarak kanıtlanabiliyor (bkz. A11).
             // Gerçek imleç isteyen akışlar VARSAYILAN DEĞİL: Erişilebilirlik izni

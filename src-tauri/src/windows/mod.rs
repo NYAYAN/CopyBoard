@@ -18,6 +18,7 @@ pub mod capture;
 pub mod hit_test;
 pub mod main_window;
 pub mod quickpaste;
+pub mod release_notes;
 pub mod widget;
 pub mod update;
 pub mod toast;

@@ -1,3 +1,19 @@
+# CopyBoard v3.2.1 Release Notes
+
+Uygulamanın içinden gelen ilk güncelleme.
+
+## 🐛 Düzeltmeler
+
+- **Görsel kopyalamak bellekte iz bırakıyordu (macOS).** Panoya kopyalanan her ekran
+  görüntüsü, görselin kendisi kadar belleği uygulama kapanana kadar tutuyordu; günlerce
+  açık kalan uygulamada yüzlerce MB birikebiliyordu. Artık kopyadan sonra bırakılıyor.
+- **Mikrofonlu video kaydı başlamıyordu (macOS).** Mikrofon açıkken kayıt bir izin
+  hatasıyla düşüyor ve sizi yanlışlıkla Ekran Kaydı ayarlarına yönlendiriyordu. Artık
+  ilk kayıtta mikrofon izni soruluyor; izin verilmezse kayıt mikrofonsuz (sistem
+  sesiyle) sürüyor ve kayıt araç çubuğundaki üstü çizili mikrofon simgesi bunu gösteriyor.
+
+---
+
 # CopyBoard v3.2.0 Release Notes
 
 Güncellemeler artık uygulamanın içinden kuruluyor — macOS'ta da.

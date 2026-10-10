@@ -28,9 +28,10 @@
 
 #![cfg(target_os = "macos")]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use screencapturekit::cm::{CMSampleBufferSCExt, CMSampleBuffer, SCFrameStatus};
 use screencapturekit::dispatch_queue::{DispatchQoS, DispatchQueue};
@@ -40,6 +41,36 @@ use screencapturekit::stream::output_type::SCStreamOutputType;
 
 use super::mixer::{self, Mixer};
 use super::writer::AssetWriter;
+use crate::platform::macos::permissions;
+
+/// Mikrofon izni isteminin cevabı en çok bu kadar bekleniyor. İstem açıkken kayıt
+/// başlamıyor (sayaç da). Süre dolarsa kayıt mikrofonsuz başlıyor.
+const MIC_PROMPT_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Mikrofon istendi ama kayda girmiyorsa neden.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MicDrop {
+    /// İzin yok: reddedildi, kısıtlı ya da istem cevapsız kaldı.
+    Permission,
+    /// İzin var ama akış mikrofonla açılamadı (ör. seçili aygıt çıkarılmış).
+    Failed,
+}
+
+impl MicDrop {
+    /// Arayüze giden ad (`record_start` dönüşü).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MicDrop::Permission => "permission",
+            MicDrop::Failed => "failed",
+        }
+    }
+}
+
+/// ScreenCaptureKit'in TCC reddi. Mikrofon reddi de ekran izni reddi de AYNI
+/// metinle geliyor: "The user declined TCCs for application, window, display capture".
+pub fn is_tcc_denial(e: &str) -> bool {
+    e.contains("declined") && e.contains("TCC")
+}
 
 pub struct Recording {
     stream: SCStream,
@@ -52,6 +83,11 @@ pub struct Recording {
     pub window_label: String,
     /// Ekran hareketsizken görüntü izini ilerleten zamanlayıcıya "dur" işareti.
     ticker: Arc<AtomicBool>,
+    /// Mikrofon istendi ama kayda girmiyorsa neden (bkz. [`start`]).
+    pub mic_dropped: Option<MicDrop>,
+    /// Gelen mikrofon tamponları. `--qa` mikrofonun gerçekten kayda girdiğini
+    /// bununla ölçüyor: izin yokken de kayıt artık başlıyor.
+    mic_buffers: Arc<AtomicU64>,
 }
 
 #[derive(Default)]
@@ -97,6 +133,16 @@ pub fn is_supported() -> bool {
 }
 
 /// Kaydı başlatır. `crop_*` FİZİKSEL piksel.
+///
+/// ## Mikrofon izni yoksa kayıt mikrofonsuz sürüyor
+///
+/// ScreenCaptureKit mikrofon izni olmadan akışı HİÇ başlatmıyor ve hatası ekran
+/// izninin reddiyle aynı ([`is_tcc_denial`]). Çağıran bunu ekran kaydı izni sanıp
+/// kullanıcıyı Ekran Kaydı ayarlarına yolluyordu — o izin zaten verilmişken — ve
+/// kayıt hiç başlamıyordu. İzin artık akıştan ÖNCE AVFoundation'a soruluyor
+/// (ilk seferde sistem istemi açılıp cevap bekleniyor); yoksa kayıt mikrofonsuz
+/// sürüyor, sistem sesi istendiyse o kalıyor. Windows'taki "ses açılamadı → sessiz
+/// kaydet" davranışıyla aynı. Neden [`Recording::mic_dropped`]da; arayüz söylüyor.
 #[allow(clippy::too_many_arguments)]
 pub fn start(
     monitor: &crate::geom::MonitorInfo,
@@ -113,6 +159,54 @@ pub fn start(
     mic_device: &str,
     // Kayda GİRMEYECEK pencerelerin CGWindowID'leri — yakalama overlay'leri
     // (bkz. `capture::overlay_window_ids`).
+    exclude_window_ids: &[u32],
+    window_label: String,
+    out_path: PathBuf,
+) -> Result<Recording, String> {
+    let mut mic_dropped = None;
+    let mut capture_mic = capture_mic;
+    if capture_mic && !permissions::request_microphone(MIC_PROMPT_TIMEOUT) {
+        log::warn!(
+            "kayıt: mikrofon izni yok ({:?}) — mikrofonsuz kaydediliyor",
+            permissions::microphone_access()
+        );
+        capture_mic = false;
+        mic_dropped = Some(MicDrop::Permission);
+    }
+
+    let try_open = |mic: bool| {
+        open_stream(
+            monitor, crop_x, crop_y, crop_w, crop_h, quality, mic, capture_system_audio,
+            mic_device, exclude_window_ids, window_label.clone(), out_path.clone(),
+        )
+    };
+    let mut recording = match try_open(capture_mic) {
+        // İzin varken de mikrofonla açılış düşebilir. Kayıt yine düşmesin: bir kez
+        // mikrofonsuz denenir. O da düşerse sorun mikrofonda değil (ör. ekran kaydı
+        // izni) ve hata olduğu gibi çağırana gidiyor.
+        Err(e) if capture_mic => {
+            log::warn!("kayıt: mikrofonla başlatılamadı ({e}) — mikrofonsuz yeniden deneniyor");
+            let recording = try_open(false)?;
+            mic_dropped = Some(if is_tcc_denial(&e) { MicDrop::Permission } else { MicDrop::Failed });
+            recording
+        }
+        other => other?,
+    };
+    recording.mic_dropped = mic_dropped;
+    Ok(recording)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn open_stream(
+    monitor: &crate::geom::MonitorInfo,
+    crop_x: f64,
+    crop_y: f64,
+    crop_w: f64,
+    crop_h: f64,
+    quality: &str,
+    capture_mic: bool,
+    capture_system_audio: bool,
+    mic_device: &str,
     exclude_window_ids: &[u32],
     window_label: String,
     out_path: PathBuf,
@@ -217,6 +311,7 @@ pub fn start(
     // Yalnız biri açıksa karıştıracak bir şey yok, o kaynak doğrudan yazılıyor.
     let mixing = capture_system_audio && capture_mic;
     let mixer = Arc::new(Mixer::default());
+    let mic_buffers = Arc::new(AtomicU64::new(0));
 
     // ── Akış çıktısı ─────────────────────────────────────────────────────────
     // Görüntü ve ses AYRI işleyiciler ve AYRI kuyruklardan geliyor; ikisi de aynı
@@ -226,6 +321,7 @@ pub fn start(
         mixer: Arc<Mixer>,
         /// Mikrofon, sistem sesine karıştırılacak mı? (İkisi de açıksa evet.)
         mixing: bool,
+        mic_buffers: Arc<AtomicU64>,
     }
     impl SCStreamOutputTrait for Sink {
         fn did_output_sample_buffer(&self, sample: CMSampleBuffer, of_type: SCStreamOutputType) {
@@ -254,6 +350,9 @@ pub fn start(
                     return;
                 }
             let ptr = sample.as_ptr();
+            if of_type == SCStreamOutputType::Microphone {
+                self.mic_buffers.fetch_add(1, Ordering::Relaxed);
+            }
             match of_type {
                 SCStreamOutputType::Screen => {
                     let pts = sample.presentation_timestamp();
@@ -327,6 +426,7 @@ pub fn start(
         writer: w.clone(),
         mixer: m.clone(),
         mixing,
+        mic_buffers: mic_buffers.clone(),
     };
     stream.add_output_handler_with_queue(sink(&writer, &mixer), SCStreamOutputType::Screen, Some(&vq));
     if capture_system_audio {
@@ -363,10 +463,15 @@ pub fn start(
             .ok();
     }
 
-    Ok(Recording { stream, writer, path: out_path, window_label, ticker })
+    Ok(Recording { stream, writer, path: out_path, window_label, ticker, mic_dropped: None, mic_buffers })
 }
 
 impl Recording {
+    /// Şu ana dek gelen mikrofon tamponu sayısı.
+    pub fn mic_buffers(&self) -> u64 {
+        self.mic_buffers.load(Ordering::Relaxed)
+    }
+
     /// Akışı durdurur ve mux'un kapanmasını bekler. Dosya yolunu döner.
     pub fn stop(&mut self) -> Result<PathBuf, String> {
         let t0 = std::time::Instant::now();

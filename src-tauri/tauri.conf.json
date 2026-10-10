@@ -35,7 +35,8 @@
     "copyright": "Nurullah YAYAN",
     "shortDescription": "Pano yöneticisi, ekran görüntüsü ve OCR aracı",
     "macOS": {
-      "minimumSystemVersion": "12.3"
+      "minimumSystemVersion": "12.3",
+      "entitlements": "Entitlements.plist"
     },
     "windows": {
       "nsis": {

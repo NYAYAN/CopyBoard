@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Video kaydında mikrofon sesi.
+
+      Paket hardened runtime ile imzalanıyor (Tauri varsayılanı). Hardened runtime'da
+      mikrofon için Info.plist'teki NSMicrophoneUsageDescription YETMİYOR; imzanın bu
+      yetkiyi de taşıması gerekiyor. Yoksa tccd istemi hiç göstermiyor ("Policy
+      disallows prompt") ve ScreenCaptureKit akışı ekran izniyle AYNI hatayla
+      reddediyor: "The user declined TCCs for application, window, display capture".
+      Kullanıcıya ne istem çıkıyordu ne de Gizlilik > Mikrofon listesinde uygulama.
+
+      Ekran Kaydı ve Erişilebilirlik için hardened runtime yetkisi GEREKMİYOR —
+      bunlar yalnız TCC izni.
+    -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+</dict>
+</plist>

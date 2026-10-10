@@ -191,8 +191,31 @@ pub fn run(app: tauri::AppHandle) {
                     None => log::warn!("QA – monitör yok, kayıt adımları atlandı"),
                     Some(m) => {
                         let path = std::env::temp_dir().join("copyboard-qa-record.mp4");
-                        // Ses de açık: mikrofon + sistem sesi (WASAPI). Aygıt yoksa kayıt
-                        // sessiz sürer ve log'a "ses açılamadı" düşer; adım yine geçer.
+
+                        // Hardened runtime'da mikrofon istemi ancak imza
+                        // `audio-input` yetkisini taşıyorsa çıkıyor. Bu makinede izin
+                        // bir kez verildikten sonra yetkisiz paket de çalışıyor gibi
+                        // görünebilir — ama YENİ her kullanıcıda istem hiç çıkmaz.
+                        // Bunu ancak imzanın kendisine bakmak yakalıyor. Paketsiz
+                        // koşuda (`target/debug/copyboard`) imza yok, denetim atlanıyor.
+                        #[cfg(target_os = "macos")]
+                        {
+                            let bundled = std::env::current_exe()
+                                .map(|p| p.to_string_lossy().contains(".app/Contents/MacOS/"))
+                                .unwrap_or(false);
+                            if bundled {
+                                check(
+                                    crate::platform::macos::permissions::has_entitlement("com.apple.security.device.audio-input"),
+                                    "imza mikrofon yetkisini taşıyor (com.apple.security.device.audio-input)",
+                                );
+                            } else {
+                                log::warn!("QA – paketsiz koşu, imza yetkisi denetimi atlandı");
+                            }
+                        }
+
+                        // Ses de açık: mikrofon + sistem sesi. Mikrofon açılamazsa (izin
+                        // yok, aygıt yok) kayıt mikrofonsuz sürer; adım yine geçer ve
+                        // mikrofonun kendisi aşağıda AYRICA ölçülür.
                         let started = crate::capture::recorder::start(
                             // Overlay açık değil; dışlanacak pencere yok.
                             &m, 100.0, 100.0, 640.0, 360.0, "high", true, true, "", &[], "qa".into(), path.clone(),
@@ -214,6 +237,24 @@ pub fn run(app: tauri::AppHandle) {
                                         check(size > 10_000, &format!("video dosyası yazıldı ({:.1} KB) → {}", size as f64 / 1024.0, p.display()));
                                     }
                                     Err(e) => check(false, &format!("video kaydı durdurulamadı: {e}")),
+                                }
+                                // Kayıt mikrofonsuz da başlayabildiği için "başladı" mikrofonu
+                                // kanıtlamıyor: tamponların gerçekten geldiğini say.
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let n = rec.mic_buffers();
+                                    if crate::platform::audio_inputs().is_empty() {
+                                        log::warn!("QA – mikrofon aygıtı yok, mikrofon denetimi atlandı");
+                                    } else {
+                                        check(
+                                            rec.mic_dropped.is_none() && n > 0,
+                                            &format!(
+                                                "mikrofon kayda girdi ({n} tampon; izin: {:?}, düşürülme: {:?})",
+                                                crate::platform::macos::permissions::microphone_access(),
+                                                rec.mic_dropped,
+                                            ),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -344,10 +385,15 @@ pub fn run(app: tauri::AppHandle) {
                     if rec {
                         // Arayüz de kayıt durumuna geçmiş olmalı: Kaydı Başlat gizli, Durdur ve sayaç görünür
                         // (A13: kayıt başlıyor ama düğme "Kaydı Başlat" kalıyordu).
+                        // Mikrofon rozeti `recordStart`ın DÖNÜŞÜNDE kuruluyor, durum ise ondan
+                        // önce doluyor: renderer cevabı işlesin diye kısa bir bekleme.
+                        sleep(300);
                         let probe = r#"window.api.copyText('QA-REC ' + document.body.className
                             + ' record-hidden=' + document.getElementById('btn-record').classList.contains('hidden')
                             + ' stop-hidden=' + document.getElementById('btn-stop').classList.contains('hidden')
-                            + ' timer-hidden=' + document.getElementById('timer').classList.contains('hidden'));"#;
+                            + ' timer-hidden=' + document.getElementById('timer').classList.contains('hidden')
+                            + ' mic-badge-hidden=' + document.getElementById('mic-dropped').classList.contains('hidden')
+                            + ' mic-tip=' + (document.getElementById('mic-dropped').dataset.tip || ''));"#;
                         on_main(&app, move |h| { if let Some(w) = h.get_webview_window("capture-0") { let _ = w.eval(probe); } });
                         sleep(700);
                         let ui = crate::platform::clipboard_read_text().unwrap_or_default();
@@ -356,6 +402,22 @@ pub fn run(app: tauri::AppHandle) {
                                 && ui.contains("stop-hidden=false") && ui.contains("timer-hidden=false"),
                             &format!("Kayıt düğmesi: arayüz kayıt durumuna geçti (okunan: {ui:?})"),
                         );
+                        // Rozet motorun kararıyla birebir: mikrofon kayda girmiyorsa nedeniyle
+                        // görünür, giriyorsa (ya da istenmediyse) görünmez.
+                        #[cfg(target_os = "macos")]
+                        {
+                            use crate::capture::recorder::MicDrop;
+                            let dropped = app.state::<RecorderState>().0.lock().unwrap().as_ref().and_then(|r| r.mic_dropped);
+                            let tip_ok = match dropped {
+                                Some(MicDrop::Permission) => ui.contains("Mikrofon izni verilmedi"),
+                                Some(MicDrop::Failed) => ui.contains("Mikrofon sesi alınamadı"),
+                                None => true,
+                            };
+                            check(
+                                ui.contains(&format!("mic-badge-hidden={}", dropped.is_none())) && tip_ok,
+                                &format!("Kayıt düğmesi: mikrofon rozeti motorla tutarlı (motor: {dropped:?}, okunan: {ui:?})"),
+                            );
+                        }
                         for _ in 0..3 {
                             on_main(&app, crate::windows::main_window::show);
                             sleep(300);

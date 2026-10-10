@@ -100,6 +100,10 @@ pub fn ensure_mic_permission() -> bool {
 // ── Video kaydı ──────────────────────────────────────────────────────────────
 
 /// Seçilen bölgenin kaydını başlatır. `rect` FİZİKSEL piksel.
+///
+/// Dönüş `{ micDropped }`: mikrofon istendi ama kayda girmiyorsa nedeni
+/// (`"permission"` | `"failed"`), yoksa `null`. Kayıt araç çubuğu bunu gösteriyor —
+/// overlay kayda girmediği için bir toast'ın aksine videoya düşmüyor.
 #[tauri::command]
 pub async fn record_start(
     app: tauri::AppHandle,
@@ -108,7 +112,7 @@ pub async fn record_start(
     y: f64,
     width: f64,
     height: f64,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (x, y, width, height, &window);
@@ -160,8 +164,11 @@ pub async fn record_start(
             // izin akışını burada tetikle — bu, uygulamayı Ekran Kaydı listesine EKLER
             // (CGRequestScreenCaptureAccess) ve Ayarlar'ı açar. Kullanıcı izni verip
             // uygulamayı yeniden başlatınca SCStream aynı imzayı görüp kaydı başlatır.
+            //
+            // Mikrofon reddi aynı metinle gelir ama buraya ULAŞMAZ: motor o durumda
+            // kaydı mikrofonsuz başlatıyor (bkz. `recorder::start`).
             #[cfg(target_os = "macos")]
-            let permission_denied = e.contains("declined") && e.contains("TCC");
+            let permission_denied = crate::capture::recorder::is_tcc_denial(&e);
             #[cfg(not(target_os = "macos"))]
             let permission_denied = false;
 
@@ -184,10 +191,14 @@ pub async fn record_start(
         })?;
 
         log::info!("kayıt motoru hazır (+{} ms)", t_start.elapsed().as_millis());
+        #[cfg(target_os = "macos")]
+        let mic_dropped = recording.mic_dropped.map(|d| d.as_str());
+        #[cfg(not(target_os = "macos"))]
+        let mic_dropped: Option<&str> = None;
         // Kayıt bir monitörde başladı — DİĞER monitörlerin overlay'leri gitsin.
         crate::capture::close_all_except(&app, &label);
         *app.state::<crate::capture::recorder::RecorderState>().0.lock().unwrap() = Some(recording);
-        Ok(())
+        Ok(serde_json::json!({ "micDropped": mic_dropped }))
     }
 }
 

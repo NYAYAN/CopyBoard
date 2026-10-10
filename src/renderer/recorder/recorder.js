@@ -14,6 +14,7 @@ const qualitySelect = document.getElementById('quality-select');
 const qualityLabel = document.getElementById('quality-label');
 const btnMic = document.getElementById('btn-mic');
 const btnSystemAudio = document.getElementById('btn-system-audio');
+const micDropped = document.getElementById('mic-dropped');
 
 const state = {
     isSelecting: false, isMoving: false, isResizing: false,
@@ -380,7 +381,8 @@ async function startRecording() {
         overlay.style.display = 'none';
         reportToolbarHitArea();
 
-        await window.api.recordStart(rect);
+        const started = await window.api.recordStart(rect);
+        showMicDropped(started && started.micDropped);
 
         state.startTime = Date.now();
         state.timerInterval = setInterval(() => {
@@ -420,6 +422,21 @@ async function startRecording() {
             alert('Kayıt başlatılamadı: ' + detail);
         }
     }
+}
+
+// Mikrofon istenmişti ama kayda girmiyor ('permission' | 'failed'). Kayıt yine sürüyor
+// (bkz. recorder::start); kullanıcı sesinin alınmadığını kaydın sonunda değil ŞİMDİ
+// görmeli. Etiket overlay-tooltip'e kurulumda `data-tip` olarak geçti; burada o güncelleniyor.
+function showMicDropped(reason) {
+    if (!micDropped) return;
+    micDropped.classList.toggle('hidden', !reason);
+    if (!reason) return;
+    const tip = reason === 'permission'
+        ? t('Mikrofon izni verilmedi. Sistem Ayarları > Gizlilik ve Güvenlik > Mikrofon.')
+        : t('Mikrofon sesi alınamadı.');
+    micDropped.dataset.tip = tip;
+    micDropped.setAttribute('aria-label', tip);
+    reportToolbarHitArea();   // araç çubuğu bir rozet genişledi
 }
 
 function stopRecording() {

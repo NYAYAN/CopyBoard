@@ -257,6 +257,27 @@ body.is-recording #selection-box {
     font-variant-numeric: tabular-nums;
 }
 
+/* Mic was requested but is not in the recording (no permission, or it failed to open).
+   The recording carries on without it, so this is a warning beside the timer, not an
+   error — and it lives in the toolbar because the toolbar is excluded from the capture,
+   where a toast would have ended up in the video. */
+.rec-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--warning);
+}
+
+.rec-badge svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+}
+
 .divider {
     width: 1px;
     height: 18px;

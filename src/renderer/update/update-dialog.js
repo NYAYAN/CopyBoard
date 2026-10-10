@@ -20,7 +20,10 @@ window.api.onUpdateInfo((info) => {
         notesContent.textContent = t('Yeni özellikler ve iyileştirmeler.');
     }
 
-    // If Mac, change update button text
+    // Electron only: Squirrel.Mac can't apply an unsigned update, so the Electron main
+    // process sends `isMac` and the button points to GitHub instead. The Tauri backend
+    // never sends it — its updater checks the minisign signature and swaps the .app in
+    // place on macOS too (src-tauri/src/updater.rs).
     if (info.isMac) {
         const updateBtn = document.getElementById('updateBtn');
         updateBtn.innerHTML = `
@@ -99,8 +102,8 @@ function formatReleaseNotes(notes) {
     };
 
     try {
-        // Tauri's updater hands over the GitHub release BODY, which is Markdown (tauri-action
-        // writes it into latest.json as-is); electron-updater gave HTML. If the text carries
+        // Tauri's updater hands over latest.json's `notes`: the version's CHANGELOG.md section,
+        // Markdown (scripts/release-files.mjs); electron-updater gave HTML. If the text carries
         // no tags at all, render the common Markdown shapes first — the sanitizer below still
         // rebuilds everything from the whitelist, so nothing here is trusted either.
         const looksLikeHtml = /<\s*[a-z][\s\S]*>/i.test(String(notes));
@@ -245,7 +248,8 @@ function formatBytes(bytes) {
 // Button event listeners
 document.getElementById('updateBtn').addEventListener('click', () => {
     if (updateInfo && updateInfo.isMac) {
-        // For Mac without code signing, redirect to release page
+        // Electron only (see onUpdateInfo): its macOS build can't self-update, and its
+        // releases are tagged `v<version>`.
         const releaseUrl = `https://github.com/NYAYAN/CopyBoard/releases/tag/v${updateInfo.version}`;
         window.api.openExternal(releaseUrl);
         window.close();

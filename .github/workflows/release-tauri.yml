@@ -1,32 +1,52 @@
 # TAURI sürüm derlemesi — Electron'un `release.yml`'inden AYRI TUTULUR.
 #
 # İkisi de aynı depoda yaşıyor ve birbirine dokunmuyor: Electron `v*` etiketiyle
-# (ör. v3.0.0), Tauri ise `tauri-v*` etiketiyle (ör. tauri-v3.0.0) tetikleniyor.
-# `tauri-v3.0.0` `v*` desenine UYMUYOR (v ile başlamıyor), dolayısıyla Electron işi
-# bu etikette KOŞMAZ; tersi de geçerli. Böylece Electron'un ürettiği asset'ler
-# hiç bozulmadan kalıyor, Tauri kendi GitHub sürümünü ayrıca oluşturuyor.
+# (ör. v2.13.1), Tauri ise `tauri-v*` etiketiyle (ör. tauri-v3.2.0) tetikleniyor.
+# `tauri-v3.2.0` `v*` desenine UYMUYOR (v ile başlamıyor), dolayısıyla Electron işi
+# bu etikette KOŞMAZ; tersi de geçerli.
 #
-# Sürüm çıkarma:
-#   Electron  →  git tag v3.0.0        && git push origin v3.0.0
-#   Tauri     →  git tag tauri-v3.0.0  && git push origin tauri-v3.0.0
+# Sürüm çıkarma: sürümü beş yerde yükselt (package.json, package-lock.json,
+# Cargo.toml, Cargo.lock, tauri.conf.json), CHANGELOG.md'nin başına
+# `# CopyBoard vX.Y.Z Release Notes` bölümünü yaz, sonra:
+#   git tag tauri-vX.Y.Z && git push origin tauri-vX.Y.Z
+#
+# ── UYGULAMA İÇİ GÜNCELLEME ─────────────────────────────────────────────────
+# NTerminal'deki düzenin CopyBoard'a özel hâli. Paketler CI'da güncelleyici için de
+# imzalanıyor (`.sig`) ve `latest.json` yazılıyor; kurulu uygulama onu okuyup yeni
+# sürümü İMZAYI DOĞRULAYARAK kendisi kuruyor (bkz. src-tauri/src/updater.rs).
+#
+# Tauri release'leri ÖN SÜRÜM (prerelease) olarak yayınlanıyor. Sebebi bu repoda
+# Electron release'lerinin de yaşaması: GitHub'ın "Latest"i ön sürümleri saymıyor,
+# Electron'un electron-updater'ı da "Latest"e bakıyor — Tauri release'i "Latest"
+# olsaydı kurulu Electron uygulamaları orada kendi dosyasını (latest-mac.yml)
+# bulamayıp güncelleme hatası verirdi. Bu yüzden uygulamanın okuduğu adres de
+# `releases/latest/…` DEĞİL, sabit `tauri-updater` ön sürümündeki `latest.json`
+# (tauri.conf.json > plugins.updater.endpoints).
+#
+# Gereken secret'lar (özel anahtarlar ASLA depoya girmez):
+#   TAURI_SIGNING_PRIVATE_KEY        güncelleme imzası (~/.tauri/copyboard.key içeriği)
+#   COPYBOARD_SIGNING_P12            "CopyBoard Dev" sertifikası, .p12'nin base64'ü
+#   COPYBOARD_SIGNING_P12_PASSWORD   o .p12'nin parolası
+# Anahtar parolasız; TAURI_SIGNING_PRIVATE_KEY_PASSWORD tanımlı DEĞİL ve bilerek boş
+# dize olarak geçiliyor: değişken hiç yoksa CLI parola sormaya kalkıp terminalsiz
+# ortamda düşüyor (NTerminal'de ölçüldü, CLI 2.11).
 name: Build and Release (Tauri)
 
 on:
+  # Elle tetikleme yalnız DERLER (paketleri artifact olarak bırakır); yayın yalnız
+  # `tauri-v*` etiketinde yapılıyor.
   workflow_dispatch:
   push:
     tags:
       - 'tauri-v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    name: Paket (${{ matrix.ad }})
     strategy:
-      # Electron sürümünde `max-parallel: 1` gerekiyordu: iki paralel
-      # `electron-builder --publish always` işi aynı etiket için taslak yarışına girip
-      # AYRI taslaklar yaratabiliyordu. `tauri-action` aynı taslağa güvenle eklediği
-      # için matris artık paralel koşabiliyor.
       fail-fast: false
       matrix:
         include:
@@ -44,22 +64,45 @@ jobs:
           #      LİNKLENEMİYOR (yerelde doğrulandı).
           #
           # Sonuç: bugün güvenilir tek kombinasyon arm64 + Windows. Intel
-          # kullanıcıları şimdilik Electron sürümünü (main) kullanır. Intel Tauri
-          # için ya tesseract-rs çapraz-derlemeyi düzeltmeli ya da macOS 26 SDK'lı
-          # bir Intel runner çıkmalı.
-          - platform: macos-latest
+          # kullanıcıları şimdilik Electron sürümünü (main) kullanır.
+          - os: macos-latest
+            ad: macOS
             args: '--target aarch64-apple-darwin'
-          - platform: windows-latest
+            rust_target: aarch64-apple-darwin
+            cikti: |
+              src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+              src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
+              src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+          - os: windows-latest
+            ad: Windows
             args: ''
+            rust_target: ''
+            cikti: |
+              src-tauri/target/release/bundle/nsis/*.exe
+              src-tauri/target/release/bundle/nsis/*.exe.sig
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+
+      # Etiket uygulamanın sürümüyle eşleşmeli: güncelleyici sürümleri karşılaştırıyor;
+      # `tauri-v3.2.0` etiketine 3.1.1 paketleri bağlanırsa kurulu uygulama kendini
+      # hep eski sanır (ya da hiç güncellenmez). Derlemeye başlamadan, ucuz yerde dur.
+      - name: Sürüm etiketle eşleşiyor mu
+        if: startsWith(github.ref, 'refs/tags/tauri-v')
+        shell: bash
+        run: |
+          surum=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$GITHUB_REF_NAME" != "tauri-v$surum" ]; then
+            echo "::error::Etiket $GITHUB_REF_NAME ama tauri.conf.json sürümü $surum — yayın yapılmadı."
+            exit 1
+          fi
 
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin' || '' }}
+          targets: ${{ matrix.rust_target }}
 
       # tesseract-rs, Tesseract + Leptonica'yı KAYNAKTAN derliyor. Önbelleksiz ilk
       # derleme uzun sürüyor; bu önbellek onu ~3 dakikaya indiriyor.
@@ -67,48 +110,199 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-          key: ${{ matrix.platform }}
+          key: ${{ matrix.os }}
 
       # cmake tesseract-rs'in ön koşulu. GitHub imajlarında hazır gelir;
       # kontrol, bir imaj değişikliğinin sessizce derlemeyi bozmasını engelliyor.
       - name: cmake doğrula
         run: cmake --version
 
+      # Node 22: `npm test` = `node --test "test/**/*.test.mjs"` ve `--test`'in glob
+      # desteği Node 21'de geldi. Node 20'de ölçüldü: "Could not find
+      # '…/test/**/*.test.mjs'" — testler hiç koşmadan yayın düşerdi.
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      # Uygulama içi güncellemeyle bozuk bir sürüm kullanıcıya KENDİLİĞİNDEN kuruluyor;
+      # yayından önce testler koşuyor. Rust testleri yalnız macOS'ta: Windows'ta hiç
+      # koşturulmadılar, durumları bilinmeden yayını kesmesinler.
+      - name: JS testleri
+        run: npm test
+
+      - name: Rust testleri
+        if: runner.os == 'macOS'
+        working-directory: src-tauri
+        run: cargo test --quiet
+
+      # ── macOS imza kimliği ───────────────────────────────────────────────────
+      # Ekran Kaydı ve Erişilebilirlik izinleri imzanın "designated requirement"ına
+      # bağlı. Ad-hoc imzada bu, binary'nin hash'i: her sürüm macOS'a YENİ bir
+      # uygulama görünür ve uygulama içi güncellemeden sonra izinler sıfırlanır.
+      # "CopyBoard Dev" ile imzada ise "identifier … and certificate leaf = H…":
+      # sertifika aynı kaldıkça izinler güncellemeler arasında korunuyor — yerel
+      # derlemelerin izni korumasının sebebi de bu (bkz. SIGNING.md).
+      #
+      # Sertifika kendinden imzalı ve geçici anahtarlıkta GÜVEN AYARI YOK; gerek de
+      # yok: `codesign` güven istemiyor (ölçüldü). Tauri'nin kendi APPLE_CERTIFICATE
+      # yolu kullanılmıyor: yerelde kanıtlanmış yol, kimliğin anahtarlık listesinde
+      # olması ve APPLE_SIGNING_IDENTITY ile adının verilmesi.
+      #
+      # Güncelleme anahtarı VARKEN sertifika YOKSA yayın duruyor: ad-hoc imzalı bir
+      # güncelleme, güncelleyen HER kullanıcının iznini sessizce sıfırlardı.
+      - name: macOS imza kimliği
+        if: runner.os == 'macOS'
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ── GÜNCELLEYİCİ ŞİMDİLİK KAPALI ────────────────────────────────────
-          # `bundle.createUpdaterArtifacts` false (tauri.conf.json). Sebebi:
-          # tauri.conf'ta `pubkey` boş, yani güncelleyici zaten atıl (imzalasa da
-          # doğrulayamaz). Açıkken her build sonunda imza anahtarı istiyordu ve
-          # "Missing comment in secret key" ile düşüyordu — .dmg/.exe üretiliyor ama
-          # yayınlanamıyordu. Kapalıyken installer'lar temiz yayınlanıyor.
-          #
-          # GÜNCELLEYİCİYİ AÇMAK İÇİN: `npm run tauri signer generate` ile anahtar
-          # çifti üret → pubkey'i tauri.conf.json'a yaz → createUpdaterArtifacts'ı
-          # true yap → TAURI_SIGNING_PRIVATE_KEY(+_PASSWORD) secret'larını ekle
-          # (özel anahtar ASLA depoya girmez) → aşağıda includeUpdaterJson: true.
-          #
-          # ── macOS İMZA: ad-hoc (Developer ID YOK) ───────────────────────────
-          # Yeni kurulumlarda TCC izinlerinin (Ekran Kaydı vb.) güncellemeler arası
-          # KORUNMASI için kararlı bir imza kimliği gerekir; ad-hoc her build'de
-          # değiştiği için izin sıfırlanır. Kalıcı çözüm ayrı bir iş (Apple
-          # Developer ID + notarization); alındığında COPYBOARD_ALLOW_UNSIGNED'ı SİL,
-          # APPLE_CERTIFICATE / _PASSWORD / APPLE_SIGNING_IDENTITY (+ APPLE_ID /
-          # APPLE_PASSWORD / APPLE_TEAM_ID) secret'larını ekle. Electron tarafı da
-          # bugün imzasız; bu, iki tarafın ortak eksiği.
-          COPYBOARD_ALLOW_UNSIGNED: '1'
+          P12: ${{ secrets.COPYBOARD_SIGNING_P12 }}
+          P12_PASSWORD: ${{ secrets.COPYBOARD_SIGNING_P12_PASSWORD }}
+          UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$P12" ]; then
+            KC="$RUNNER_TEMP/copyboard-sign.keychain-db"
+            KCPW="$(uuidgen)"
+            security create-keychain -p "$KCPW" "$KC"
+            security set-keychain-settings -lut 21600 "$KC"
+            security unlock-keychain -p "$KCPW" "$KC"
+            printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/cb.p12"
+            security import "$RUNNER_TEMP/cb.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+            rm -f "$RUNNER_TEMP/cb.p12"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KC" > /dev/null
+            # Mevcut aramayı koruyarak listeye ekle.
+            security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+            if ! security find-identity -p codesigning "$KC" | grep -qF '"CopyBoard Dev"'; then
+              echo "::error::.p12 içinde \"CopyBoard Dev\" kod imzalama kimliği yok."
+              security find-identity -p codesigning "$KC"
+              exit 1
+            fi
+            echo "APPLE_SIGNING_IDENTITY=CopyBoard Dev" >> "$GITHUB_ENV"
+            echo "CB_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+            echo "macOS paketi \"CopyBoard Dev\" ile imzalanacak."
+          elif [ -n "$UPDATER_KEY" ]; then
+            echo "::error::Güncelleme anahtarı var ama COPYBOARD_SIGNING_P12 yok. Ad-hoc imzalı bir güncelleme, güncelleyen her kullanıcının Ekran Kaydı/Erişilebilirlik iznini sıfırlardı — yayın durduruldu."
+            exit 1
+          else
+            # Ne güncelleme ne sertifika (ör. fork): en azından AD-HOC. İmzasız paketi
+            # macOS "hasarlı" sayıp açtırmıyor; ad-hoc'ta "Yine de Aç" çıkıyor
+            # (NTerminal'de ölçüldü).
+            echo "::warning::COPYBOARD_SIGNING_P12 yok: macOS paketi ad-hoc imzalanıyor."
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "COPYBOARD_ALLOW_UNSIGNED=1" >> "$GITHUB_ENV"
+          fi
+
+      # `createUpdaterArtifacts` tauri.conf.json'da değil BURADA açılıyor: orada açık
+      # olsaydı anahtarı olmayan her yerel `npm run build` imza isteyip düşerdi.
+      - name: Paketle
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            npx tauri build ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY tanımlı değil: güncelleme paketleri üretilmedi, uygulama bu sürümü kendisi kuramayacak."
+            npx tauri build ${{ matrix.args }}
+          fi
+
+      # İmzanın gerçekten istenen kimlikle atıldığını ÖLÇ: sessizce ad-hoc'a düşmüş bir
+      # paket, güncelleyen herkesin iznini sıfırlardı ve bu ancak kullanıcıda görülürdü.
+      - name: macOS imzasını doğrula
+        if: runner.os == 'macOS' && env.APPLE_SIGNING_IDENTITY == 'CopyBoard Dev'
+        shell: bash
+        run: |
+          app=$(ls -d src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app | head -1)
+          bilgi=$(codesign -dvvv "$app" 2>&1)
+          dr=$(codesign -d -r- "$app" 2>&1 | grep '^designated')
+          echo "$bilgi" | grep -E '^(Identifier|Authority)='
+          echo "$dr"
+          echo "$bilgi" | grep -qx 'Authority=CopyBoard Dev' || { echo "::error::Paket CopyBoard Dev ile imzalanmamış."; exit 1; }
+          echo "$dr" | grep -q 'certificate leaf' || { echo "::error::Designated requirement sertifikaya bağlı değil (izinler korunmaz)."; exit 1; }
+
+      - name: Paketleri yükle
+        uses: actions/upload-artifact@v7
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'CopyBoard ${{ github.ref_name }}'
-          releaseDraft: true
-          prerelease: false
-          includeUpdaterJson: false
-          args: ${{ matrix.args }}
+          name: copyboard-${{ matrix.ad }}
+          path: ${{ matrix.cikti }}
+          if-no-files-found: error
+
+      - name: Geçici anahtarlığı sil
+        if: always() && runner.os == 'macOS' && env.CB_SIGN_KEYCHAIN != ''
+        shell: bash
+        run: security delete-keychain "$CB_SIGN_KEYCHAIN" || true
+
+  publish:
+    name: Yayın
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/tauri-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Paketleri indir
+        uses: actions/download-artifact@v7
+        with:
+          pattern: copyboard-*
+          path: indirilen
+          merge-multiple: true
+
+      # Düz klasör + latest.json + CHANGELOG'dan sürüm notu (bkz. scripts/release-files.mjs).
+      - name: Yayın dosyalarını hazırla
+        run: node scripts/release-files.mjs indirilen paketler "$GITHUB_REF_NAME" release-notes.md
+
+      # `--prerelease --latest=false`: Electron'un "Latest"ine dokunma (bkz. dosya başı).
+      # Yeniden koşuda release zaten varsa dosyalar üzerine yazılıyor.
+      - name: Sürüm release'i
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          surum="${GITHUB_REF_NAME#tauri-v}"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" paketler/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "CopyBoard $surum" \
+              --notes-file release-notes.md \
+              --prerelease --latest=false \
+              paketler/*
+          fi
+
+      # Uygulamanın okuduğu sabit adres: `tauri-updater` ön sürümündeki latest.json.
+      # Sürümün release'i tamamen yüklendikten SONRA güncelleniyor; önce olsaydı
+      # uygulama henüz var olmayan paketleri indirmeye kalkabilirdi.
+      - name: Güncelleme kanalını güncelle
+        if: hashFiles('paketler/latest.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view tauri-updater > /dev/null 2>&1; then
+            gh release create tauri-updater \
+              --title "CopyBoard güncelleme kanalı" \
+              --notes "Uygulama içi güncellemenin okuduğu latest.json. Kurulum dosyaları sürüm release'lerinde." \
+              --prerelease --latest=false \
+              --target "$GITHUB_SHA"
+          fi
+          gh release upload tauri-updater paketler/latest.json --clobber
+
+      # Uygulamanın göreceğini ÖLÇ: kurulu uygulama tam bu adresi okuyor.
+      - name: Kanal doğru sürümü gösteriyor mu
+        if: hashFiles('paketler/latest.json') != ''
+        run: |
+          surum="${GITHUB_REF_NAME#tauri-v}"
+          url=$(node -p "require('./src-tauri/tauri.conf.json').plugins.updater.endpoints[0]")
+          for i in 1 2 3 4 5 6; do
+            gelen=$(curl -fsSL "$url" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).version)}catch{console.log('')}})")
+            [ "$gelen" = "$surum" ] && { echo "✓ $url → $gelen"; exit 0; }
+            echo "bekleniyor ($i): kanal '$gelen' gösteriyor, beklenen '$surum'"; sleep 10
+          done
+          echo "::error::Güncelleme kanalı $surum göstermiyor."; exit 1

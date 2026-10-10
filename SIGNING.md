@@ -5,63 +5,105 @@ CopyBoard'da **iki ayrı imza** var ve karıştırılmamalı.
 | | Ne için | Zorunlu mu |
 |---|---|---|
 | **Tauri güncelleyici imzası** | Güncellemenin bizden geldiğini doğrular | Güncelleme özelliği için **evet** |
-| **İşletim sistemi kod imzası** (Apple / Authenticode) | Gatekeeper / SmartScreen uyarısını kaldırır | Hayır — uygulama imzasız da çalışır |
+| **macOS kod imzası** ("CopyBoard Dev") | İzinlerin (Ekran Kaydı, Erişilebilirlik) güncellemeler arasında korunması | Uygulama içi güncelleme için **evet** — CI onsuz yayın yapmıyor |
+| **Apple Developer ID / Authenticode** | Gatekeeper / SmartScreen uyarısını kaldırır | Hayır — şu an yok |
 
 ---
 
 ## 1. Tauri güncelleyici imzası
 
 Tauri'nin güncelleyicisi **imzasız güncelleme kabul etmez** ve bu kapatılamaz.
-Apple/Microsoft ile hiçbir ilgisi yoktur; Tauri'nin kendi anahtar çiftidir.
+Apple/Microsoft ile hiçbir ilgisi yoktur; Tauri'nin kendi (minisign) anahtar çiftidir.
 
-### Anahtar üretimi (bir kez)
+**Durum:** anahtar 10 Ekim 2026'da üretildi, **parolasız** (anahtar kimliği
+`8898C4028D4D12B6`):
+
+* **Özel anahtar** `~/.tauri/copyboard.key` — **ASLA depoya girmez.** Kaybolursa
+  kurulu uygulamalar bir sonraki sürümü doğrulayamaz; yedeği güvenli bir yerde
+  (parola yöneticisi) tutulmalı.
+* **Genel anahtar** `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`
+  (dosyası `~/.tauri/copyboard.key.pub`).
+
+Anahtar tek yönlü bir karar: `pubkey` bir kez yayınlanmış sürüme girdi. Yeniden
+üretmek (`npx tauri signer generate`) kurulu her uygulamanın otomatik güncellemesini
+kalıcı olarak kırar — **yeniden üretme.**
+
+### GitHub secret'ı
+
+| Secret | Değer |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | `~/.tauri/copyboard.key` dosyasının İÇERİĞİ |
+
+İçeriği ekrana basmadan panoya almak için:
 
 ```bash
-npx tauri signer generate -w ~/.tauri/copyboard.key
+pbcopy < ~/.tauri/copyboard.key
 ```
 
-Bu iki şey üretir:
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` **tanımlanmıyor**: anahtar parolasız ve iş akışı
+değişkeni boş dize olarak geçiyor (değişken hiç yoksa CLI terminalsiz ortamda parola
+sormaya kalkıp düşüyor — NTerminal'de ölçüldü).
 
-* **Özel anahtar** (`~/.tauri/copyboard.key`) — **ASLA depoya girmez.**
-* **Genel anahtar** — çıktıda basılır.
+### `createUpdaterArtifacts` neden CI'da açılıyor
 
-### Kurulum
+`tauri.conf.json`'da `bundle.createUpdaterArtifacts: false`; CI paketlerken
+`--config '{"bundle":{"createUpdaterArtifacts":true}}'` ile açıyor. Bayrak açıkken
+`tauri build` güncelleme paketini (`.app.tar.gz`, `-setup.exe`) imzalamak ister:
+yapılandırmada açık olsaydı anahtarı olmayan her yerel `npm run build`
+`A public key has been found, but no private key.` hatasıyla biterdi.
 
-1. Genel anahtarı `src-tauri/tauri.conf.json` içine yaz:
+Yerelde güncelleme paketi üretmek gerekirse (ör. uçtan uca test) anahtarın **yolu**
+verilebilir — CLI yol ya da içerik kabul ediyor, yol vermek içeriği süreç ortamına
+koymuyor:
 
-   ```json
-   "plugins": { "updater": { "pubkey": "<genel anahtar>" } }
-   ```
+```bash
+TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/copyboard.key" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+  npx tauri build --bundles app --config '{"bundle":{"createUpdaterArtifacts":true}}'
+```
 
-   > Alan şu an **boş**. Boşken uygulama "güncelleyici yapılandırılmamış" sayıyor:
-   > açılış kontrolü atlanır, elle kontrol anlaşılır bir uyarı toast'ı verir (ham
-   > minisign hatası değil). Yapılandırma bölümünün tamamı silinirse uygulama
-   > açılışta panikler (BULGU F5-a), o yüzden bölümü silme — yalnız `pubkey`'i doldur.
-
-2. Özel anahtarı ve parolasını GitHub deposunda **Secrets** olarak ekle:
-
-   | Secret | Değer |
-   |---|---|
-   | `TAURI_SIGNING_PRIVATE_KEY` | özel anahtar dosyasının İÇERİĞİ |
-   | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | üretirken verdiğin parola |
-
-`tauri.conf.json` içinde `bundle.createUpdaterArtifacts: true` açık. Bu bayrak
-olmadan `tauri build` hiç `.sig` üretmiyor ve tauri-action `latest.json`ı release'e
-**yazmıyordu** — güncelleyici hiçbir sürümde çalışamazdı. Bayrağın bedeli: imza
-anahtarı **zorunlu**. Secret'lar yoksa CI'daki `tauri build` imza adımında hata verir;
-yerelde `tauri build` almak için de aynı iki değişkeni ortama ver (ya da yalnız
-`tauri dev` kullan).
+`pubkey` boşsa uygulama güncelleyiciyi "yapılandırılmamış" sayar: açılış kontrolü
+atlanır, elle kontrol anlaşılır bir uyarı toast'ı verir. `plugins.updater` bölümünü
+tamamen silmek ise uygulamayı açılışta düşürür (BULGU F5-a) — bölümü silme.
 
 ---
 
 ## 2. macOS kod imzası
 
-Uygulama şu an **imzasız** dağıtılıyor (Electron sürümündeki `identity: null` ile aynı
-politika). Sonuçları:
+Dağıtılan paket **"CopyBoard Dev"** ile imzalanıyor: aşağıda yerel geliştirme için
+oluşturulan kendinden imzalı sertifikanın AYNISI. CI onu `COPYBOARD_SIGNING_P12`
+secret'ından geçici bir anahtarlığa alıyor. Apple Developer ID değil ve notarize
+edilmiyor. Sonuçları:
 
-* Kullanıcı ilk açılışta Gatekeeper uyarısı görür (sağ tık → Aç ile geçilir).
-* Güncelleyici macOS'ta **kapalı**: `download_update` ve `install_update` baştan
-  reddediyor, güncelleme diyaloğu kullanıcıyı GitHub'dan elle indirmeye yönlendiriyor.
+* **İlk elle kurulumda** Gatekeeper uyarısı çıkar (sağ tık → Aç). Uygulama içi
+  güncellemede çıkmaz: paketi uygulama kendisi indiriyor, karantina işareti konmuyor.
+* **İzinler güncellemeler arasında korunur.** Belirlenmiş gereksinim
+  `identifier "com.nurullahyayan.copyboard.tauri" and certificate leaf = H"998278a1…"`
+  ve sertifika değişmedikçe sürümden sürüme aynı kalıyor. Sertifika **1 Eylül 2036**'ya
+  kadar geçerli; yenilenen bir sertifikanın parmak izi farklı olur ve herkesin izni
+  bir kez sıfırlanır.
+* **CI bu imza olmadan yayın yapmıyor:** güncelleme anahtarı varken sertifika yoksa iş
+  duruyor — ad-hoc imzalı bir güncelleme, güncelleyen herkesin iznini sessizce
+  sıfırlardı. Paketlemeden sonra imzanın gerçekten CopyBoard Dev ile atıldığı ve
+  gereksinimin sertifikaya bağlı olduğu da ölçülüyor.
+
+### Sertifikayı CI'a vermek (bir kez)
+
+1. *Keychain Access* → **login** anahtarlığı → **My Certificates** → "CopyBoard Dev"
+   (açınca altında özel anahtarı görünmeli) → sağ tık → **Export "CopyBoard Dev"…** →
+   biçim **Personal Information Exchange (.p12)** → güçlü bir parola ver.
+2. GitHub → *Settings → Secrets and variables → Actions → New repository secret*:
+
+   | Secret | Değer |
+   |---|---|
+   | `COPYBOARD_SIGNING_P12` | `base64 -i CopyBoardDev.p12 \| pbcopy` ile panoya alınan metin |
+   | `COPYBOARD_SIGNING_P12_PASSWORD` | 1. adımdaki parola |
+
+3. `.p12` dosyasını sil ya da güvenli bir yere taşı.
+
+Sertifikaya geçici anahtarlıkta güven ayarı verilmiyor; gerek de yok — `codesign`
+güvenilmeyen bir kimlikle de imzalıyor (ölçüldü). Tauri'nin `APPLE_CERTIFICATE`
+yolu kullanılmıyor: yerelde kanıtlanmış yol, kimliğin anahtarlık listesinde olması
+ve adının `APPLE_SIGNING_IDENTITY` ile verilmesi.
 
 Apple Developer sertifikası ($99/yıl) alınırsa:
 
@@ -69,7 +111,8 @@ Apple Developer sertifikası ($99/yıl) alınırsa:
 "bundle": { "macOS": { "signingIdentity": "Developer ID Application: ...", "providerShortName": "..." } }
 ```
 
-ve notarization eklenir. macOS'ta uygulama içi güncelleme ancak bundan sonra açılabilir.
+ve notarization eklenir; Gatekeeper uyarısı da kalkar. Kimlik değiştiği için
+herkesin izni bir kez sıfırlanır.
 
 ### Geliştirme sırasında: izinler neden her derlemede sıfırlanıyor
 
@@ -179,20 +222,6 @@ Not: `bundle_dmg.sh` üstüste başarısız olursa `/Volumes/dmg.XXXXXX` altınd
 birimler bırakabiliyor. Zararsız ama birikirler; `hdiutil detach /Volumes/dmg.XXXXXX`
 ile ayrılır.
 
-### Güncelleyici anahtarı üretilmeden derleme sonunda hata çıkıyor
-
-`npm run build` şu satırla bitiyor:
-
-```
-Error A public key has been found, but no private key. Make sure to set
-`TAURI_SIGNING_PRIVATE_KEY` environment variable.
-```
-
-`tauri.conf.json`'daki `plugins.updater.pubkey` BOŞ olmasına rağmen bundler
-güncelleyici yapıtını (`.app.tar.gz`) imzalamaya çalışıyor. Paket üretilmiş oluyor,
-yalnız çıkışta bu hata basılıyor. §1'deki anahtar üretilip `TAURI_SIGNING_PRIVATE_KEY`
-verilince geçiyor.
-
 ### Bekçi: imzasız derleme sessizce geçmiyor
 
 `APPLE_SIGNING_IDENTITY` tanımlı değilse Tauri paketi **sessizce** ad-hoc imzalar —
@@ -210,11 +239,15 @@ WSL'e gidip dağıtım yoksa derlemeyi düşürüyordu) ve üç durumu ayırıyo
 | Değişken var ama anahtarlıkta yok | Derleme **durur**, mevcut kimlikleri listeler |
 | Kimlik geçerli | `İmzalama kimliği doğrulandı: …` yazıp devam eder |
 
-Bilerek imzasız derlemek için `COPYBOARD_ALLOW_UNSIGNED=1`. CI bu muafiyeti
-`release.yml` içinde **açıkça** kullanıyor: geliştirme makinesindeki kendinden imzalı
-sertifika CI'a taşınamaz (ve taşınmamalı). Developer ID alındığında o satır silinip
-yerine `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` / `APPLE_SIGNING_IDENTITY`
-secret'ları eklenir.
+Bilerek imzasız derlemek için `COPYBOARD_ALLOW_UNSIGNED=1`. CI
+(`release-tauri.yml`) bu muafiyeti yalnız ne sertifikanın ne güncelleme anahtarının
+tanımlı olduğu ortamda (ör. bir fork) kullanıyor; normal yayında kimlik geçici
+anahtarlıktan geliyor.
+
+CI'da betik `security find-identity`'yi `-v` OLMADAN çağırıyor: `-v` yalnız
+güvenilen kimlikleri listeliyor ve geçici anahtarlıktaki sertifikaya güven ayarı
+yok — bekçi, `codesign`'ın sorunsuz kullanacağı bir kimliği "yok" sanıp yayını
+durdururdu. Yerelde `-v` kalıyor.
 
 Notlar:
 

@@ -562,7 +562,8 @@ pub fn run(app: tauri::AppHandle) {
                 }
             }
 
-            // ── 9c. Güncelleyici: pubkey boşken elle kontrol uyarı toast'ı vermeli ──
+            // ── 9c. Güncelleyici: elle kontrol HER ZAMAN bir toast'la yanıt vermeli ──
+            // (pubkey boşsa uyarı; doluysa "güncelsiniz" ya da kanala ulaşılamadıysa hata).
             {
                 let configured = crate::updater::is_configured(&app);
                 tauri::async_runtime::block_on(crate::updater::check_manual(app.clone()));

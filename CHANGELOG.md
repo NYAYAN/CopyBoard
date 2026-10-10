@@ -1,3 +1,24 @@
+# CopyBoard v3.2.0 Release Notes
+
+Güncellemeler artık uygulamanın içinden kuruluyor — macOS'ta da.
+
+## ✨ Yeni
+
+- **Uygulama içi güncelleme.** Yeni bir sürüm çıktığında açılışta bir diyalog
+  geliyor; **Güncelle** deyince paket indiriliyor, imzası doğrulanıyor ve uygulama
+  yeni sürümle yeniden açılıyor. DMG indirip uygulamayı Uygulamalar klasörüne
+  sürüklemek gerekmiyor. macOS'ta diyalog eskiden GitHub sayfasına yönlendiriyordu.
+- **İzinler güncellemeden sonra korunuyor.** Sürümler aynı imza kimliğiyle
+  imzalandığı için Ekran Kaydı ve Erişilebilirlik izni her güncellemede yeniden
+  istenmiyor.
+
+## ⚠️ Son kez elle kurulum
+
+3.1.x'te güncelleyici henüz yapılandırılmamıştı, o yüzden 3.2.0 **bir kez elle**
+kurulmalı. Sonraki sürümler uygulamanın içinden gelecek.
+
+---
+
 # CopyBoard v3.1.1 Release Notes
 
 Uzun süre açık kalan uygulamanın belleği artık zamanla büyümüyor.

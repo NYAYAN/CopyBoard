@@ -1,11 +1,19 @@
 //! Otomatik güncelleme — `src/main/services/update-manager.js`'in karşılığı.
 //!
-//! ## macOS'ta neden devre dışı
+//! ## macOS'ta da uygulama içi kurulum
 //!
-//! Uygulama macOS'ta imzasız dağıtılıyor. Electron sürümünde Squirrel.Mac güncellemeyi
-//! uygulayamıyordu ve dialog kullanıcıyı GitHub'dan elle indirmeye yönlendiriyordu.
-//! Aynı politika korunuyor: `download` macOS'ta baştan reddediliyor, böylece ana süreç
-//! başarısız olacağı belli bir indirmeye hiç başlamıyor.
+//! Electron sürümünde macOS'ta kapalıydı: Squirrel.Mac güncellemeyi yalnız Apple
+//! imzalı uygulamaya uygulayabiliyordu ve diyalog kullanıcıyı GitHub'a yolluyordu.
+//! Tauri'nin güncelleyicisinde o kısıt YOK: paketin minisign imzasını
+//! `plugins.updater.pubkey` ile doğrulayıp `.app` paketini yerinde değiştiriyor
+//! (NTerminal ad-hoc imzalı olduğu hâlde macOS'ta böyle güncelleniyor).
+//!
+//! İzinlerin güncellemeden sonra KORUNMASI ayrı bir şart: Ekran Kaydı ve
+//! Erişilebilirlik imzanın "designated requirement"ına bağlı. CI paketleri yerel
+//! derlemelerle aynı "CopyBoard Dev" sertifikasıyla imzaladığı için gereksinim
+//! (`identifier … and certificate leaf = H…`) sürümler arasında aynı kalıyor;
+//! ad-hoc imzalı bir güncelleme ise yayın akışında baştan durduruluyor
+//! (bkz. .github/workflows/release-tauri.yml).
 //!
 //! ## Elle kontrol HER ZAMAN yanıt vermeli
 //!
@@ -41,10 +49,6 @@ static MANUAL_CHECK: AtomicBool = AtomicBool::new(false);
 /// Elle başlatılan kontrol için yanıt hakkını tüket. `true` dönerse rapor bizim.
 fn claim_manual_report() -> bool {
     MANUAL_CHECK.swap(false, Ordering::AcqRel)
-}
-
-fn is_mac() -> bool {
-    cfg!(target_os = "macos")
 }
 
 fn t(app: &tauri::AppHandle, key: &str) -> String {
@@ -117,11 +121,11 @@ fn open_dialog(app: &tauri::AppHandle, update: &tauri_plugin_updater::Update) {
     let info = serde_json::json!({
         "version": update.version,
         "currentVersion": app.package_info().version.to_string(),
-        // tauri-action `latest.json`'a release gövdesini MARKDOWN olarak yazıyor
-        // (electron-updater HTML veriyordu). Diyalog ikisini de tanıyor.
+        // `latest.json`'ın `notes`'u: CHANGELOG.md'deki sürüm bölümü, MARKDOWN
+        // (bkz. scripts/release-files.mjs; electron-updater HTML veriyordu).
+        // Diyalog ikisini de tanıyor.
         "releaseNotes": update.body.clone().unwrap_or_default(),
         "releaseName": update.version,
-        "isMac": is_mac(),
     });
     PENDING.lock().unwrap().replace(update.version.clone());
 
@@ -161,12 +165,6 @@ fn emit_error(app: &tauri::AppHandle, message: String) {
 
 #[tauri::command]
 pub async fn download_update(app: tauri::AppHandle) {
-    if is_mac() {
-        // Savunma derinliği: dialog macOS kullanıcısını elle indirmeye yönlendiriyor,
-        // ama ana süreç de baştan kaybedeceği bir indirmeye başlamamalı.
-        log::warn!("[updater] macOS'ta uygulama içi indirme atlandı (imzasız uygulama)");
-        return;
-    }
     let update = match check(&app).await {
         Ok(Some(u)) => u,
         // Diyalog "İndiriliyor…"da kilitli kalmasın: Electron her başarısızlıkta
@@ -225,23 +223,71 @@ pub async fn download_update(app: tauri::AppHandle) {
     }
 }
 
-/// Geri sayım bitti: indirilen paketi kur. Windows'ta eklenti NSIS'i başlatıp süreci
-/// kendisi sonlandırıyor (Electron `quitAndInstall` karşılığı).
+/// Geri sayım bitti: indirilen paketi kur.
+///
+/// `async` OLMAK ZORUNDA: senkron komutlar ana thread'de koşuyor. macOS'ta paketin
+/// yerine yazılamazsa eklenti yönetici parolası istemini ana thread'e gönderip
+/// sonucunu BEKLİYOR; komut ana thread'de olsaydı kendi kendini bekleyip kilitlenirdi
+/// (NTerminal'de yaşanan ders).
 #[tauri::command]
-pub fn install_update(app: tauri::AppHandle) {
-    if is_mac() {
-        log::warn!("[updater] macOS'ta yeniden başlatma atlandı (imzasız uygulama)");
-        return;
+pub async fn install_update(app: tauri::AppHandle) {
+    if let Err(e) = install_downloaded(&app) {
+        emit_error(&app, e);
     }
+}
+
+/// Windows'ta eklenti NSIS'i başlatıp süreci KENDİSİ sonlandırıyor (Electron
+/// `quitAndInstall` karşılığı) — `install` başarıda geri dönmüyor. macOS'ta ise `.app`
+/// paketini yerinde değiştirip DÖNÜYOR; yeni sürüme geçmek için yeniden başlatmak
+/// bize kalıyor. Yeniden başlatma bilerek yalnız macOS'ta: Windows'ta buraya
+/// ulaşmak kurulumun başlamadığı demek ve yeniden başlatma ESKİ sürümü açardı.
+///
+/// `restart` değil `request_restart`: `restart` ana thread'de kapanış olaylarını
+/// ATLIYOR. Tek-örnek eklentisinin soketi yalnız `RunEvent::Exit`te siliniyor;
+/// atlanınca yeni süreç, henüz ölmemiş eski sürecin soketine bağlanıp "zaten açık"
+/// diyerek çıkabiliyordu — güncellemeden sonra uygulama hiç geri gelmezdi.
+/// `request_restart` olayları sırayla işletiyor (izleyici durur, kısayollar
+/// bırakılır, soket silinir), yeni süreci olay döngüsü bittikten SONRA açıyor.
+fn install_downloaded(app: &tauri::AppHandle) -> Result<(), String> {
     let _ = PENDING.lock().unwrap().take();
     let Some((update, bytes)) = DOWNLOADED.lock().unwrap().take() else {
-        emit_error(&app, t(&app, "İndirilmiş güncelleme bulunamadı."));
-        return;
+        return Err(t(app, "İndirilmiş güncelleme bulunamadı."));
     };
     // Bekleyen pano yazması kurulumdan önce diske insin.
     app.state::<crate::state::AppState>().store.flush();
-    if let Err(e) = update.install(bytes) {
+    update.install(bytes).map_err(|e| {
         log::error!("güncelleme kurulamadı: {e}");
-        emit_error(&app, e.to_string());
+        e.to_string()
+    })?;
+    #[cfg(target_os = "macos")]
+    {
+        log::info!("[updater] güncelleme kuruldu — yeni sürümle yeniden başlatılıyor");
+        app.request_restart();
     }
+    Ok(())
+}
+
+/// `--qa-update` (yalnız hata ayıklama derlemesi): diyaloğun düğmelerinin çağırdığı
+/// komutları SIRAYLA koşturur — indir (imza doğrulaması dahil) → kur → yeniden
+/// başlat. Uç noktası yerel bir `latest.json`'a çevrilmiş bir pakette anlamlı;
+/// adımlar RELEASE_GUIDE.md "Güncellemeyi yerelde uçtan uca sınamak"ta.
+#[cfg(debug_assertions)]
+pub fn qa_run(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        // Açılış otursun, ama zincir açılıştaki sessiz kontrolden (5 sn) ÖNCE bitsin
+        // ki güncelleme diyaloğu araya girmesin.
+        crate::tokio_sleep(1000).await;
+        log::info!("QA-UPDATE başlıyor: kurulu sürüm {}", app.package_info().version);
+        download_update(app.clone()).await;
+        if DOWNLOADED.lock().unwrap().is_none() {
+            println!("QAU SONUC: indirme ya da imza doğrulaması başarısız (ayrıntı günlükte)");
+            app.exit(1);
+            return;
+        }
+        log::info!("QA-UPDATE: indirildi ve imza doğrulandı — kuruluyor");
+        if let Err(e) = install_downloaded(&app) {
+            println!("QAU SONUC: kurulum başarısız: {e}");
+            app.exit(1);
+        }
+    });
 }

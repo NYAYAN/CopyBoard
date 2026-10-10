@@ -591,6 +591,8 @@ Hızlı Yapıştır penceresi, kullanıcının yazdığı alandan odağı **çal
 
 **macOS:** Bugün uygulama imzasız (`identity: null` + ad-hoc imza) ve bu yüzden `electron-updater` macOS'ta devre dışı — kullanıcı GitHub'dan elle indiriyor. Tauri'de de **aynı politika korunacak** (macOS'ta `download-update` engellenir, dialog manuel indirmeye yönlendirir). Apple Developer sertifikası alınırsa bu kısıt ayrı bir iş kaleminde kaldırılır.
 
+> **Güncelleme (2026-10-10, v3.2.0):** kısıt Apple sertifikası BEKLENMEDEN kaldırıldı. Squirrel.Mac'in aksine Tauri'nin güncelleyicisi Apple imzası istemiyor (paketi minisign ile doğruluyor); izinlerin güncellemeler arasında korunması için CI paketleri yerel "CopyBoard Dev" sertifikasıyla imzalıyor. Kanal, Electron'un "Latest"ine dokunmamak için sabit `tauri-updater` ön sürümü. Ayrıntı: RELEASE_GUIDE.md "Güncelleyici", SIGNING.md §1–2.
+
 **Kritik:** v2.12.0 (Electron) → v3.0.0 (Tauri) geçişi **electron-updater ile yapılamaz**. Electron sürümü kendi güncelleyicisiyle Tauri paketini kuramaz (NSIS farklı, .app farklı). Geçiş stratejisi §8.3'te.
 
 ---
@@ -1124,4 +1126,4 @@ Bu plandaki Tauri API iddiaları `docs.rs/tauri` üzerinden doğrulandı (2026-0
 | K7 | Linux desteği | ~~Şimdi~~ · **Kapsama alındı** | ✅ **Karar verildi: dahil.** Faz L olarak v3.1.0'da, X11 tam / Wayland kısmi (§5.14) |
 | K9 | Wayland'da pano izleme (GNOME) | Sessizce çalışmasın · Kullanıcıya söyle + elle ekleme kısayolu | **Söyle** — sessiz başarısızlık en kötü seçenek |
 | K10 | Linux paket formatı | AppImage · deb · rpm · Flatpak | **AppImage + deb** (Tauri yerleşik); Flatpak portal uyumu zaten gerektiği için sonradan kolay |
-| K8 | macOS kod imzası | Ad-hoc devam · Apple Developer ($99/yıl) | **Ayrı iş kalemi** — updater'ın macOS'ta açılması buna bağlı |
+| K8 | macOS kod imzası | Ad-hoc devam · Apple Developer ($99/yıl) | **Ayrı iş kalemi** — 2026-10-10: güncelleyici macOS'ta Apple sertifikasız açıldı, CI "CopyBoard Dev" ile imzalıyor (§5.12) |

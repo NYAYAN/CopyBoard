@@ -1009,6 +1009,13 @@ pub fn run() {
                 qa::run(handle.clone());
             }
 
+            // Geliştirme kolaylığı: `--qa-update` — indir → imzayı doğrula → kur →
+            // yeniden başlat zincirini diyaloğa basmadan koşturur (bkz. `updater.rs`).
+            #[cfg(debug_assertions)]
+            if std::env::args().any(|a| a == "--qa-update") {
+                updater::qa_run(handle.clone());
+            }
+
             // Geliştirme kolaylığı: `--qa-capture[=snip,color,ocr,scroll]` — FARE
             // gerektiren yakalama akışlarını (bölge seçimi, renk seçici, OCR,
             // kaydırmalı yakalama) ekrana bilinen bir desen basıp sürükleyerek ve

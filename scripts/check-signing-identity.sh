@@ -45,13 +45,23 @@ MSG
     exit 1
 fi
 
-if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"${APPLE_SIGNING_IDENTITY}\""; then
+# `-v` yalnız GEÇERLİ (güvenilen) kimlikleri listeler. Yerelde bu doğru koruma:
+# kendinden imzalı sertifikaya "Her Zaman Güven" denmemişse SIGNING.md'deki adım
+# eksik demektir. CI'da ise sertifika geçici bir anahtarlığa alınıyor ve orada GÜVEN
+# AYARI YOK — `-v` onu "0 geçerli" sayıyor. Ama `codesign` güven İSTEMİYOR (ölçüldü:
+# güvenilmeyen kendinden imzalı kimlikle imza çıkış 0, kimlik "certificate leaf"e
+# bağlı, yani izinler güncellemelerde korunuyor). Güven adımı da etkileşimsiz
+# ortamda takılmasıyla bilinen bir adım; gerek olmadığı için CI'da hiç yapılmıyor.
+FIND_FLAGS="-v -p codesigning"
+[ "${GITHUB_ACTIONS:-}" = "true" ] && FIND_FLAGS="-p codesigning"
+
+if ! security find-identity $FIND_FLAGS 2>/dev/null | grep -qF "\"${APPLE_SIGNING_IDENTITY}\""; then
     cat >&2 <<MSG
 
   ✗ "${APPLE_SIGNING_IDENTITY}" anahtarlıkta geçerli bir kod imzalama kimliği değil.
 
     Mevcut kimlikler:
-$(security find-identity -v -p codesigning 2>&1 | sed 's/^/    /')
+$(security find-identity $FIND_FLAGS 2>&1 | sed 's/^/    /')
 
     Sertifika var ama listede yoksa "Always Trust" adımı eksik olabilir — SIGNING.md.
 

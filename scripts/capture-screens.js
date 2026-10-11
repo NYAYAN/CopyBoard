@@ -85,6 +85,7 @@ function registerStubs() {
     ipcMain.handle('get-audio-settings', () => ({ mic: false, system: false }));
     ipcMain.handle('get-screenshots', () => gallery);
     ipcMain.handle('ensure-mic-permission', () => true);
+    ipcMain.handle('get-update-info', () => UPDATE_INFO);
 }
 
 // Yakalama katmanları hazır olduklarını 'snip-ready' ile bildirir; onları
@@ -377,7 +378,8 @@ async function shotMainWindow() {
     await load(win, path.join(RENDERER, 'main-window', 'index.html'));
     await sleep(600);
 
-    write('01-pano-gecmisi', await onBackdrop(await win.webContents.capturePage(), 40));
+    heroParts.main = await win.webContents.capturePage();
+    write('01-pano-gecmisi', await onBackdrop(heroParts.main, 40));
 
     await win.webContents.executeJavaScript(`document.querySelector('[data-tab="favorites"]').click()`);
     await sleep(400);
@@ -516,7 +518,8 @@ async function shotWidget() {
         return { x, y, w: Math.max(...r.map((b) => b.right)) - x,
                  h: Math.max(...r.map((b) => b.bottom)) - y };
     })()`);
-    write('14-yuzen-arac', await onBackdrop(cropDip(await win.webContents.capturePage(), col, 14), 44));
+    heroParts.widget = cropDip(await win.webContents.capturePage(), col, 14);
+    write('14-yuzen-arac', await onBackdrop(heroParts.widget, 44));
 
     p = await center('#btn-snippet');
     await click(win, p.x, p.y);
@@ -534,23 +537,28 @@ async function shotQuickPaste() {
     win.destroy();
 }
 
+// Güncelleme penceresi açılınca bilgiyi kendisi de çekiyor (get-update-info), push
+// yalnızca yedek. "Yeni" sürüm, kurulu sürümün bir yamasıdır; sabit yazılırsa sürüm
+// ilerledikçe pencere eski bir sürümü "yeni" diye gösterir.
+const UPDATE_INFO = {
+    currentVersion: SETTINGS.appVersion,
+    version: SETTINGS.appVersion.replace(/\d+$/, (n) => String(Number(n) + 1)),
+    isMac: process.platform === 'darwin',
+    // GitHub sürüm notlarını HTML olarak verir; pencere de markdown değil HTML
+    // temizleyip basar.
+    releaseNotes: '<h3>Yenilikler</h3><ul>'
+        + '<li>Ekran görüntülerini yan yana karşılaştırma</li>'
+        + '<li>Metin aracı seçili rengi gösteriyor</li>'
+        + '<li>Güncelleme penceresi yeni sürümü söylüyor</li></ul>'
+        + '<h3>Düzeltmeler</h3><ul>'
+        + '<li>Yüzen araç görev çubuğunun yanında yarım kalıyordu</li>'
+        + '<li>Açık temada ayar listesinin üzerine gelinen satırı okunmuyordu</li></ul>'
+};
+
 async function shotUpdateDialog() {
     const win = mkWin({ width: 380, height: 500, transparent: true });
     await load(win, path.join(RENDERER, 'update', 'update-dialog.html'));
-    win.webContents.send('update-info', {
-        currentVersion: SETTINGS.appVersion,
-        version: '2.12.0',
-        isMac: process.platform === 'darwin',
-        // GitHub sürüm notlarını HTML olarak verir; pencere de markdown değil HTML
-        // temizleyip basar.
-        releaseNotes: '<h3>Yenilikler</h3><ul>'
-            + '<li>Kaydırmalı yakalamada sabit başlık ve altlık algılama</li>'
-            + '<li>Galeri küçük resimleri hücrenin şeklinde üretiliyor</li>'
-            + '<li>Kaydetme sırasında bekleme göstergesi</li></ul>'
-            + '<h3>Düzeltmeler</h3><ul>'
-            + '<li>İlk küçük resim sürekli üzerine gelinmiş gibi görünüyordu</li>'
-            + '<li>Galeri küçük resimleri Retina ekranda büyütülüyordu</li></ul>'
-    });
+    win.webContents.send('update-info', UPDATE_INFO);
     await sleep(600);
     write('17-guncelleme', await onBackdrop(await win.webContents.capturePage(), 44));
     win.destroy();
@@ -561,7 +569,43 @@ async function shotToast() {
     await load(win, path.join(RENDERER, 'toast', 'toast.html'));
     win.webContents.send('display-toast', 'Metin panoya kopyalandı', 'success');
     await sleep(600);
-    write('18-bildirim', await onBackdrop(await win.webContents.capturePage(), 36));
+    const raw = await win.webContents.capturePage();
+    write('18-bildirim', await onBackdrop(raw, 36));
+    // Tanıtım görseli için yalnızca kartın kendisi: pencerenin kenarında kesilen
+    // gölgesi, sahnenin üstünde gri bir dikdörtgen olarak görünüyor.
+    const r = await win.webContents.executeJavaScript(`(() => {
+        const b = document.getElementById('toast').getBoundingClientRect();
+        return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`);
+    heroParts.toast = cropDip(raw, r, 0);
+    win.destroy();
+}
+
+// README'nin en üstündeki görsel: tek karede uygulamanın ne olduğu. Ayrı ekranların
+// ham kareleri (zeminsiz) sahte masaüstünün üstüne, gerçekte durdukları yerlere
+// konur: pano penceresi belgenin önünde, yüzen araç sağ kenarda, bildirim üstte.
+const heroParts = {};
+
+async function shotHero() {
+    const { main, widget, toast } = heroParts;
+    if (!main || !widget || !toast) throw new Error('ana pencere, yüzen araç ve bildirim kareleri yok');
+    const sf = screen.getPrimaryDisplay().scaleFactor || 1;
+    const dip = (img) => { const s = img.getSize(); return { w: Math.round(s.width / sf), h: Math.round(s.height / sf) }; };
+    const m = dip(main), wd = dip(widget), t = dip(toast);
+    const PAD = 40;
+    const W = STAGE_W + PAD * 2, H = STAGE_H + PAD * 2;
+    const win = mkWin({ width: W, height: H, transparent: true, hasShadow: false });
+    await loadHTML(win, `<body style="margin:0;width:${W}px;height:${H}px;background:transparent">
+      <div style="position:absolute;left:${PAD}px;top:${PAD}px;width:${STAGE_W}px;height:${STAGE_H}px;
+           border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.18),0 20px 44px rgba(0,0,0,.30)">
+        <img src="${stageShot.dataUrl}" style="position:absolute;left:0;top:0;width:${STAGE_W}px;height:${STAGE_H}px">
+        <img src="${main.toDataURL()}" style="position:absolute;left:${STAGE_W - m.w - 130}px;top:${Math.round((STAGE_H - m.h) / 2) + 24}px;
+             width:${m.w}px;height:${m.h}px;border-radius:10px;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 24px 60px rgba(0,0,0,.55)">
+        <img src="${widget.toDataURL()}" style="position:absolute;left:${STAGE_W - wd.w - 14}px;top:${Math.round((STAGE_H - wd.h) / 2) + 24}px;
+             width:${wd.w}px;height:${wd.h}px">
+        <img src="${toast.toDataURL()}" style="position:absolute;left:${Math.round((STAGE_W - t.w) / 2)}px;top:18px;
+             width:${t.w}px;height:${t.h}px;filter:drop-shadow(0 10px 24px rgba(0,0,0,.45))">
+      </div></body>`);
+    write('00-tanitim', await win.webContents.capturePage());
     win.destroy();
 }
 
@@ -593,7 +637,8 @@ app.whenReady().then(async () => {
         ['Yüzen araç', shotWidget],
         ['Hızlı yapıştır', shotQuickPaste],
         ['Güncelleme', shotUpdateDialog],
-        ['Bildirim', shotToast]
+        ['Bildirim', shotToast],
+        ['Tanıtım', shotHero]
     ];
 
     // Klasör en başta silindiği için yarım kalan bir koşu README'yi kırık görsellerle

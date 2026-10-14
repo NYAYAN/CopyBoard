@@ -24,10 +24,14 @@ pub mod audio_devices;
 pub mod pasteboard;
 pub mod power;
 
+use std::sync::OnceLock;
+
 use objc2::rc::Retained;
+use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, Sel};
+use objc2::{sel, ClassType};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationOptions, NSRunningApplication, NSWindow,
-    NSWindowCollectionBehavior,
+    NSApplication, NSApplicationActivationOptions, NSPanel, NSRunningApplication, NSWindow,
+    NSWindowCollectionBehavior, NSWindowStyleMask,
 };
 use objc2_foundation::MainThreadMarker;
 
@@ -159,6 +163,96 @@ pub fn set_join_all_spaces(window: &tauri::WebviewWindow) -> Result<(), String> 
                 | NSWindowCollectionBehavior::IgnoresCycle,
         )
     })
+}
+
+/// [`make_nonactivating_panel`]'in pencereyi çevirdiği `NSPanel` alt sınıfı.
+fn nonactivating_panel_class() -> &'static AnyClass {
+    static CLASS: OnceLock<&'static AnyClass> = OnceLock::new();
+    *CLASS.get_or_init(|| {
+        // `TaoWindow` bu ikisini kendi `focusable` ivar'ından cevaplıyordu. Sınıf
+        // değişince o yöntemler gidiyor; pencere odak almamaya devam etsin diye burada.
+        extern "C-unwind" fn refuse(_this: &AnyObject, _cmd: Sel) -> Bool {
+            Bool::NO
+        }
+        let mut builder = ClassBuilder::new(c"CopyBoardNonactivatingPanel", NSPanel::class())
+            .expect("CopyBoardNonactivatingPanel süreçte bir kez tanımlanır");
+        // SAFETY: İkisi de NSWindow'da `-(BOOL)` imzalı; `Bool` onun karşılığı.
+        unsafe {
+            builder.add_method(sel!(canBecomeKeyWindow), refuse as extern "C-unwind" fn(_, _) -> _);
+            builder.add_method(sel!(canBecomeMainWindow), refuse as extern "C-unwind" fn(_, _) -> _);
+        }
+        builder.register()
+    })
+}
+
+/// Pencereyi odak almayan bir `NSPanel`'e çevirir — başka bir uygulamanın TAM EKRAN
+/// Space'inde görünebilmesinin yolu.
+///
+/// ## Neden
+///
+/// macOS, arka plandaki bir uygulamanın sıradan `NSWindow`'unu tam ekran bir uygulamanın
+/// Space'ine almıyor; `CanJoinAllSpaces` + `FullScreenAuxiliary` tek başına yetmiyor.
+/// Pencere "gösteriliyor" (`isVisible` = YES) ama kullanıcının baktığı yerde değil:
+/// tam ekranda Cmd+Shift+V hızlı yapıştırı açmıyor gibi görünüyordu (kullanıcı raporu).
+/// Spotlight benzeri araçlar bu yüzden `NonactivatingPanel` biçimli bir `NSPanel`
+/// kullanıyor — Electron'un `type: 'panel'`ı da öyle. O biçim biti YALNIZ `NSPanel`
+/// örneklerinde geçerli.
+///
+/// ## Nasıl
+///
+/// tao pencereyi kendi `NSWindow` alt sınıfıyla (`TaoWindow`) kuruyor, sınıf seçtirmiyor.
+/// Nesnenin sınıfı `object_setClass` ile bir `NSPanel` alt sınıfına çevriliyor
+/// (tauri-nspanel'in de yolu), ama yalnız güvenli olduğu bilinen durumda:
+///
+/// - Sınıf `TaoWindow` ya da onun KVO kılıfı (`NSKVONotifying_TaoWindow`) olmalı. WebKit
+///   pencereyi KVO ile izlediği için webview'lı bir pencerede gerçek sınıf ikincisi.
+///   Bilinmeyen bir sınıfın ivar düzenini ve ezdiği yöntemleri bilemeyiz.
+/// - Yeni sınıfın örnek boyutu eskisinden BÜYÜK olamaz: nesne eski boyutta ayrıldı.
+///   (`TaoWindow` bir `focusable` ivar'ı taşıyor, panel sınıfı hiç ivar eklemiyor.)
+/// - `TaoWindow`'un ezdiği yöntemler: `canBecomeKeyWindow` / `canBecomeMainWindow`
+///   panel sınıfında NO ile karşılanıyor; `sendEvent:` (pencereyi arka plandan sürükleme)
+///   bu pencerelerde kullanılmıyor. Çevrilen pencerede tao'nun `set_focusable`ı
+///   ÇAĞRILMAMALI — o, artık sınıfta olmayan ivar'a adıyla yazıyor.
+///
+/// Koşul tutmazsa pencereye dokunulmaz ve hata döner; eski davranış sürer.
+pub fn make_nonactivating_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
+    with_ns_window(window, |ns| -> Result<(), String> {
+        let panel = nonactivating_panel_class();
+        let obj: &AnyObject = ns;
+        let current = obj.class();
+        if std::ptr::eq(current, panel) {
+            return Ok(());
+        }
+        let base = if current.name().to_bytes().starts_with(b"NSKVONotifying_") {
+            current.superclass()
+        } else {
+            Some(current)
+        };
+        if base.map(|c| c.name()) != Some(c"TaoWindow") {
+            return Err(format!("beklenmeyen pencere sınıfı {:?}", current.name()));
+        }
+        if panel.instance_size() > current.instance_size() {
+            return Err(format!(
+                "panel sınıfı ({} bayt) pencereden ({} bayt) büyük",
+                panel.instance_size(),
+                current.instance_size()
+            ));
+        }
+        // SAFETY: Ana thread'deyiz, pencere canlı; sınıf ve boyut yukarıda doğrulandı.
+        unsafe { objc2::ffi::object_setClass(obj as *const AnyObject as *mut AnyObject, panel) };
+        // NSPanel'in varsayılanı `hidesOnDeactivate = YES`. CopyBoard hemen her zaman
+        // arka planda olduğu için panel kendiliğinden gizlenirdi; açıkça kapatılıyor.
+        ns.setHidesOnDeactivate(false);
+        ns.setStyleMask(ns.styleMask() | NSWindowStyleMask::NonactivatingPanel);
+        Ok(())
+    })?
+}
+
+/// Pencere, kullanıcının ŞU AN baktığı Space'te mi? Görünür bir pencere için bu,
+/// "ekranda gerçekten görünüyor mu" demek; `isVisible` başka bir Space'te kalmış
+/// pencereye de YES diyor.
+pub fn is_on_active_space(window: &tauri::WebviewWindow) -> Result<bool, String> {
+    with_ns_window(window, |ns| ns.isOnActiveSpace())
 }
 
 /// Pencereyi diğer pencerelerin üstüne getirir (Electron `moveTop()`).

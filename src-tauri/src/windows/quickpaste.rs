@@ -8,6 +8,10 @@
 //! Esc ile kapanma: pencere `focusable: false` olduğu için tuş vuruşu yakalayamıyor.
 //! Esc, YALNIZ görünürken global bir kısayol olarak kaydediliyor ve her gizlenmede
 //! bırakılıyor — Esc başka uygulamalara ait, uzun süre tutulmamalı.
+//!
+//! macOS'ta pencere kurulur kurulmaz odak almayan bir `NSPanel`'e çevriliyor: sıradan
+//! bir `NSWindow` tam ekran uygulamaların Space'ine giremiyor ve kısayol orada seçiciyi
+//! "açıyor" ama kullanıcı hiçbir şey görmüyordu (bkz. `platform::make_nonactivating_panel`).
 
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
@@ -27,7 +31,7 @@ fn escape_shortcut() -> Shortcut {
 }
 
 pub fn create(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
-    super::build(
+    let window = super::build(
         app,
         super::WindowSpec {
             label: LABEL,
@@ -46,9 +50,15 @@ pub fn create(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
             all_spaces: true,
             background: Some((0, 0, 0, 0)),
             visible: false,
+            // Seçici hiç key olmuyor; satıra ilk tıklama doğrudan seçim yapmalı.
+            accept_first_mouse: true,
             ..Default::default()
         },
-    )
+    )?;
+    if let Err(e) = crate::platform::make_nonactivating_panel(&window) {
+        log::warn!("hızlı yapıştır panele çevrilemedi — tam ekran uygulamalarda görünmeyebilir: {e}");
+    }
+    Ok(window)
 }
 
 /// Seçiciyi imlecin yanına koyar; geçerli ekranın çalışma alanında tamamen kalması
@@ -96,6 +106,10 @@ pub fn show(app: &tauri::AppHandle) {
     // `moveTop()` da çağırıyordu; seviye tek başına pencereyi diğer topmost
     // pencerelerin ÖNÜNE getirmiyor.
     let _ = crate::platform::order_front(&window);
+    // Tam ekranda görünmeme sessiz kalmasın: panel çevrimi tutmadıysa günlükte iz bırakır.
+    if !crate::platform::is_on_active_space(&window) {
+        log::warn!("hızlı yapıştır gösterildi ama kullanıcının Space'inde değil (tam ekran uygulama?)");
+    }
 
     // Pencere açılışta ÖNCEDEN kuruluyor, ama `listen()` bir promise: uygulama açılır
     // açılmaz kısayola basılırsa dinleyici henüz kurulmamış olabilir ve gösterim
@@ -169,7 +183,12 @@ pub fn hide(app: &tauri::AppHandle) {
 
 pub fn toggle(app: &tauri::AppHandle) {
     match app.get_webview_window(LABEL) {
-        Some(w) if w.is_visible().unwrap_or(false) => hide(app),
+        // Yalnız kullanıcının GÖREBİLDİĞİ seçici kapatılır. macOS'ta `isVisible`, başka
+        // bir Space'te kalmış pencereye de YES diyor; tam ekranda ikinci basış o görünmeyen
+        // pencereyi kapatıyordu. Görünmüyorsa kapatmak yerine buraya getiriliyor.
+        Some(w) if w.is_visible().unwrap_or(false) && crate::platform::is_on_active_space(&w) => {
+            hide(app)
+        }
         Some(_) => show(app),
         None => match create(app) {
             Ok(_) => show(app),

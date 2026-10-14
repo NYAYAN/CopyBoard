@@ -89,6 +89,35 @@ pub fn join_all_spaces(window: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Pencereyi odak almayan bir panele çevirir ki TAM EKRAN uygulamaların üstünde de
+/// görünebilsin. `join_all_spaces` tek başına macOS'ta buna yetmiyor (ayrıntı:
+/// `macos::make_nonactivating_panel`). Diğer platformlarda karşılığı yok, no-op.
+pub fn make_nonactivating_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::make_nonactivating_panel(window)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        Ok(())
+    }
+}
+
+/// Pencere kullanıcının o an baktığı masaüstünde mi? Space kavramı yalnız macOS'ta
+/// var; diğer platformlarda — ve sorulamazsa — `true`.
+pub fn is_on_active_space(window: &tauri::WebviewWindow) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::is_on_active_space(window).unwrap_or(true)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        true
+    }
+}
+
 /// Pencerenin EKRAN YAKALAMA kimliği (macOS'ta CGWindowID). Yalnız macOS'ta
 /// anlamlı; başka platformda `None` — Windows'ta overlay `WDA_EXCLUDEFROMCAPTURE`
 /// ile zaten karelere hiç girmiyor.
